@@ -231,6 +231,23 @@ bukan error 500.
 - Download file/folder (folder di-zip on-the-fly saat request).
 - Search/filter by nama dalam direktori aktif.
 
+### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
+
+Fitur di atas dipecah jadi dua PR terpisah, sama seperti Docker/Service di Fase 2:
+
+- **Fase 3a (selesai)**: browse + breadcrumb, `Jail` (validasi path lengkap — traversal,
+  symlink escape, blocklist, dicek juga terhadap **isi listing**, bukan cuma saat aksi
+  diklik), create file/folder, rename, delete (rekursif untuk folder, via `os.RemoveAll`),
+  download **file tunggal** (streaming langsung lewat `http.ServeFile`, bukan buffer penuh).
+- **Fase 3b (belum)**: copy/cut/paste + multi-select (butuh clipboard per-session + job queue
+  untuk operasi besar), upload, download **folder** (zip on-the-fly), search/filter dalam
+  direktori. Semuanya sengaja ditunda ke satu PR terpisah karena berbagi satu concern yang
+  sama (streaming aman, lihat "Keandalan Operasi File Besar/Banyak" di bawah) — membangunnya
+  sekaligus dengan browsing dasar akan membuat satu PR terlalu besar untuk direview dengan baik.
+- Search/filter (di atas) juga masuk 3b meski secara teknis sederhana — supaya tetap konsisten
+  ditest bersamaan dengan multi-select yang jadi rasional utamanya (filter lalu select-all
+  hasil filter untuk operasi massal).
+
 ### Keandalan Operasi File Besar/Banyak
 
 **Latar belakang**: CasaOS di pengalaman sebelumnya beberapa kali membuat Raspberry Pi 5

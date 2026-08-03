@@ -25,23 +25,48 @@ permukaan risikonya besar jika tidak dijaga. Bagian ini mendefinisikan pagar pen
 
 ## 7.3 File Explorer — Path Traversal & Batasan Akses
 
-Ini area risiko paling tinggi. Aturan wajib:
+Ini area risiko paling tinggi — makanya `internal/fileexplorer/safepath.go` (tipe `Jail`)
+dibangun & diuji **sebelum** kode lain di package ini boleh menyentuh filesystem sama sekali
+(Fase 3a). Aturan wajib, semuanya diimplementasikan di satu tempat (`Jail.Resolve`) supaya
+tidak ada jalur kode yang lupa memvalidasi:
 
 - **Semua path input dari klien** (query param, body JSON) di-*resolve* ke absolute path
-  (`filepath.Abs` + `filepath.Clean`), lalu divalidasi berada **di dalam root yang diizinkan**
-  (`config.fileExplorer.rootDir`, default `/` tapi bisa dipersempit).
-- Tolak path yang mengandung symlink yang keluar dari root (`filepath.EvalSymlinks` lalu
-  cek ulang prefix) — mencegah symlink dipakai untuk escape jail.
-- **Daftar path terlarang** (blocklist tambahan meski root-nya `/`), default meliputi:
-  `/etc/shadow`, `/etc/gshadow`, direktori `.ssh` milik user manapun, `/proc`, `/sys`
-  (kecuali yang memang dibaca collector secara internal, bukan lewat file explorer) —
-  dikonfigurasi di `config.yaml`, bisa ditambah user.
-- Upload: validasi ukuran maksimal per file (default, misal 500MB, dikonfigurasi), dan
-  **tidak** melakukan eksekusi/parsing otomatis terhadap file yang diupload.
-- Rename/move/copy: validasi **kedua** path (source & destination) dengan aturan yang sama.
-- Semua operasi tulis (`create`, `rename`, `move`, `delete`, `save editor`) **dicatat ke
-  audit log** (lihat 7.6) dengan siapa (session user — meski single-user, tetap dicatat
-  untuk jejak waktu), path, dan aksi.
+  (`filepath.Clean`), lalu divalidasi berada **di dalam root yang diizinkan**
+  (`config.fileExplorer.rootDir`, default `/` tapi bisa dipersempit) via perbandingan
+  `filepath.Rel` yang benar (bukan `strings.HasPrefix` naif — itu salah untuk kasus seperti
+  root `/home` vs path `/homework`, beda direktori tapi match sebagai prefix string).
+- Symlink yang keluar dari root ditolak. Karena path yang divalidasi **belum tentu ada**
+  (perlu untuk create/rename-destination), resolusi symlink dilakukan best-effort: turun ke
+  ancestor terdekat yang benar-benar ada, `filepath.EvalSymlinks` di situ, lalu sambung
+  kembali bagian yang belum ada — bukan cuma `EvalSymlinks` langsung (yang akan error untuk
+  path yang belum ada).
+- **Daftar path terlarang** (blocklist tambahan meski root-nya `/`): default
+  `/etc/shadow`, `/etc/shadow-`, `/etc/gshadow`, `/etc/gshadow-` (varian `-` adalah file
+  backup dari `vipw`/`pwck`, sensitivitasnya sama — mudah terlewat kalau cuma daftar nama
+  tanpa varian ini), `/proc`, `/sys` — dikonfigurasi di `config.yaml`, bisa ditambah user.
+  **Direktori `.ssh` milik user manapun** ditangani **generik**, bukan lewat blocklist statis
+  — `Jail` memeriksa apakah ada komponen path bernama `.ssh` di mana pun dalam path yang
+  sudah di-resolve, jadi otomatis mencakup `/home/*/.ssh`, `/root/.ssh`, dst tanpa perlu tahu
+  dulu semua kemungkinan home directory yang ada di sistem.
+- **Entry blocklisted difilter dari listing, bukan cuma ditolak saat diklik.** Ditemukan
+  langsung lewat testing manual terhadap `/etc` sungguhan: sebelum diperbaiki, `/etc/shadow`
+  tetap muncul di tabel dengan tombol Unduh/Rename/Hapus yang terlihat aktif tapi akan gagal
+  403 kalau diklik — aman (tidak ada kebocoran data), tapi UX yang membingungkan dan
+  berpotensi menyembunyikan validasi yang sebenarnya benar. Sekarang tiap entry listing
+  divalidasi lewat `Jail.Resolve` yang sama sebelum dikirim ke template.
+- Upload (Fase 3b): validasi ukuran maksimal per file, dan **tidak** melakukan
+  eksekusi/parsing otomatis terhadap file yang diupload.
+- Rename: validasi **kedua** path (source & destination) dengan aturan yang sama — sudah
+  diimplementasikan di Fase 3a (`fileexplorer.Rename` dipanggil setelah kedua path lolos
+  `Jail.Resolve` secara terpisah).
+- **Diuji langsung** (bukan cuma unit test terisolasi) terhadap skenario: path traversal
+  (`../../../etc/passwd`), symlink yang sengaja dibuat mengarah keluar root, akses langsung
+  ke `.ssh`, dan blocklist (termasuk untuk path yang belum ada di dalam direktori
+  blocklisted) — semua tertolak dengan pesan jelas, dikonfirmasi lewat program uji terpisah
+  sebelum kode ini dianggap aman untuk PR.
+- Semua operasi tulis (`create`, `rename`, `move`, `delete`, `save editor`) **harus** dicatat
+  ke audit log (lihat §7.7) — **catatan implementasi**: logging ini belum ditambahkan di
+  Fase 3a, dicadangkan untuk Fase 3b/polish bersama fitur audit log yang lebih lengkap.
 
 ## 7.4 Docker & Systemd — Privilege
 

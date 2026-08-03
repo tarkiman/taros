@@ -34,13 +34,15 @@ tarkiman-os/
 │   │   └── logs.go                # Tail via journalctl -u, on-demand
 │   │
 │   ├── fileexplorer/               # operasi filesystem + validasi keamanan
-│   │   ├── list.go
-│   │   ├── ops.go                 # create/rename/copy/move/delete (rename cepat via os.Rename)
-│   │   ├── copyjob.go             # copy/move streaming: buffer tetap, throttle, sync berkala
-│   │   ├── jobqueue.go            # antrean job besar: batas konkuren, progress, cancel
-│   │   ├── content.go             # baca/tulis isi file (untuk editor)
-│   │   ├── archive.go             # zip on-the-fly (streaming) untuk download folder
-│   │   └── safepath.go            # validasi path traversal, jail root
+│   │   ├── safepath.go             # Jail: validasi traversal, symlink escape, blocklist —
+│   │   │                           # dibangun & diuji duluan (Fase 3a), sebelum apa pun lain
+│   │   │                           # di package ini boleh menyentuh filesystem
+│   │   ├── list.go                # listing + metadata (owner/group via cache lookup)
+│   │   ├── ops.go                 # mkdir/create/rename/delete (rename via os.Rename)
+│   │   ├── copyjob.go             # [Fase 3b] copy/move streaming: buffer tetap, throttle
+│   │   ├── jobqueue.go            # [Fase 3b] antrean job besar: batas konkuren, progress, cancel
+│   │   ├── content.go             # [Fase 3c] baca/tulis isi file (untuk editor)
+│   │   └── archive.go             # [Fase 3b] zip on-the-fly (streaming) untuk download folder
 │   │
 │   ├── terminal/                    # spawn shell dalam PTY, jembatani ke WebSocket
 │   │   ├── pty.go                   # wrapper creack/pty: spawn shell, resize, kill
@@ -64,7 +66,9 @@ tarkiman-os/
 │   │   ├── handlers_dashboard.go
 │   │   ├── handlers_docker.go        # page + fragment + action handlers Docker (Fase 2)
 │   │   ├── handlers_services.go
-│   │   ├── handlers_files.go
+│   │   ├── handlers_files.go         # page + fragment handlers file explorer (Fase 3a: browse/
+│   │   │                             # mkdir/create/rename/delete/download; copy-paste & upload
+│   │   │                             # jadi Fase 3b)
 │   │   ├── handlers_auth.go          # login/logout
 │   │   ├── sse.go                    # endpoint SSE metrics stream
 │   │   ├── ws_terminal.go            # endpoint WebSocket terminal (upgrade, Origin check)
@@ -95,6 +99,8 @@ tarkiman-os/
 │   │       ├── docker_settings.html
 │   │       ├── services_list.html
 │   │       ├── services_logs.html
+│   │       ├── files_list.html            # listing + breadcrumb; entry yang match blocklist
+│   │       │                              # difilter di sini, bukan cuma ditolak saat diklik
 │   │       └── error_panel.html           # dipakai semua fragment (Docker & Service) untuk
 │   │                                       # degradasi/error — nama generik sejak dipakai lintas domain
 │   ├── static/
@@ -103,6 +109,7 @@ tarkiman-os/
 │   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
 │   │       ├── dashboard.js               # SSE listener + chart + render tabel dashboard
+│   │       ├── files.js                    # mkdir/rename/delete (fetch JSON) + refresh listing
 │   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
 │   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
 │   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built,
@@ -166,3 +173,16 @@ tarkiman-os/
   satu struct `Deps` (sessions, creds, store, docker client+watcher, dst) alih-alih daftar
   parameter panjang — diperkenalkan tepat saat Fase 2 menambah dependency Docker karena daftar
   positional sebelumnya (5 parameter dari Fase 0–1) sudah mulai tidak nyaman dipanggil.
+- **Breadcrumb & path gabungan pakai `filepath.Join`/`filepath.Dir`, bukan `printf "%s/%s"`.**
+  Ditemukan langsung saat testing manual dengan `rootDir: "/"`: penggabungan string naif
+  menghasilkan path `"//home"` (dua slash) — secara fungsional tetap jalan (`filepath.Clean`
+  di `Jail.Resolve` menormalkannya), tapi tampil salah di URL/link. `joinPath` ditambahkan ke
+  `funcMap` ([funcs.go](../internal/web/funcs.go)) supaya template bisa pakai `filepath.Join`
+  langsung, bukan cuma di kode Go.
+- **Entry yang masuk blocklist difilter dari listing, bukan cuma ditolak saat diklik.**
+  Ditemukan saat testing terhadap `/etc` sungguhan: `/etc/shadow` muncul di tabel dengan
+  tombol Unduh/Rename/Hapus yang "terlihat" berfungsi tapi akan gagal 403 kalau diklik —
+  aman, tapi membingungkan. `handleFilesListFragment` sekarang menyaring tiap entry lewat
+  `Jail.Resolve` sebelum dikirim ke template, jadi entry terlarang tidak pernah muncul sama
+  sekali (sekaligus menutup celah symlink-escape yang sama untuk isi listing, bukan cuma
+  untuk aksi).

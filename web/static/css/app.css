@@ -248,3 +248,19 @@ tr:last-child td { border-bottom: none; }
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+.file-toolbar { display: flex; gap: var(--space); margin-bottom: calc(var(--space) * 2); }
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--space);
+  font-size: 0.85rem;
+}
+.breadcrumb a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.breadcrumb a:not(:last-child)::after { content: "/"; color: var(--text-muted); margin-left: 4px; }
+.breadcrumb a:hover { text-decoration: underline; }
