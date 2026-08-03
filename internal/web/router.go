@@ -2,10 +2,12 @@ package web
 
 import (
 	"net/http"
+	"time"
 
 	assets "github.com/tarkiman/tarkiman-os/web"
 
 	"github.com/tarkiman/tarkiman-os/internal/auth"
+	"github.com/tarkiman/tarkiman-os/internal/store"
 )
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -16,9 +18,11 @@ type Server struct {
 	sessions    *auth.SessionStore
 	creds       *auth.Credentials
 	rateLimiter *auth.LoginRateLimiter
+	store       *store.Store
+	sseInterval time.Duration
 }
 
-func NewServer(sessions *auth.SessionStore, creds *auth.Credentials, rateLimiter *auth.LoginRateLimiter) (*Server, error) {
+func NewServer(sessions *auth.SessionStore, creds *auth.Credentials, rateLimiter *auth.LoginRateLimiter, metricsStore *store.Store, sseInterval time.Duration) (*Server, error) {
 	tmpl, err := loadTemplates()
 	if err != nil {
 		return nil, err
@@ -28,6 +32,8 @@ func NewServer(sessions *auth.SessionStore, creds *auth.Credentials, rateLimiter
 		sessions:    sessions,
 		creds:       creds,
 		rateLimiter: rateLimiter,
+		store:       metricsStore,
+		sseInterval: sseInterval,
 	}, nil
 }
 
@@ -38,6 +44,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", s.handleLoginSubmit)
 	mux.HandleFunc("POST /api/auth/logout", s.requireAuth(s.handleLogout))
 	mux.HandleFunc("GET /{$}", s.requireAuth(s.handleDashboard))
+
+	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
+	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))
 
 	mux.Handle("GET /static/", http.FileServerFS(assets.Static))
 

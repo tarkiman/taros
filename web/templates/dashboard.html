@@ -1,15 +1,69 @@
 {{define "title"}}Dashboard — TarkimanOS{{end}}
+
+{{define "extra_head"}}
+<link rel="stylesheet" href="/static/css/vendor/uPlot.min.css">
+{{end}}
+
 {{define "content"}}
 <header class="topnav">
   <span class="brand">TarkimanOS</span>
+  <span class="conn-status" id="conn-status" title="Status koneksi live">●</span>
   <span class="user">{{.Username}}</span>
   <form method="post" action="/api/auth/logout">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <button type="submit">Keluar</button>
   </form>
 </header>
-<main>
-  <p>Dashboard monitoring belum tersedia — collector metrics baru masuk di Fase 1.</p>
+<main class="dashboard">
+  {{if not .Snapshot}}
+  <p>Mengumpulkan data pertama…</p>
+  {{else}}
+  <section class="cards">
+    <div class="card">
+      <span class="card-label">CPU</span>
+      <span class="card-value" id="val-cpu">{{printf "%.0f" .Snapshot.CPU.TotalPercent}}%</span>
+    </div>
+    <div class="card">
+      <span class="card-label">RAM</span>
+      <span class="card-value" id="val-mem">{{printf "%.0f" .Snapshot.Mem.UsedPercent}}%</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Disk terpenuh</span>
+      <span class="card-value" id="val-disk">—%</span>
+    </div>
+    <div class="card">
+      <span class="card-label">Suhu tertinggi</span>
+      <span class="card-value" id="val-temp">—°C</span>
+    </div>
+  </section>
+  {{end}}
+
+  <section class="panel">
+    <h2>CPU &amp; RAM — 15 menit terakhir</h2>
+    <div id="chart-cpumem"></div>
+  </section>
+
+  <section class="grid-2">
+    <div class="panel">
+      <h2>Disk</h2>
+      <table id="table-disks"><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>Network</h2>
+      <table id="table-net"><tbody></tbody></table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Suhu</h2>
+    <ul id="list-temps"></ul>
+  </section>
 </main>
 {{end}}
+
+{{define "extra_scripts"}}
+<script src="/static/js/vendor/uPlot.iife.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
+{{end}}
+
 {{template "layout" .}}

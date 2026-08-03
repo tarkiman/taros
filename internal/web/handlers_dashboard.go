@@ -7,5 +7,6 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	s.tmpl.render(w, http.StatusOK, "dashboard.html", map[string]any{
 		"Username":  sess.Username,
 		"CSRFToken": sess.CSRFToken,
+		"Snapshot":  s.store.Latest(),
 	})
 }

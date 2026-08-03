@@ -5,18 +5,23 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/term"
 
 	"github.com/tarkiman/tarkiman-os/internal/auth"
+	"github.com/tarkiman/tarkiman-os/internal/collector"
 	"github.com/tarkiman/tarkiman-os/internal/config"
+	"github.com/tarkiman/tarkiman-os/internal/store"
 	"github.com/tarkiman/tarkiman-os/internal/web"
 )
 
@@ -48,14 +53,41 @@ func runServer(args []string) {
 	sessions := auth.NewSessionStore(time.Duration(cfg.Auth.SessionIdleTimeoutMin) * time.Minute)
 	rateLimiter := auth.NewLoginRateLimiter(cfg.Auth.LoginRateLimitAttempts, time.Duration(cfg.Auth.LoginRateLimitWindowSec)*time.Second)
 
-	srv, err := web.NewServer(sessions, creds, rateLimiter)
+	fastInterval := time.Duration(cfg.Polling.CPUMemNetIntervalSec) * time.Second
+	metricsStore := store.New(15*time.Minute, map[string]time.Duration{
+		store.SeriesCPUTotalPercent:   fastInterval,
+		store.SeriesMemUsedPercent:    fastInterval,
+		store.SeriesDiskReadBytesSec:  fastInterval,
+		store.SeriesDiskWriteBytesSec: fastInterval,
+		store.SeriesTempMaxCelsius:    time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
+	})
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	coll := collector.New(metricsStore)
+	go coll.Run(ctx, collector.Intervals{
+		CPUMemNet: fastInterval,
+		DiskUsage: time.Duration(cfg.Polling.DiskUsageIntervalSec) * time.Second,
+		Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
+	})
+
+	srv, err := web.NewServer(sessions, creds, rateLimiter, metricsStore, fastInterval)
 	if err != nil {
 		slog.Error("init web server", "err", err)
 		os.Exit(1)
 	}
 
+	httpServer := &http.Server{Addr: cfg.Server.Listen, Handler: srv.Handler()}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+
 	slog.Info("tarkimanos starting", "listen", cfg.Server.Listen)
-	if err := http.ListenAndServe(cfg.Server.Listen, srv.Handler()); err != nil {
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)
 	}
