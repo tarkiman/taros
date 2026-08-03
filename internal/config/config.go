@@ -13,8 +13,9 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	Auth   AuthConfig   `yaml:"auth"`
+	Server  ServerConfig  `yaml:"server"`
+	Auth    AuthConfig    `yaml:"auth"`
+	Polling PollingConfig `yaml:"polling"`
 }
 
 type ServerConfig struct {
@@ -32,6 +33,13 @@ type AuthConfig struct {
 	LoginRateLimitWindowSec int `yaml:"loginRateLimitWindowSec"`
 }
 
+// PollingConfig sets collector intervals — see docs/04-features.md §4.1.
+type PollingConfig struct {
+	CPUMemNetIntervalSec int `yaml:"cpuMemNetIntervalSec"`
+	DiskUsageIntervalSec int `yaml:"diskUsageIntervalSec"`
+	TempIntervalSec      int `yaml:"tempIntervalSec"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -42,6 +50,11 @@ func Default() Config {
 			SessionIdleTimeoutMin:   1440,
 			LoginRateLimitAttempts:  5,
 			LoginRateLimitWindowSec: 300,
+		},
+		Polling: PollingConfig{
+			CPUMemNetIntervalSec: 2,
+			DiskUsageIntervalSec: 10,
+			TempIntervalSec:      5,
 		},
 	}
 }

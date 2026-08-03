@@ -41,7 +41,7 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | Route | Deskripsi |
 |---|---|
 | `GET /api/stream/metrics` | **SSE** — push snapshot metrics (CPU/RAM/disk/temp/net) tiap tick |
-| `GET /api/metrics/history?metric=cpu&range=15m` | Data histori untuk chart (dari ring buffer) |
+| `GET /api/metrics/history?metric=cpu` | Data histori untuk chart (dari ring buffer). Fase 1: `metric` ∈ `cpu\|mem\|diskRead\|diskWrite\|tempMax`, selalu mengembalikan seluruh isi buffer (~15 menit) — parameter `range` dicadangkan untuk nanti kalau tingkat retensi lebih panjang (lihat [05-data-storage.md](05-data-storage.md)) sudah ada untuk dipilih |
 | `GET /api/terminal/ws` | **WebSocket** — sesi PTY interaktif (stdin/stdout + resize control message) |
 | `POST /api/files/op` | Body JSON: `{action: copy|cut|paste|rename|delete|mkdir, ...}` — rename/mkdir/delete file tunggal langsung sinkron; copy/move/delete besar mengembalikan `{jobId}` (lihat di bawah) |
 | `GET /api/files/op/{jobId}/stream` | **SSE** — progress job file besar (persentase, kecepatan, ETA) |

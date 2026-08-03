@@ -11,12 +11,12 @@ tarkiman-os/
 │
 ├── internal/
 │   ├── collector/                # baca metrics sistem dari /proc, /sys
-│   │   ├── cpu.go
-│   │   ├── mem.go
-│   │   ├── disk.go
-│   │   ├── temp.go
-│   │   ├── net.go
-│   │   └── collector.go          # interface & scheduler goroutine
+│   │   ├── cpu.go                # delta-based %, per-core, load average
+│   │   ├── mem.go                # used = total - MemAvailable
+│   │   ├── disk.go                # usage per mount + I/O throughput (whole-disk only)
+│   │   ├── temp.go               # /sys/class/thermal/thermal_zone*
+│   │   ├── net.go                 # per-interface throughput, exclude lo/veth/br-/docker
+│   │   └── collector.go          # Collector struct + 3 ticker scheduler (Run)
 │   │
 │   ├── docker/                    # klien tipis ke Docker Engine API (Unix socket)
 │   │   ├── client.go
@@ -44,9 +44,10 @@ tarkiman-os/
 │   │   ├── pty.go                   # wrapper creack/pty: spawn shell, resize, kill
 │   │   └── session.go               # lifecycle sesi: idle timeout, limit konkuren, audit
 │   │
-│   ├── store/                      # ring buffer in-memory untuk histori metrics
-│   │   ├── ringbuffer.go
-│   │   └── store.go
+│   ├── store/                      # latest snapshot + ring buffer in-memory
+│   │   ├── ringbuffer.go          # RingBuffer generik (fixed-capacity, overwrite)
+│   │   ├── snapshot.go            # struct Snapshot (dipakai juga sebagai JSON wire format SSE)
+│   │   └── store.go               # Store: atomic latest snapshot + named ring buffer
 │   │
 │   ├── auth/                        # login, session, CSRF, rate limit
 │   │   ├── session.go              # SessionStore in-memory (create/validate/reap)
