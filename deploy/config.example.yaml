@@ -1,0 +1,13 @@
+# Contoh config.yaml untuk TarkimanOS — hanya berisi bagian yang sudah
+# diimplementasikan (Fase 0: server + auth). Section lain (fileExplorer,
+# docker, systemd, terminal, thresholds, dst — lihat docs/09-deployment.md
+# §9.6) akan ditambahkan di sini seiring fase implementasinya selesai.
+
+server:
+  listen: "0.0.0.0:8090"
+
+auth:
+  credentialsFile: "/etc/tarkimanos/credentials.yaml"
+  sessionIdleTimeoutMin: 1440
+  loginRateLimitAttempts: 5
+  loginRateLimitWindowSec: 300

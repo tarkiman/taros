@@ -1,0 +1,15 @@
+{{define "title"}}Dashboard — TarkimanOS{{end}}
+{{define "content"}}
+<header class="topnav">
+  <span class="brand">TarkimanOS</span>
+  <span class="user">{{.Username}}</span>
+  <form method="post" action="/api/auth/logout">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Keluar</button>
+  </form>
+</header>
+<main>
+  <p>Dashboard monitoring belum tersedia — collector metrics baru masuk di Fase 1.</p>
+</main>
+{{end}}
+{{template "layout" .}}

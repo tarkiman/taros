@@ -1,0 +1,21 @@
+[Unit]
+Description=TarkimanOS - Lightweight Linux system monitor
+After=network.target
+
+[Service]
+Type=simple
+User=tarkimanos
+Group=tarkimanos
+ExecStart=/usr/local/bin/tarkimanos --config /etc/tarkimanos/config.yaml
+Restart=on-failure
+RestartSec=5
+
+# Hardening dasar — lihat docs/09-deployment.md §9.3 kenapa
+# ProtectHome/ProtectSystem sengaja tidak diperketat (fitur file explorer
+# butuh akses baca/tulis luas begitu diimplementasikan).
+NoNewPrivileges=true
+ProtectHome=false
+ProtectSystem=false
+
+[Install]
+WantedBy=multi-user.target
