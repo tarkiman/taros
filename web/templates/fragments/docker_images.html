@@ -1,0 +1,20 @@
+<div class="panel">
+<table class="docker-table">
+<thead><tr><th>Tag</th><th>Ukuran</th><th>Dipakai</th><th>Dibuat</th><th>Aksi</th></tr></thead>
+<tbody>
+{{range .Images}}
+<tr>
+  <td>{{.Tag}}{{if .Dangling}} <span class="badge badge-warn">dangling</span>{{end}}</td>
+  <td>{{formatBytes .SizeBytes}}</td>
+  <td>{{if gt .Containers 0}}{{.Containers}} container{{else}}<span class="text-muted">tidak dipakai</span>{{end}}</td>
+  <td class="text-muted">{{.Created.Format "2006-01-02 15:04"}}</td>
+  <td class="actions">
+    <button class="btn-sm btn-danger" hx-post="/fragments/docker/images/{{.ID}}/remove" hx-target="#docker-tab-panel" hx-swap="innerHTML" hx-confirm="Hapus image {{.Tag}}?">Hapus</button>
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="text-muted">Tidak ada image.</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>

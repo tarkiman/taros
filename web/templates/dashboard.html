@@ -7,6 +7,10 @@
 {{define "content"}}
 <header class="topnav">
   <span class="brand">TarkimanOS</span>
+  <nav class="topnav-links">
+    <a href="/" class="active">Dashboard</a>
+    <a href="/docker">Docker</a>
+  </nav>
   <span class="conn-status" id="conn-status" title="Status koneksi live">●</span>
   <span class="user">{{.Username}}</span>
   <form method="post" action="/api/auth/logout">

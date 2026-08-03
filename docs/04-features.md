@@ -81,25 +81,34 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
 - Daftar container **running** (default) dengan toggle untuk menampilkan **semua** (termasuk
   stopped/exited).
 - Per container: nama, image, status, uptime, port mapping, dan **live stats**:
-  - CPU% (dihitung dari delta `cpu_stats`/`precpu_stats`, mengikuti formula resmi Docker).
-  - Memory usage vs limit (+ persentase).
-  - Network I/O (rx/tx).
-  - Block I/O (read/write disk).
-- Aksi: **start / stop / restart / remove** per container (butuh konfirmasi di UI untuk
-  stop/restart/remove; remove butuh konfirmasi lebih tegas — mengetik ulang nama container,
-  karena ireversibel).
-- Detail container: klik untuk lihat env vars (redacted untuk key yang terlihat seperti
-  secret/password/token — heuristic sederhana), mounted volumes, network yang terhubung.
-- Log viewer sederhana (tail N baris terakhir, non-streaming) — opsional, lihat roadmap.
+  - CPU% (dihitung dari delta `cpu_stats`/`precpu_stats` dalam **satu** panggilan
+    `stats?stream=false` — terkonfirmasi Docker sudah mengembalikan `precpu_stats` yang valid
+    dari sampel internalnya sendiri, jadi TarkimanOS tidak perlu polling dua kali sendiri
+    seperti collector `/proc` host di [Fase 1](10-roadmap.md)).
+  - Memory usage vs limit (+ persentase) — **catatan implementasi**: di sebagian host
+    cgroup v2, Docker mengembalikan `memory_stats.usage`/`.limit` kosong (0) — dikonfirmasi
+    ini quirk daemon/host, bukan bug klien (`docker stats` bawaan Docker sendiri juga
+    menunjukkan "0B/0B" di host yang sama). UI menampilkan "—" alih-alih memaksakan angka
+    yang salah dalam kondisi ini.
+  - Network I/O (rx/tx), Block I/O (read/write disk).
+- Aksi: **start / stop / restart / remove** per container. Konfirmasi Fase 2 pakai
+  `hx-confirm` bawaan htmx (dialog konfirmasi native browser) — **bukan** modal custom
+  bergaya aplikasi atau pola "ketik ulang nama" yang disebutkan di draf awal; itu jadi
+  item polish UI di [Fase 5](10-roadmap.md), bukan blocker untuk fungsi dasar start/stop/
+  restart/remove yang sudah aman (tetap ada konfirmasi, cuma belum custom-styled).
+- **Belum diimplementasikan di Fase 2** (dicadangkan untuk iterasi berikut): detail container
+  (env vars, mounted volumes, network terhubung) saat diklik, dan log viewer. Scope Fase 2
+  difokuskan ke list + live stats + aksi dasar dulu.
 
 ### Images
 
 - Daftar image terpasang: repository:tag, image ID (pendek), ukuran, created date, jumlah
   container yang memakainya (running + stopped), status **dangling** (image tanpa tag, biasa
   sisa build lama) ditandai jelas karena ini kandidat pertama untuk dibersihkan.
-- "Konsumsi resource" untuk image = **ukuran disk** (dari `Size`/`VirtualSize` API Docker,
-  atau lebih akurat lewat `GET /system/df?verbose=1` yang menghitung shared-size antar layer
-  dengan benar — dua image yang berbagi layer dasar tidak dihitung dobel).
+- "Konsumsi resource" untuk image = **ukuran disk**, langsung dari field `Size` di
+  `GET /images/json` — cukup akurat & murah untuk tabel per-item; agregat total/reclaimable
+  yang memperhitungkan shared layer antar image dihitung Docker sendiri di level `/system/df`
+  (dipakai di panel Settings, bukan di tabel Images per-item).
 - Aksi: **remove image** (ditolak dengan pesan jelas kalau masih dipakai container yang belum
   dihapus — bukan force-remove diam-diam).
 - Sort/filter: by ukuran (cari yang paling boros), by "tidak dipakai container manapun".
@@ -107,10 +116,14 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
 ### Volumes
 
 - Daftar volume: nama, driver, mount point, dibuat kapan, dipakai oleh container mana saja.
-- "Konsumsi resource" untuk volume = **ukuran data di dalamnya** — dihitung dari
-  `GET /system/df?verbose=1` (Docker sudah menghitung ini per-volume), fallback ke `du`
-  di sisi server untuk mount point-nya kalau data ukuran dari API tidak tersedia (driver
-  volume non-default).
+- "Konsumsi resource" untuk volume = **ukuran data di dalamnya**. **Catatan implementasi
+  Fase 2**: endpoint list dasar `GET /volumes` (dipakai untuk tabel) **tidak** menyertakan
+  info ukuran sama sekali (dikonfirmasi terhadap Docker 29.x — field `UsageData` kosong)
+  — mengambil ukuran akurat per-volume butuh `GET /system/df` yang jauh lebih berat
+  (~2 detik di mesin dev), jadi Fase 2 menampilkan "tidak diketahui" untuk ukuran volume di
+  tabel (persis seperti perilaku default `docker volume ls`). Fallback `du` di sisi server
+  disebutkan di draf awal tapi **tidak dibangun** — ukuran volume akurat per-item dicadangkan
+  untuk iterasi berikutnya kalau memang dibutuhkan.
 - Tandai volume **tidak terpakai** (tidak di-mount container manapun saat ini) — kandidat
   pembersihan, tapi **tidak dihapus otomatis**, hanya highlight.
 - Aksi: **remove volume** (ditolak kalau masih dipakai; volume yang datanya besar diberi

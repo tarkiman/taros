@@ -21,6 +21,7 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/auth"
 	"github.com/tarkiman/tarkiman-os/internal/collector"
 	"github.com/tarkiman/tarkiman-os/internal/config"
+	"github.com/tarkiman/tarkiman-os/internal/docker"
 	"github.com/tarkiman/tarkiman-os/internal/store"
 	"github.com/tarkiman/tarkiman-os/internal/web"
 )
@@ -72,7 +73,23 @@ func runServer(args []string) {
 		Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
 	})
 
-	srv, err := web.NewServer(sessions, creds, rateLimiter, metricsStore, fastInterval)
+	deps := web.Deps{
+		Sessions:      sessions,
+		Creds:         creds,
+		RateLimiter:   rateLimiter,
+		Store:         metricsStore,
+		SSEInterval:   fastInterval,
+		DockerEnabled: cfg.Docker.Enabled,
+	}
+	if cfg.Docker.Enabled {
+		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
+		dockerWatcher := docker.NewWatcher(dockerClient)
+		go dockerWatcher.Run(ctx, time.Duration(cfg.Docker.WatchIntervalSec)*time.Second)
+		deps.Docker = dockerClient
+		deps.DockerWatcher = dockerWatcher
+	}
+
+	srv, err := web.NewServer(deps)
 	if err != nil {
 		slog.Error("init web server", "err", err)
 		os.Exit(1)

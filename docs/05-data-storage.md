@@ -39,12 +39,22 @@ byte ≈ 72KB terburuk) — jauh dari mengkhawatirkan di RAM budget 25–30MB.
 
 ## Data yang **Tidak** Disimpan Histori (hanya snapshot terkini)
 
-- Daftar & stats **containers, images, volumes, networks** Docker — semuanya selalu query
-  on-demand ke Docker API saat halaman/sub-tab dibuka (atau SSE tick untuk stats container
-  yang sedang running), tidak disimpan histori panjang (cukup snapshot terakhir untuk render
-  cepat). `GET /system/df` (dipakai untuk ukuran image/volume, lihat
-  [04-features.md](04-features.md) §4.2) juga dipanggil on-demand, bukan di-poll berkala,
-  karena hitungannya relatif berat di sisi daemon Docker.
+- Daftar & stats **containers, images, volumes, networks** Docker — tidak ada histori
+  panjang (ring buffer) untuk semuanya, tapi implementasi Fase 2 punya satu nuansa penting
+  untuk **containers** khususnya: `internal/docker.Watcher` menjaga **cache short-lived di
+  memori** (snapshot terakhir, di-refresh di background setiap `docker.watchIntervalSec`),
+  bukan query langsung on-demand per request seperti dokumen ini awalnya membayangkan.
+  Alasannya ditemukan saat implementasi: `GET /containers/{id}/stats?stream=false` Docker
+  ternyata **~1 detik per container** (Docker menunggu sampel CPU kedua secara internal) —
+  di mesin dev dengan 37 container berjalan, itu berarti request halaman Containers bisa
+  makan >10 detik kalau dipanggil sinkron on-demand. Watcher menyerap latensi itu di
+  background sehingga tiap page load/refresh tetap instan dari cache, dengan trade-off data
+  bisa selisih beberapa detik dari kondisi real-time — dianggap sepadan untuk dashboard
+  monitoring. Images/Volumes/Networks/Settings **tetap** on-demand murni (list-nya jauh
+  lebih cepat, lihat detail kecepatan di [04-features.md](04-features.md) §4.2) — hanya
+  container stats yang butuh pola cache ini. `GET /system/df` (dipakai di Settings) juga
+  tetap on-demand, bukan di-poll berkala, karena hitungannya relatif berat di sisi daemon
+  Docker (~2 detik terukur di mesin dev dengan 63 image/48 volume).
 - Daftar unit systemd — sama, snapshot terkini saja.
 - Listing file explorer — tidak di-cache lama, selalu baca filesystem terkini per request
   (dengan cache sangat singkat, <1 detik, hanya untuk menghindari duplikasi baca saat render).

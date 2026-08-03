@@ -19,12 +19,13 @@ tarkiman-os/
 │   │   └── collector.go          # Collector struct + 3 ticker scheduler (Run)
 │   │
 │   ├── docker/                    # klien tipis ke Docker Engine API (Unix socket)
-│   │   ├── client.go
-│   │   ├── containers.go
-│   │   ├── stats.go
+│   │   ├── client.go              # HTTP client custom DialContext ke Unix socket
+│   │   ├── containers.go          # list, start/stop/restart/remove, ListWithStats
+│   │   ├── stats.go               # formula CPU% resmi Docker dari 1x panggilan stats
+│   │   ├── watcher.go             # cache background — lihat 05-data-storage.md kenapa perlu
 │   │   ├── images.go
 │   │   ├── volumes.go
-│   │   ├── networks.go
+│   │   ├── networks.go            # ListNetworks inspect per-network untuk ConnectedCount
 │   │   └── system.go              # info daemon, /system/df, prune actions
 │   │
 │   ├── systemd/                   # klien D-Bus ke systemd
@@ -56,16 +57,17 @@ tarkiman-os/
 │   │   └── ratelimit.go            # LoginRateLimiter per-IP
 │   │
 │   ├── web/                          # HTTP layer (package `web`)
-│   │   ├── router.go                # Server struct + net/http ServeMux (routes, static)
+│   │   ├── router.go                # Server + Deps struct (lihat catatan di bawah) + ServeMux
 │   │   ├── middleware.go             # requireAuth (session+CSRF), logging, recover
+│   │   ├── funcs.go                  # FuncMap template bersama (formatBytes, formatPct)
 │   │   ├── handlers_dashboard.go
-│   │   ├── handlers_docker.go
+│   │   ├── handlers_docker.go        # page + fragment + action handlers Docker (Fase 2)
 │   │   ├── handlers_services.go
 │   │   ├── handlers_files.go
 │   │   ├── handlers_auth.go          # login/logout
 │   │   ├── sse.go                    # endpoint SSE metrics stream
 │   │   ├── ws_terminal.go            # endpoint WebSocket terminal (upgrade, Origin check)
-│   │   └── templates.go              # satu *template.Template per halaman (lihat catatan di bawah)
+│   │   └── templates.go              # template per-halaman DAN per-fragment (lihat catatan)
 │   │
 │   ├── config/
 │   │   └── config.go                 # struct config + Default() + Load() dari YAML
@@ -83,15 +85,24 @@ tarkiman-os/
 │   │   ├── editor.html
 │   │   ├── login.html
 │   │   ├── terminal.html                  # halaman full-screen xterm.js
-│   │   └── fragments/                    # partial template untuk htmx swap
+│   │   └── fragments/                    # partial template untuk htmx swap — tanpa layout.html,
+│   │       │                              # di-parse & di-render standalone (lihat catatan di bawah)
+│   │       ├── docker_containers.html
+│   │       ├── docker_images.html
+│   │       ├── docker_volumes.html
+│   │       ├── docker_networks.html
+│   │       ├── docker_settings.html
+│   │       └── docker_unavailable.html    # dipakai semua fragment Docker untuk degradasi/error
 │   ├── static/
 │   │   ├── css/
-│   │   │   └── app.css                   # design tokens + styling custom
+│   │   │   ├── app.css                   # design tokens + styling custom
+│   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
-│   │       ├── app.js                     # inisialisasi Alpine, SSE listener
+│   │       ├── dashboard.js               # SSE listener + chart + render tabel dashboard
 │   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
 │   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
-│   │       └── vendor/                    # htmx, alpine, uplot, codemirror, xterm.js (built sekali)
+│   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built,
+│   │                                       # lihat 03-tech-stack.md); codemirror/xterm.js menyusul
 │   └── embed.go                            # //go:embed directive (package `assets`)
 │
 ├── deploy/
@@ -137,4 +148,17 @@ tarkiman-os/
 - File JS vendor (`web/static/js/vendor/`) adalah hasil build **sekali** di mesin developer
   (lihat `scripts/build-assets.sh`), **dicommit ke repo** — bukan di-build ulang tiap
   `go build`, dan bukan diunduh dari CDN saat runtime (device target tidak butuh akses
-  internet untuk menjalankan TarkimanOS).
+  internet untuk menjalankan TarkimanOS). Fase 2: htmx & uPlot diambil langsung sebagai file
+  dist resmi (tidak ada langkah build sama sekali untuk keduanya, lihat
+  [03-tech-stack.md](03-tech-stack.md)) — `scripts/build-assets.sh` belum benar-benar dibuat,
+  baru dibutuhkan nanti saat CodeMirror 6/xterm.js masuk (butuh bundling sungguhan).
+- **Fragment template di-parse & dirender berdiri sendiri, tanpa `layout.html`.** Beda dengan
+  halaman penuh, file di `web/templates/fragments/` cuma berisi potongan HTML biasa (tabel,
+  panel) tanpa `{{define}}` — `templateSet.renderFragment` mem-parse tiap file sendirian lewat
+  `template.New(name)...ParseFS(fs, f)` lalu `ExecuteTemplate(w, name, data)`, dipakai baik
+  untuk fetch awal (`hx-trigger="load"`) maupun tiap swap sesudahnya (auto-refresh atau
+  setelah aksi) — satu fungsi render yang sama untuk kedua kasus.
+- **`web.Deps` struct, bukan parameter positional yang terus bertambah.** `NewServer` menerima
+  satu struct `Deps` (sessions, creds, store, docker client+watcher, dst) alih-alih daftar
+  parameter panjang — diperkenalkan tepat saat Fase 2 menambah dependency Docker karena daftar
+  positional sebelumnya (5 parameter dari Fase 0–1) sudah mulai tidak nyaman dipanggil.
