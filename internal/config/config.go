@@ -61,12 +61,17 @@ type SystemdConfig struct {
 }
 
 // FileExplorerConfig — see docs/04-features.md §4.4 & docs/07-security.md §7.3.
-// Streaming/job-queue fields (maxUploadSizeMB, copyThrottleMBps, ...) land
-// in Fase 3b along with the features that need them — not added here yet,
-// see docs/10-roadmap.md.
 type FileExplorerConfig struct {
 	RootDir   string   `yaml:"rootDir"`
 	Blocklist []string `yaml:"blocklist"`
+
+	MaxUploadSizeMB  int `yaml:"maxUploadSizeMB"`
+	MaxConcurrentOps int `yaml:"maxConcurrentOps"`
+	// CopyThrottleMBps: 0 = unbounded. Set on slow storage (STB eMMC/SD) to
+	// avoid outrunning the device's write speed — see
+	// docs/04-features.md §4.4 "Keandalan Operasi File Besar/Banyak".
+	CopyThrottleMBps int `yaml:"copyThrottleMBps"`
+	CopySyncEveryMB  int `yaml:"copySyncEveryMB"`
 }
 
 func Default() Config {
@@ -103,6 +108,10 @@ func Default() Config {
 				"/proc",
 				"/sys",
 			},
+			MaxUploadSizeMB:  500,
+			MaxConcurrentOps: 2,
+			CopyThrottleMBps: 0,
+			CopySyncEveryMB:  32,
 		},
 	}
 }

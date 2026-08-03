@@ -239,14 +239,14 @@ Fitur di atas dipecah jadi dua PR terpisah, sama seperti Docker/Service di Fase 
   symlink escape, blocklist, dicek juga terhadap **isi listing**, bukan cuma saat aksi
   diklik), create file/folder, rename, delete (rekursif untuk folder, via `os.RemoveAll`),
   download **file tunggal** (streaming langsung lewat `http.ServeFile`, bukan buffer penuh).
-- **Fase 3b (belum)**: copy/cut/paste + multi-select (butuh clipboard per-session + job queue
-  untuk operasi besar), upload, download **folder** (zip on-the-fly), search/filter dalam
-  direktori. Semuanya sengaja ditunda ke satu PR terpisah karena berbagi satu concern yang
-  sama (streaming aman, lihat "Keandalan Operasi File Besar/Banyak" di bawah) — membangunnya
-  sekaligus dengan browsing dasar akan membuat satu PR terlalu besar untuk direview dengan baik.
-- Search/filter (di atas) juga masuk 3b meski secara teknis sederhana — supaya tetap konsisten
-  ditest bersamaan dengan multi-select yang jadi rasional utamanya (filter lalu select-all
-  hasil filter untuk operasi massal).
+- **Fase 3b (selesai)**: copy/cut/paste + multi-select (clipboard per-session di
+  `auth.Session`, lihat [08-project-structure.md](08-project-structure.md)), job queue
+  streaming untuk copy/move, upload (multipart streaming), download **folder** (zip
+  on-the-fly via `archive/zip`, tidak pernah membangun arsip penuh di disk/memori dulu),
+  search/filter dalam direktori.
+- **Paste selalu mengembalikan `jobId`**, bahkan kalau semua item ternyata instant-rename
+  (sama filesystem) — satu jalur kode di klien (poll/watch job) untuk semua kasus, bukan dua
+  bentuk respons berbeda tergantung seberapa cepat operasinya kebetulan selesai.
 
 ### Keandalan Operasi File Besar/Banyak
 
@@ -290,11 +290,17 @@ Aturan wajib untuk `fileexplorer/`:
 - **Cek ruang disk tersedia sebelum mulai** — tolak dengan pesan jelas di awal kalau kapasitas
   tujuan diperkirakan tidak cukup, daripada gagal di tengah jalan meninggalkan file setengah
   tersalin.
-- **Checkpoint uji nyata**: sebelum fitur file explorer dianggap selesai, wajib dites langsung
-  di STB dengan skenario yang persis memicu masalah di CasaOS — copy file tunggal berukuran
-  besar (multi-GB) **dan** copy banyak file kecil sekaligus (ribuan file) — pastikan dashboard
-  & SSH/akses lain ke perangkat **tetap responsif** selama proses berjalan (lihat
-  [10-roadmap.md](10-roadmap.md) Fase 3).
+- **Checkpoint uji nyata (selesai-dev, di RPi 5 — validasi STB fisik masih tertunda)**: diuji
+  dengan skenario yang persis memicu masalah di CasaOS — copy file tunggal 1.5GB **dengan
+  throttle 20MB/s** (mensimulasikan storage lambat ala STB, lihat
+  [01-overview.md](01-overview.md) "Lingkungan Development" soal kenapa disimulasikan) di
+  storage disk nyata (bukan tmpfs), **dan** copy 2000 file kecil sekaligus. Selama copy
+  1.5GB berjalan (~75 detik), latency endpoint lain di proses yang sama diukur konsisten
+  di bawah 3ms — tidak ada penurunan responsivitas sama sekali. Checksum MD5 sumber vs hasil
+  cocok persis, tidak ada file `.tkpart` tersisa setelah selesai maupun setelah dibatalkan
+  di tengah jalan (diuji cancel pada 300ms setelah mulai, ~100MB sudah tertulis, berhenti
+  bersih tanpa sisa). Validasi STB fisik tetap jadi kriteria "selesai-rilis" yang belum
+  tercapai (lihat [10-roadmap.md](10-roadmap.md) "Definisi Selesai").
 
 ### Text Editor Terintegrasi
 

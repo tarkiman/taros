@@ -4,12 +4,29 @@
 {{end}}
 </div>
 
+<div class="file-toolbar">
+  <form onsubmit="return tkFileSearch(event)">
+    <input type="search" name="q" placeholder="Cari di folder ini…" value="{{.Query}}">
+  </form>
+  {{if .ClipboardSize}}
+  <button class="btn-sm" onclick="tkFilePaste('{{.CurrentPath}}')">Tempel ({{.ClipboardSize}}{{if .ClipboardCut}}, pindah{{end}})</button>
+  {{end}}
+</div>
+
+<div id="selection-bar" class="file-toolbar" style="display:none">
+  <span id="selection-count" class="text-muted"></span>
+  <button class="btn-sm" onclick="tkSelectionCopy()">Salin</button>
+  <button class="btn-sm" onclick="tkSelectionCut()">Potong</button>
+  <button class="btn-sm btn-danger" onclick="tkSelectionDelete()">Hapus</button>
+</div>
+
 <div class="panel">
 <table class="docker-table">
-<thead><tr><th>Nama</th><th>Ukuran</th><th>Pemilik</th><th>Diubah</th><th>Aksi</th></tr></thead>
+<thead><tr><th></th><th>Nama</th><th>Ukuran</th><th>Pemilik</th><th>Diubah</th><th>Aksi</th></tr></thead>
 <tbody>
 {{if .ParentPath}}
 <tr>
+  <td></td>
   <td colspan="5">
     <a href="/files?path={{.ParentPath}}" hx-get="/fragments/files/list?path={{.ParentPath}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{.ParentPath}}">.. (naik satu level)</a>
   </td>
@@ -18,6 +35,7 @@
 {{range .Entries}}
 {{$fullPath := joinPath $.CurrentPath .Name}}
 <tr>
+  <td><input type="checkbox" class="tk-select" value="{{$fullPath}}" onchange="tkSelectionChanged()"></td>
   <td>
     {{if .IsDir}}
     <a href="/files?path={{$fullPath}}" hx-get="/fragments/files/list?path={{$fullPath}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{$fullPath}}">📁 {{.Name}}</a>
@@ -29,15 +47,13 @@
   <td class="text-muted">{{.Owner}}</td>
   <td class="text-muted">{{.ModTime.Format "2006-01-02 15:04"}}</td>
   <td class="actions">
-    {{if not .IsDir}}
-    <a class="btn-sm" href="/api/files/download?path={{$fullPath}}">Unduh</a>
-    {{end}}
+    <a class="btn-sm" href="/api/files/download?path={{$fullPath}}">Unduh{{if .IsDir}} (zip){{end}}</a>
     <button class="btn-sm" onclick="tkFileRename('{{$fullPath}}')">Rename</button>
     <button class="btn-sm btn-danger" onclick="tkFileDelete('{{$fullPath}}', '{{.Name}}')">Hapus</button>
   </td>
 </tr>
 {{else}}
-<tr><td colspan="5" class="text-muted">Folder kosong.</td></tr>
+<tr><td colspan="6" class="text-muted">Folder kosong.</td></tr>
 {{end}}
 </tbody>
 </table>

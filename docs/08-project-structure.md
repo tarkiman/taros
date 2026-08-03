@@ -39,10 +39,13 @@ tarkiman-os/
 │   │   │                           # di package ini boleh menyentuh filesystem
 │   │   ├── list.go                # listing + metadata (owner/group via cache lookup)
 │   │   ├── ops.go                 # mkdir/create/rename/delete (rename via os.Rename)
-│   │   ├── copyjob.go             # [Fase 3b] copy/move streaming: buffer tetap, throttle
-│   │   ├── jobqueue.go            # [Fase 3b] antrean job besar: batas konkuren, progress, cancel
-│   │   ├── content.go             # [Fase 3c] baca/tulis isi file (untuk editor)
-│   │   └── archive.go             # [Fase 3b] zip on-the-fly (streaming) untuk download folder
+│   │   ├── job.go                 # Job/JobSnapshot: progress state, mutex-protected
+│   │   ├── copy.go                # streaming copy: buffer tetap, throttle, sync berkala,
+│   │   │                          # cek ruang disk, deteksi same-filesystem (device ID)
+│   │   ├── jobqueue.go            # antrean job: batas konkuren (semaphore), cancel via
+│   │   │                          # context, reaper job lama (pola sama seperti SessionStore)
+│   │   ├── archive.go             # zip on-the-fly (streaming, archive/zip) untuk download folder
+│   │   └── content.go             # [Fase 3c] baca/tulis isi file (untuk editor)
 │   │
 │   ├── terminal/                    # spawn shell dalam PTY, jembatani ke WebSocket
 │   │   ├── pty.go                   # wrapper creack/pty: spawn shell, resize, kill
@@ -54,7 +57,8 @@ tarkiman-os/
 │   │   └── store.go               # Store: atomic latest snapshot + named ring buffer
 │   │
 │   ├── auth/                        # login, session, CSRF, rate limit
-│   │   ├── session.go              # SessionStore in-memory (create/validate/reap)
+│   │   ├── session.go              # SessionStore in-memory (create/validate/reap) +
+│   │   │                           # Session.{Set,Get,Clear}Clipboard (file explorer copy/cut)
 │   │   ├── credentials.go          # load/save admin credentials (bcrypt hash) + Verify
 │   │   ├── csrf.go                 # Session.ValidCSRF (constant-time compare)
 │   │   └── ratelimit.go            # LoginRateLimiter per-IP
@@ -66,9 +70,9 @@ tarkiman-os/
 │   │   ├── handlers_dashboard.go
 │   │   ├── handlers_docker.go        # page + fragment + action handlers Docker (Fase 2)
 │   │   ├── handlers_services.go
-│   │   ├── handlers_files.go         # page + fragment handlers file explorer (Fase 3a: browse/
-│   │   │                             # mkdir/create/rename/delete/download; copy-paste & upload
-│   │   │                             # jadi Fase 3b)
+│   │   ├── handlers_files.go         # page + fragment handlers file explorer: browse, mkdir/
+│   │   │                             # create/rename/delete (3a), copy/cut/paste + upload +
+│   │   │                             # zip-download + progress SSE + cancel (3b)
 │   │   ├── handlers_auth.go          # login/logout
 │   │   ├── sse.go                    # endpoint SSE metrics stream
 │   │   ├── ws_terminal.go            # endpoint WebSocket terminal (upgrade, Origin check)
@@ -109,7 +113,10 @@ tarkiman-os/
 │   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
 │   │       ├── dashboard.js               # SSE listener + chart + render tabel dashboard
-│   │       ├── files.js                    # mkdir/rename/delete (fetch JSON) + refresh listing
+│   │       ├── files.js                    # mkdir/rename/delete/copy/cut/paste (fetch JSON),
+│   │       │                                # upload via XHR (butuh progress event, fetch tidak
+│   │       │                                # punya ini untuk request body), progress panel
+│   │       │                                # via EventSource ke endpoint job SSE
 │   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
 │   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
 │   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built,
@@ -186,3 +193,23 @@ tarkiman-os/
   `Jail.Resolve` sebelum dikirim ke template, jadi entry terlarang tidak pernah muncul sama
   sekali (sekaligus menutup celah symlink-escape yang sama untuk isi listing, bukan cuma
   untuk aksi).
+- **Clipboard file explorer hidup di `auth.Session`, bukan struct terpisah.** Copy/cut cuma
+  perlu diingat "punya siapa" dan "kadaluarsa kapan" — dua hal yang session sudah urus.
+  Menambah `map[token]Clipboard` sendiri di `internal/web` akan mengulang logika yang sama
+  persis (least-privilege terhadap siapa boleh baca/tulis, lifecycle mengikuti login) tanpa
+  manfaat nyata — jadi cukup jadi field pada `Session` dengan mutex sendiri (`clipMu`, terpisah
+  dari mutex `SessionStore`) supaya operasi clipboard tidak perlu mengunci seluruh session table.
+- **Job queue file explorer memakai pola yang sama dengan `docker.Watcher`.** Sama-sama:
+  goroutine background + state yang di-snapshot dengan mutex + hasil dibaca lewat cache/
+  polling, bukan dihitung ulang tiap request. Bedanya niatnya terbalik — `docker.Watcher`
+  ada supaya request TIDAK menunggu operasi lambat (baca cache instan), job queue file
+  explorer ada supaya operasi lambat (copy besar) TIDAK memblokir request lain sementara
+  progressnya tetap bisa dipantau. Pola implementasinya (mutex-protected snapshot) kebetulan
+  identik meski alasannya berbeda.
+- **Diverifikasi dengan disk sungguhan, bukan `/tmp` (tmpfs/RAM).** Uji "operasi file besar
+  tidak boleh menghang-kan sistem" ([04-features.md](04-features.md) §4.4) butuh storage
+  yang benar-benar melakukan I/O disk — `/tmp` di banyak distro Linux (termasuk mesin dev
+  proyek ini) adalah tmpfs (RAM-backed), yang tidak akan pernah menunjukkan tekanan
+  dirty-page sama sekali walau filenya besar. Test data ditaruh di partisi disk sungguhan
+  (`/home`), dengan throughput dibatasi (`copyThrottleMBps`) untuk mendekati kondisi storage
+  lambat STB, supaya hasil ujinya bermakna.

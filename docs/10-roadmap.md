@@ -119,17 +119,29 @@ Dipecah jadi tiga PR (pola yang sama seperti Fase 2 — lihat memori proyek/`REA
   (`os.Rename`, `http.ServeFile`), bukan operasi besar yang berisiko. Checkpoint stabilitas
   "sungguhan" (copy file multi-GB, dsb) berlaku untuk 3b di bawah.
 
-### 3b — Operasi Besar & Streaming (belum dikerjakan)
+### 3b — Operasi Besar & Streaming (selesai-dev; validasi STB fisik tertunda)
 
-- `copyjob.go` + `jobqueue.go`: copy/move streaming (buffer tetap, tanpa load penuh ke memori),
-  throttle opsional, sync berkala, antrean dengan batas konkuren, progress via SSE, cancel.
-- Copy/cut/paste + multi-select, upload (streaming multipart), download folder (zip on-the-fly),
-  search/filter dalam direktori — lihat [04-features.md](04-features.md) §4.4.
-- **Checkpoint stabilitas (langsung merespons masalah CasaOS yang jadi motivasi proyek ini,
-  lihat [01-overview.md](01-overview.md))**: di STB, copy file tunggal multi-GB **dan** copy
-  ribuan file kecil sekaligus — pastikan dashboard & akses lain ke perangkat (SSH, dsb) **tetap
-  responsif** sepanjang proses, tidak ada hang yang butuh power-cycle manual. Ini kriteria
-  "selesai" yang sama pentingnya dengan checkpoint keamanan — jangan dilewati.
+- `job.go` + `copy.go` + `jobqueue.go`: copy/move streaming (buffer tetap 256KB, tanpa load
+  penuh ke memori), throttle opsional (`copyThrottleMBps`), sync berkala (`copySyncEveryMB`),
+  antrean dengan batas konkuren (semaphore), progress via SSE, cancel (`context.CancelFunc`).
+  Move dalam filesystem sama dideteksi via perbandingan device ID (`syscall.Stat_t.Dev`) dan
+  jadi `os.Rename` instan, bukan stream copy+delete.
+- `archive.go`: download folder sebagai zip streaming (`archive/zip`, tidak pernah membangun
+  arsip penuh dulu). Copy/cut/paste + multi-select (clipboard di `auth.Session`), upload
+  (multipart streaming, `http.MaxBytesReader` menegakkan `maxUploadSizeMB`), search/filter
+  dalam direktori — lihat [04-features.md](04-features.md) §4.4.
+- **Checkpoint stabilitas — selesai-dev tercapai, langsung merespons masalah CasaOS yang jadi
+  motivasi proyek ini** (lihat [01-overview.md](01-overview.md)): di RPi 5 dengan storage
+  **disk sungguhan** (bukan `/tmp` yang ternyata tmpfs/RAM-backed di mesin dev — baru
+  disadari saat menyiapkan test data, lihat [08-project-structure.md](08-project-structure.md)),
+  copy file tunggal 1.5GB **dengan throttle 20MB/s** (mensimulasikan storage lambat ala STB)
+  **dan** copy 2000 file kecil sekaligus. Selama copy 1.5GB berjalan (~75 detik), latency
+  endpoint lain di server yang sama diukur konsisten <3ms — tidak ada penurunan responsivitas
+  sama sekali. Checksum MD5 cocok persis, tidak ada file `.tkpart` tersisa baik setelah selesai
+  normal maupun setelah dibatalkan di tengah jalan. **Validasi STB fisik (Cortex-A53, storage
+  eMMC/SD asli, bukan simulasi throttle) tetap jadi kriteria "selesai-rilis" yang belum
+  tercapai** — sama seperti fase-fase sebelumnya, lihat [10-roadmap.md](10-roadmap.md)
+  "Definisi Selesai" untuk kenapa dua tingkat validasi ini dipisahkan.
 
 ### 3c — Text Editor (belum dikerjakan)
 
