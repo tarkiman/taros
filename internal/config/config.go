@@ -1,8 +1,8 @@
 // Package config loads TarkimanOS's YAML configuration file.
 //
-// Only the sections implemented so far are parsed. Later fases (systemd,
-// file explorer, terminal, ...) will extend this struct as those features
-// land — see docs/09-deployment.md for the eventual full shape.
+// Only the sections implemented so far are parsed. Later fases (file
+// explorer, terminal, ...) will extend this struct as those features land
+// — see docs/09-deployment.md for the eventual full shape.
 package config
 
 import (
@@ -17,6 +17,7 @@ type Config struct {
 	Auth    AuthConfig    `yaml:"auth"`
 	Polling PollingConfig `yaml:"polling"`
 	Docker  DockerConfig  `yaml:"docker"`
+	Systemd SystemdConfig `yaml:"systemd"`
 }
 
 type ServerConfig struct {
@@ -51,6 +52,13 @@ type DockerConfig struct {
 	WatchIntervalSec int    `yaml:"watchIntervalSec"`
 }
 
+// SystemdConfig — see docs/04-features.md §4.3 & docs/07-security.md.
+// ProtectedUnits get an extra, more emphatic confirmation before
+// stop/restart so they don't get taken down by accident.
+type SystemdConfig struct {
+	ProtectedUnits []string `yaml:"protectedUnits"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -71,6 +79,9 @@ func Default() Config {
 			Enabled:          true,
 			SocketPath:       "/var/run/docker.sock",
 			WatchIntervalSec: 5,
+		},
+		Systemd: SystemdConfig{
+			ProtectedUnits: []string{"ssh.service", "docker.service", "tarkimanos.service"},
 		},
 	}
 }

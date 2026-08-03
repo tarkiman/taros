@@ -172,15 +172,44 @@ bukan error 500.
 
 ## 4.3 Monitoring Service (systemd)
 
-- Daftar unit `.service` (default filter), dengan opsi tampilkan `.socket`/`.timer` juga.
-- Per unit: nama, description, **load state**, **active state** (active/inactive/failed/activating),
-  **sub state**, enabled/disabled (`UnitFileState`), memory usage per unit (via cgroup jika tersedia).
-- Search/filter by nama & status (misal quick-filter "failed only").
-- Aksi: **start / stop / restart / reload**, dengan konfirmasi untuk stop/restart pada unit
-  kritikal (daftar unit "terproteksi" bisa dikonfigurasi, misal `sshd`, `systemd-*`, `docker`,
-  supaya tidak ke-restart tidak sengaja).
-- Tampilkan beberapa baris terakhir log unit (via `journalctl -u <unit> -n 50 --no-pager`,
-  dieksekusi on-demand saat user membuka detail — bukan terus-menerus).
+- Daftar unit `.service` (default filter), dengan opsi tampilkan `.socket`/`.timer` juga
+  (toggle `showAll`, gabungan `systemctl list-units --type=service,socket,timer`).
+- Per unit: nama, description, **active state** (active/inactive/failed/activating), **sub
+  state**, enabled/disabled (digabung dari `systemctl list-unit-files` berdasarkan nama unit).
+- Search/filter by nama & description, plus quick-filter "hanya yang failed" — keduanya
+  filter di sisi server terhadap hasil `list-units`, bukan query systemd terpisah.
+- Aksi: **start / stop / restart / reload**, dengan konfirmasi lebih tegas (teks peringatan
+  eksplisit) untuk unit "terproteksi" yang bisa dikonfigurasi lewat `systemd.protectedUnits`
+  di `config.yaml` (default: `ssh.service`, `docker.service`, `tarkimanos.service` — dicek
+  langsung terhadap nama unit sebenarnya di sistem Debian/Raspberry Pi OS, bukan `sshd.service`
+  seperti asumsi awal sebelum divalidasi).
+- Tampilkan 50 baris terakhir log unit (via `journalctl -u <unit> -n 50 --no-pager`,
+  dieksekusi on-demand saat tombol "Log" diklik — bukan terus-menerus), ditampilkan di satu
+  panel log bersama di bagian bawah halaman (bukan per-baris expand-in-place, demi kesederhanaan).
+
+### Catatan Implementasi & Privilege
+
+- **List/monitoring read-only tidak butuh privilege khusus** — `systemctl list-units`/
+  `list-unit-files` dan `journalctl -u` (untuk user yang jadi anggota grup `adm`/`systemd-journal`)
+  jalan tanpa root maupun sudo, terukur cepat (~15ms untuk list-units, ~500ms untuk gabungan
+  list-units+list-unit-files terhadap 170+ unit) — **tidak perlu** pola cache/`Watcher`
+  seperti Docker container stats (lihat [05-data-storage.md](05-data-storage.md)).
+- **Aksi (start/stop/restart/reload) butuh privilege elevated** — dikonfirmasi langsung:
+  tanpa setup tambahan, `systemctl restart <unit>` yang dijalankan oleh user service
+  `tarkimanos` (non-root) gagal dengan "Interactive authentication required." Implementasi
+  memanggil `sudo -n systemctl <aksi> <unit>` (`-n`/non-interaktif supaya gagal cepat &
+  jelas, bukan menggantung menunggu password yang tidak akan pernah datang) — ini **memakai
+  privilege opt-in yang sama** yang sudah didokumentasikan untuk web terminal
+  ([07-security.md](07-security.md) §7.6), atau bisa pakai sudoers rule yang lebih sempit
+  (khusus `systemctl`, bukan shell penuh) — lihat [09-deployment.md](09-deployment.md) §9.2.
+  Tanpa salah satu dari itu, list/monitoring tetap berfungsi penuh, hanya tombol aksi yang
+  akan menampilkan pesan error jelas ("Interactive authentication required") alih-alih diam-diam
+  gagal.
+- **Memory usage per unit (via cgroup) — belum diimplementasikan.** `MemoryAccounting` tidak
+  aktif secara default untuk kebanyakan unit di sistem yang diuji (`systemctl show <unit> -p
+  MemoryCurrent` mengembalikan `[not set]`), jadi kolom ini bernilai rendah untuk banyak
+  instalasi kecuali user mengaktifkan `DefaultMemoryAccounting=yes` sendiri — dicadangkan
+  untuk iterasi berikutnya kalau memang dibutuhkan, bukan prioritas Fase 2b.
 
 ## 4.4 File Explorer
 
