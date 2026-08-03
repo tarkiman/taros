@@ -1,10 +1,9 @@
 # Contoh config.yaml untuk TarkimanOS — hanya berisi bagian yang sudah
 # diimplementasikan (Fase 0: server + auth; Fase 1: polling metrics;
-# Fase 2: docker + systemd; Fase 3a: file explorer inti). Section lain
-# (terminal, thresholds, dst — lihat docs/09-deployment.md §9.6) akan
-# ditambahkan seiring fase implementasinya selesai. Field streaming/job
-# queue untuk fileExplorer (maxUploadSizeMB, copyThrottleMBps, dst)
-# menyusul di Fase 3b bersama fitur yang membutuhkannya.
+# Fase 2: docker + systemd; Fase 3a+3b: file explorer lengkap kecuali
+# editor). Section lain (terminal, thresholds, dst — lihat
+# docs/09-deployment.md §9.6) akan ditambahkan seiring fase
+# implementasinya selesai.
 
 server:
   listen: "0.0.0.0:8090"
@@ -42,3 +41,7 @@ fileExplorer:
     - "/sys"
     # ".ssh" directories (any user's) are blocked automatically by internal/fileexplorer,
     # not via this list — see docs/07-security.md §7.3.
+  maxUploadSizeMB: 500
+  maxConcurrentOps: 2         # copy/move besar diantrekan, tidak dijalankan paralel tanpa batas
+  copyThrottleMBps: 0         # 0 = tanpa batas; set (mis. 20) di storage lambat (eMMC/SD STB)
+  copySyncEveryMB: 32         # panggil fsync tiap N MB agar writeback bertahap, bukan menumpuk

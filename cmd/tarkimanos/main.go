@@ -84,16 +84,23 @@ func runServer(args []string) {
 		slog.Error("init file explorer jail", "err", err)
 		os.Exit(1)
 	}
+	jobQueue := fileexplorer.NewJobQueue(cfg.FileExplorer.MaxConcurrentOps, fileexplorer.CopyOptions{
+		BufferBytes:         256 * 1024,
+		ThrottleBytesPerSec: int64(cfg.FileExplorer.CopyThrottleMBps) * 1024 * 1024,
+		SyncEveryBytes:      int64(cfg.FileExplorer.CopySyncEveryMB) * 1024 * 1024,
+	})
 
 	deps := web.Deps{
-		Sessions:       sessions,
-		Creds:          creds,
-		RateLimiter:    rateLimiter,
-		Store:          metricsStore,
-		SSEInterval:    fastInterval,
-		DockerEnabled:  cfg.Docker.Enabled,
-		ProtectedUnits: protectedUnits,
-		Jail:           jail,
+		Sessions:        sessions,
+		Creds:           creds,
+		RateLimiter:     rateLimiter,
+		Store:           metricsStore,
+		SSEInterval:     fastInterval,
+		DockerEnabled:   cfg.Docker.Enabled,
+		ProtectedUnits:  protectedUnits,
+		Jail:            jail,
+		Jobs:            jobQueue,
+		MaxUploadSizeMB: cfg.FileExplorer.MaxUploadSizeMB,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

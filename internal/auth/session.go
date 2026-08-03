@@ -16,6 +16,35 @@ type Session struct {
 	// CSRFToken is bound to the session so a stolen CSRF token alone
 	// (without the session cookie) is useless — see docs/07-security.md §7.2.
 	CSRFToken string
+
+	// clipboard is the file explorer's copy/cut state, per-session as
+	// documented in docs/04-features.md §4.4 — a dedicated mutex (not the
+	// SessionStore's) since this is mutated independently of session
+	// creation/validation, by concurrent file-explorer requests for the
+	// same session.
+	clipMu       sync.Mutex
+	clipboard    []string
+	clipboardCut bool
+}
+
+// SetClipboard records paths for a later Paste — see docs/04-features.md §4.4.
+func (s *Session) SetClipboard(paths []string, cut bool) {
+	s.clipMu.Lock()
+	defer s.clipMu.Unlock()
+	s.clipboard = paths
+	s.clipboardCut = cut
+}
+
+func (s *Session) Clipboard() (paths []string, cut bool) {
+	s.clipMu.Lock()
+	defer s.clipMu.Unlock()
+	return s.clipboard, s.clipboardCut
+}
+
+func (s *Session) ClearClipboard() {
+	s.clipMu.Lock()
+	defer s.clipMu.Unlock()
+	s.clipboard = nil
 }
 
 // SessionStore is an in-memory, mutex-protected session table. State is

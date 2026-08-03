@@ -44,11 +44,11 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | `GET /api/stream/metrics` | **SSE** — push snapshot metrics (CPU/RAM/disk/temp/net) tiap tick |
 | `GET /api/metrics/history?metric=cpu` | Data histori untuk chart (dari ring buffer). Fase 1: `metric` ∈ `cpu\|mem\|diskRead\|diskWrite\|tempMax`, selalu mengembalikan seluruh isi buffer (~15 menit) — parameter `range` dicadangkan untuk nanti kalau tingkat retensi lebih panjang (lihat [05-data-storage.md](05-data-storage.md)) sudah ada untuk dipilih |
 | `GET /api/terminal/ws` | **WebSocket** — sesi PTY interaktif (stdin/stdout + resize control message) |
-| `POST /api/files/op` | Body JSON: `{action: mkdir\|create\|rename\|delete, path, newPath?}`. **Fase 3a**: keempat aksi ini sudah jalan, semuanya sinkron (tidak butuh job — operasinya instan/`os.Rename`). `copy\|cut\|paste` menyusul di Fase 3b, dan **akan** butuh jobId untuk file besar (lihat di bawah) |
-| `GET /api/files/op/{jobId}/stream` | [Fase 3b] **SSE** — progress job file besar (persentase, kecepatan, ETA) |
-| `POST /api/files/op/{jobId}/cancel` | [Fase 3b] Batalkan job yang sedang berjalan |
-| `POST /api/files/upload` | [Fase 3b] Multipart upload (streaming, tidak dibuffer penuh di memori sebelum ditulis) |
-| `GET /api/files/download?path=` | Download file (streaming via `http.ServeFile`, sudah jalan Fase 3a). Folder-sebagai-zip masih 501 sampai Fase 3b |
+| `POST /api/files/op` | Body JSON: `{action, path, newPath?, paths?}`. `mkdir\|create\|rename\|delete` sinkron (instan/`os.Rename`). `copy\|cut` cuma menyimpan `paths` ke clipboard sesi (`auth.Session`), tidak ada I/O. `paste` **selalu** mengembalikan `{jobId}` — bahkan kalau semua entry ternyata instant-rename, satu jalur kode klien untuk semua kasus |
+| `GET /api/files/op/{jobId}/stream` | **SSE** — progress job file besar (`JobSnapshot`: persentase, `bytesPerSec`, `currentFile`) |
+| `POST /api/files/op/{jobId}/cancel` | Batalkan job yang sedang berjalan — `context.CancelFunc`, efektif dalam &lt;1 buffer I/O (~256KB) |
+| `POST /api/files/upload?path=` | Multipart streaming langsung ke disk (`io.CopyBuffer`, bukan buffer penuh); `http.MaxBytesReader` menegakkan `fileExplorer.maxUploadSizeMB` dengan memutus baca begitu limit terlampaui, bukan menolak setelah menerima semuanya |
+| `GET /api/files/download?path=` | Download file tunggal (streaming via `http.ServeFile`) atau **folder sebagai zip** (streaming via `archive/zip`, tidak pernah membangun arsip penuh di disk/memori dulu) |
 | `GET /api/files/content?path=` | Baca isi file untuk editor |
 | `PUT /api/files/content?path=` | Simpan isi file dari editor |
 | `POST /api/auth/login` | Login (set cookie session) |

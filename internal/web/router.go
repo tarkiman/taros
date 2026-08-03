@@ -35,6 +35,9 @@ type Deps struct {
 
 	// Jail scopes every file explorer operation — see docs/07-security.md §7.3.
 	Jail *fileexplorer.Jail
+	// Jobs runs copy/move operations — see docs/04-features.md §4.4.
+	Jobs            *fileexplorer.JobQueue
+	MaxUploadSizeMB int
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -84,6 +87,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /files", s.requireAuth(s.handleFilesPage))
 	mux.HandleFunc("GET /fragments/files/list", s.requireAuth(s.handleFilesListFragment))
 	mux.HandleFunc("POST /api/files/op", s.requireAuth(s.handleFilesOp))
+	mux.HandleFunc("GET /api/files/op/{jobId}/stream", s.requireAuth(s.handleFilesOpStream))
+	mux.HandleFunc("POST /api/files/op/{jobId}/cancel", s.requireAuth(s.handleFilesOpCancel))
+	mux.HandleFunc("POST /api/files/upload", s.requireAuth(s.handleFilesUpload))
 	mux.HandleFunc("GET /api/files/download", s.requireAuth(s.handleFilesDownload))
 
 	mux.Handle("GET /static/", http.FileServerFS(assets.Static))

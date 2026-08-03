@@ -249,7 +249,29 @@ tr:last-child td { border-bottom: none; }
   word-break: break-all;
 }
 
-.file-toolbar { display: flex; gap: var(--space); margin-bottom: calc(var(--space) * 2); }
+.file-toolbar { display: flex; align-items: center; gap: var(--space); margin-bottom: calc(var(--space) * 2); }
+.file-toolbar input[type="search"] {
+  padding: 5px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.progress-track {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  height: 10px;
+  overflow: hidden;
+  margin: var(--space) 0;
+}
+.progress-fill {
+  background: var(--accent);
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease;
+}
 
 .breadcrumb {
   display: flex;
