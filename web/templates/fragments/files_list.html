@@ -1,0 +1,44 @@
+<div class="breadcrumb">
+{{range .Breadcrumbs}}
+  <a href="/files?path={{.Path}}" hx-get="/fragments/files/list?path={{.Path}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{.Path}}">{{.Name}}</a>
+{{end}}
+</div>
+
+<div class="panel">
+<table class="docker-table">
+<thead><tr><th>Nama</th><th>Ukuran</th><th>Pemilik</th><th>Diubah</th><th>Aksi</th></tr></thead>
+<tbody>
+{{if .ParentPath}}
+<tr>
+  <td colspan="5">
+    <a href="/files?path={{.ParentPath}}" hx-get="/fragments/files/list?path={{.ParentPath}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{.ParentPath}}">.. (naik satu level)</a>
+  </td>
+</tr>
+{{end}}
+{{range .Entries}}
+{{$fullPath := joinPath $.CurrentPath .Name}}
+<tr>
+  <td>
+    {{if .IsDir}}
+    <a href="/files?path={{$fullPath}}" hx-get="/fragments/files/list?path={{$fullPath}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{$fullPath}}">📁 {{.Name}}</a>
+    {{else}}
+    📄 {{.Name}}
+    {{end}}
+  </td>
+  <td class="text-muted">{{if not .IsDir}}{{formatBytes .SizeBytes}}{{end}}</td>
+  <td class="text-muted">{{.Owner}}</td>
+  <td class="text-muted">{{.ModTime.Format "2006-01-02 15:04"}}</td>
+  <td class="actions">
+    {{if not .IsDir}}
+    <a class="btn-sm" href="/api/files/download?path={{$fullPath}}">Unduh</a>
+    {{end}}
+    <button class="btn-sm" onclick="tkFileRename('{{$fullPath}}')">Rename</button>
+    <button class="btn-sm btn-danger" onclick="tkFileDelete('{{$fullPath}}', '{{.Name}}')">Hapus</button>
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="text-muted">Folder kosong.</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>

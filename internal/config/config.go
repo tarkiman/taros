@@ -13,11 +13,12 @@ import (
 )
 
 type Config struct {
-	Server  ServerConfig  `yaml:"server"`
-	Auth    AuthConfig    `yaml:"auth"`
-	Polling PollingConfig `yaml:"polling"`
-	Docker  DockerConfig  `yaml:"docker"`
-	Systemd SystemdConfig `yaml:"systemd"`
+	Server       ServerConfig       `yaml:"server"`
+	Auth         AuthConfig         `yaml:"auth"`
+	Polling      PollingConfig      `yaml:"polling"`
+	Docker       DockerConfig       `yaml:"docker"`
+	Systemd      SystemdConfig      `yaml:"systemd"`
+	FileExplorer FileExplorerConfig `yaml:"fileExplorer"`
 }
 
 type ServerConfig struct {
@@ -59,6 +60,15 @@ type SystemdConfig struct {
 	ProtectedUnits []string `yaml:"protectedUnits"`
 }
 
+// FileExplorerConfig — see docs/04-features.md §4.4 & docs/07-security.md §7.3.
+// Streaming/job-queue fields (maxUploadSizeMB, copyThrottleMBps, ...) land
+// in Fase 3b along with the features that need them — not added here yet,
+// see docs/10-roadmap.md.
+type FileExplorerConfig struct {
+	RootDir   string   `yaml:"rootDir"`
+	Blocklist []string `yaml:"blocklist"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -82,6 +92,17 @@ func Default() Config {
 		},
 		Systemd: SystemdConfig{
 			ProtectedUnits: []string{"ssh.service", "docker.service", "tarkimanos.service"},
+		},
+		FileExplorer: FileExplorerConfig{
+			RootDir: "/",
+			Blocklist: []string{
+				"/etc/shadow",
+				"/etc/shadow-", // vipw/pwck leave the previous version here — same sensitivity
+				"/etc/gshadow",
+				"/etc/gshadow-",
+				"/proc",
+				"/sys",
+			},
 		},
 	}
 }

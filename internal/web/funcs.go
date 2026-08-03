@@ -3,12 +3,14 @@ package web
 import (
 	"fmt"
 	"html/template"
+	"path/filepath"
 )
 
 // funcMap is shared by every page and fragment template — see templates.go.
 var funcMap = template.FuncMap{
 	"formatBytes": formatBytes,
 	"formatPct":   formatPct,
+	"joinPath":    filepath.Join,
 }
 
 func formatBytes(n int64) string {

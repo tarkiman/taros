@@ -1,0 +1,32 @@
+{{define "title"}}Files — TarkimanOS{{end}}
+
+{{define "content"}}
+<header class="topnav">
+  <span class="brand">TarkimanOS</span>
+  <nav class="topnav-links">
+    <a href="/">Dashboard</a>
+    <a href="/docker">Docker</a>
+    <a href="/services">Service</a>
+    <a href="/files" class="active">Files</a>
+  </nav>
+  <span class="user">{{.Username}}</span>
+  <form method="post" action="/api/auth/logout">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Keluar</button>
+  </form>
+</header>
+<main>
+  <div class="file-toolbar">
+    <button class="btn-sm" id="btn-new-folder">Folder Baru</button>
+    <button class="btn-sm" id="btn-new-file">File Baru</button>
+  </div>
+  <div id="files-panel" hx-get="/fragments/files/list?path={{.CurrentPath}}" hx-trigger="load" hx-swap="innerHTML" hx-push-url="/files?path={{.CurrentPath}}"><p>Memuat…</p></div>
+</main>
+{{end}}
+
+{{define "extra_scripts"}}
+<script src="/static/js/vendor/htmx.min.js"></script>
+<script src="/static/js/files.js"></script>
+{{end}}
+
+{{template "layout" .}}

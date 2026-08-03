@@ -92,21 +92,53 @@ satu fase besar di roadmap ini.
 
 ## Fase 3 — File Explorer & Editor
 
-- `fileexplorer/`: list, create, rename (via `os.Rename` untuk kasus umum, lihat
-  [04-features.md](04-features.md) "Keandalan Operasi File Besar/Banyak"), delete, copy/cut-paste.
+Dipecah jadi tiga PR (pola yang sama seperti Fase 2 — lihat memori proyek/`README.md`
+"Menjaga Dokumentasi Tetap Relevan"): inti dulu, lalu operasi berat/streaming, baru editor.
+
+### 3a — File Explorer inti (selesai)
+
+- `safepath.go` (tipe `Jail`): validasi path traversal, symlink escape (best-effort resolve
+  untuk path yang belum ada), blocklist, generic `.ssh` block — dibangun & **diuji sebelum**
+  kode lain di package ini boleh menyentuh filesystem, sesuai [07-security.md](07-security.md)
+  §7.3.
+- `list.go`, `ops.go`: browse + breadcrumb, create file/folder, rename (`os.Rename`), delete
+  (rekursif via `os.RemoveAll`), download file tunggal (streaming via `http.ServeFile`).
+- **Checkpoint keamanan tercapai**: diuji langsung (bukan cuma unit test) — traversal, symlink
+  escape sungguhan (dibuat via `os.Symlink` mengarah ke `/etc`), akses `.ssh`, blocklist
+  (termasuk untuk path yang belum ada di dalam direktori blocklisted) — semua tertolak
+  dengan pesan jelas.
+- **Dua bug nyata ditemukan & diperbaiki lewat testing manual** (bukan cuma lolos unit test
+  terisolasi): (1) breadcrumb awalnya dibangun dari filesystem `/` bukan dari `rootDir` jail
+  — kalau `rootDir` dipersempit, breadcrumb menampilkan link yang **akan ditolak** kalau
+  diklik (aman, tapi UX rusak); (2) entry yang masuk blocklist (`/etc/shadow`) tetap muncul
+  di listing dengan tombol aksi yang terlihat aktif tapi gagal 403 kalau diklik. Keduanya
+  diperbaiki — lihat [07-security.md](07-security.md) §7.3 &
+  [08-project-structure.md](08-project-structure.md) untuk detail.
+- **Checkpoint stabilitas untuk 3a**: tidak relevan di fase ini — operasi yang diimplementasikan
+  (create/rename/delete/download-file-tunggal) semuanya sudah streaming/instan by construction
+  (`os.Rename`, `http.ServeFile`), bukan operasi besar yang berisiko. Checkpoint stabilitas
+  "sungguhan" (copy file multi-GB, dsb) berlaku untuk 3b di bawah.
+
+### 3b — Operasi Besar & Streaming (belum dikerjakan)
+
 - `copyjob.go` + `jobqueue.go`: copy/move streaming (buffer tetap, tanpa load penuh ke memori),
   throttle opsional, sync berkala, antrean dengan batas konkuren, progress via SSE, cancel.
-- Upload (streaming multipart) / download (streaming, zip on-the-fly untuk folder).
-- `safepath.go`: validasi path traversal, root jail, blocklist (implementasi penuh sesuai
-  [07-security.md](07-security.md) §7.3 — **wajib** sebelum fitur ini dianggap selesai).
-- Integrasi CodeMirror 6 untuk editor teks (md/yaml/json/conf/plain).
-- **Checkpoint keamanan**: uji manual (coba path traversal, symlink escape, upload file besar)
-  sebelum fitur ini dianggap "selesai" — bukan cuma functional testing.
+- Copy/cut/paste + multi-select, upload (streaming multipart), download folder (zip on-the-fly),
+  search/filter dalam direktori — lihat [04-features.md](04-features.md) §4.4.
 - **Checkpoint stabilitas (langsung merespons masalah CasaOS yang jadi motivasi proyek ini,
   lihat [01-overview.md](01-overview.md))**: di STB, copy file tunggal multi-GB **dan** copy
   ribuan file kecil sekaligus — pastikan dashboard & akses lain ke perangkat (SSH, dsb) **tetap
   responsif** sepanjang proses, tidak ada hang yang butuh power-cycle manual. Ini kriteria
-  "selesai" yang sama pentingnya dengan checkpoint keamanan di atas — jangan dilewati.
+  "selesai" yang sama pentingnya dengan checkpoint keamanan — jangan dilewati.
+
+### 3c — Text Editor (belum dikerjakan)
+
+- `content.go`: baca/tulis isi file dengan deteksi biner, save atomik (tulis ke temp file lalu
+  rename).
+- Integrasi CodeMirror 6 (butuh langkah build sungguhan — beda dari htmx/uPlot di fase
+  sebelumnya yang dipakai langsung dari dist resmi, lihat [03-tech-stack.md](03-tech-stack.md)).
+- Validasi ringan YAML/JSON, auto-save draft ke `localStorage`, deteksi konflik — lihat
+  [04-features.md](04-features.md) §4.4 "Text Editor Terintegrasi".
 
 ## Fase 4 — Web Terminal
 

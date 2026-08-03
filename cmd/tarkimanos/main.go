@@ -22,6 +22,7 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/collector"
 	"github.com/tarkiman/tarkiman-os/internal/config"
 	"github.com/tarkiman/tarkiman-os/internal/docker"
+	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
 	"github.com/tarkiman/tarkiman-os/internal/store"
 	"github.com/tarkiman/tarkiman-os/internal/web"
 )
@@ -78,6 +79,12 @@ func runServer(args []string) {
 		protectedUnits[u] = true
 	}
 
+	jail, err := fileexplorer.NewJail(cfg.FileExplorer.RootDir, cfg.FileExplorer.Blocklist)
+	if err != nil {
+		slog.Error("init file explorer jail", "err", err)
+		os.Exit(1)
+	}
+
 	deps := web.Deps{
 		Sessions:       sessions,
 		Creds:          creds,
@@ -86,6 +93,7 @@ func runServer(args []string) {
 		SSEInterval:    fastInterval,
 		DockerEnabled:  cfg.Docker.Enabled,
 		ProtectedUnits: protectedUnits,
+		Jail:           jail,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

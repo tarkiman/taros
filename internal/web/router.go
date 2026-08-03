@@ -8,6 +8,7 @@ import (
 
 	"github.com/tarkiman/tarkiman-os/internal/auth"
 	"github.com/tarkiman/tarkiman-os/internal/docker"
+	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
 	"github.com/tarkiman/tarkiman-os/internal/store"
 )
 
@@ -31,6 +32,9 @@ type Deps struct {
 	// ProtectedUnits get an extra-emphatic confirmation before stop/restart
 	// — see docs/07-security.md.
 	ProtectedUnits map[string]bool
+
+	// Jail scopes every file explorer operation — see docs/07-security.md §7.3.
+	Jail *fileexplorer.Jail
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -76,6 +80,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /fragments/services/list", s.requireAuth(s.handleServicesListFragment))
 	mux.HandleFunc("POST /fragments/services/{name}/{action}", s.requireAuth(s.handleServiceAction))
 	mux.HandleFunc("GET /fragments/services/{name}/logs", s.requireAuth(s.handleServiceLogsFragment))
+
+	mux.HandleFunc("GET /files", s.requireAuth(s.handleFilesPage))
+	mux.HandleFunc("GET /fragments/files/list", s.requireAuth(s.handleFilesListFragment))
+	mux.HandleFunc("POST /api/files/op", s.requireAuth(s.handleFilesOp))
+	mux.HandleFunc("GET /api/files/download", s.requireAuth(s.handleFilesDownload))
 
 	mux.Handle("GET /static/", http.FileServerFS(assets.Static))
 
