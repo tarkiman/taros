@@ -156,3 +156,68 @@ tr:last-child td { border-bottom: none; }
 }
 
 #list-temps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: calc(var(--space) / 2); }
+
+.topnav-links { display: flex; gap: var(--space); }
+.topnav-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: calc(var(--space) / 2) var(--space);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+.topnav-links a.active { color: var(--text); background: var(--surface); }
+.topnav-links a:hover { color: var(--text); }
+
+.tabs {
+  display: flex;
+  gap: var(--space);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: calc(var(--space) * 2);
+  overflow-x: auto;
+}
+.tab {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: var(--space) calc(var(--space) * 1.5);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--text); }
+
+.docker-table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  padding-bottom: calc(var(--space) / 1.5);
+  border-bottom: 1px solid var(--border);
+}
+.docker-table td { vertical-align: middle; }
+.docker-table .actions { display: flex; gap: calc(var(--space) / 2); justify-content: flex-end; white-space: nowrap; }
+
+.text-muted { color: var(--text-muted); font-size: 0.85rem; }
+
+.btn-sm {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.btn-sm:hover { border-color: var(--accent); }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: #fff; }
+
+.badge-warn { background: #e0a83e; }
+.badge-state-running { background: #3ecf6e; color: #06240f; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+.badge-state-exited { background: var(--border); color: var(--text-muted); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+.badge-state-paused { background: #e0a83e; color: #241c06; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+
+.panel + .panel { margin-top: calc(var(--space) * 2); }
+.panel h2 { margin-top: 0; }
+.panel table tr td:first-child { color: var(--text-muted); width: 40%; }

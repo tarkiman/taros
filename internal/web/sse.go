@@ -23,7 +23,7 @@ func (s *Server) handleMetricsStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	ticker := time.NewTicker(s.sseInterval)
+	ticker := time.NewTicker(s.deps.SSEInterval)
 	defer ticker.Stop()
 
 	ctx := r.Context()
@@ -32,7 +32,7 @@ func (s *Server) handleMetricsStream(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			snap := s.store.Latest()
+			snap := s.deps.Store.Latest()
 			if snap == nil {
 				continue
 			}
@@ -73,7 +73,7 @@ func (s *Server) handleMetricsHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	samples := s.store.History(series)
+	samples := s.deps.Store.History(series)
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(samples); err != nil {
 		return

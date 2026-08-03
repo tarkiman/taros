@@ -1,0 +1,31 @@
+<div class="panel">
+<table class="docker-table">
+<thead><tr>
+  <th>Nama</th><th>Image</th><th>Status</th><th>CPU</th><th>RAM</th><th>Network</th><th>Ports</th><th>Aksi</th>
+</tr></thead>
+<tbody>
+{{range .Containers}}
+<tr>
+  <td>{{.Name}}</td>
+  <td class="text-muted">{{.Image}}</td>
+  <td><span class="badge badge-state-{{.State}}">{{.Status}}</span></td>
+  <td>{{if .HasStats}}{{formatPct .Stats.CPUPercent}}{{else}}—{{end}}</td>
+  <td>{{if and .HasStats .Stats.MemLimitBytes}}{{formatBytes .Stats.MemUsageBytes}} / {{formatBytes .Stats.MemLimitBytes}}{{else}}—{{end}}</td>
+  <td>{{if .HasStats}}↓{{formatBytes .Stats.NetRxBytes}} ↑{{formatBytes .Stats.NetTxBytes}}{{else}}—{{end}}</td>
+  <td class="text-muted">{{.Ports}}</td>
+  <td class="actions">
+    {{if eq .State "running"}}
+    <button class="btn-sm" hx-post="/fragments/docker/containers/{{.ID}}/stop" hx-target="#docker-tab-panel" hx-swap="innerHTML" hx-confirm="Stop container {{.Name}}?">Stop</button>
+    <button class="btn-sm" hx-post="/fragments/docker/containers/{{.ID}}/restart" hx-target="#docker-tab-panel" hx-swap="innerHTML" hx-confirm="Restart container {{.Name}}?">Restart</button>
+    {{else}}
+    <button class="btn-sm" hx-post="/fragments/docker/containers/{{.ID}}/start" hx-target="#docker-tab-panel" hx-swap="innerHTML">Start</button>
+    <button class="btn-sm btn-danger" hx-post="/fragments/docker/containers/{{.ID}}/remove" hx-target="#docker-tab-panel" hx-swap="innerHTML" hx-confirm="Hapus container {{.Name}}? Tindakan ini tidak bisa dibatalkan.">Hapus</button>
+    {{end}}
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="8" class="text-muted">Tidak ada container.</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>

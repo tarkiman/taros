@@ -29,7 +29,7 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | `GET /fragments/docker/settings` | Panel info daemon + disk usage + tombol cleanup |
 | `GET /fragments/services/list` | Tabel systemd unit |
 | `GET /fragments/files/list` | Listing folder (dipakai saat navigasi tanpa reload) |
-| `POST /fragments/docker/containers/{id}/start\|stop\|restart\|remove` | Aksi container, return baris ter-update |
+| `POST /fragments/docker/containers/{id}/{start\|stop\|restart\|remove}` | Aksi container. Implementasi Fase 2: return **seluruh tabel** ter-refresh (bukan cuma baris), lebih sederhana daripada per-row diff & tetap cukup cepat karena `internal/docker.Watcher` sudah cache di memori — lihat [05-data-storage.md](05-data-storage.md) |
 | `POST /fragments/docker/images/{id}/remove` | Hapus image |
 | `POST /fragments/docker/volumes/{name}/remove` | Hapus volume |
 | `POST /fragments/docker/networks/{id}/remove` | Hapus network |

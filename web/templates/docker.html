@@ -1,0 +1,47 @@
+{{define "title"}}Docker — TarkimanOS{{end}}
+
+{{define "content"}}
+<header class="topnav">
+  <span class="brand">TarkimanOS</span>
+  <nav class="topnav-links">
+    <a href="/">Dashboard</a>
+    <a href="/docker" class="active">Docker</a>
+  </nav>
+  <span class="user">{{.Username}}</span>
+  <form method="post" action="/api/auth/logout">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Keluar</button>
+  </form>
+</header>
+<main>
+  {{if not .DockerEnabled}}
+  <p class="panel">Docker tidak diaktifkan di konfigurasi (<code>docker.enabled: false</code>).</p>
+  {{else}}
+  <nav class="tabs">
+    <a href="/docker?tab=containers" class="tab{{if eq .Tab "containers"}} active{{end}}">Containers</a>
+    <a href="/docker?tab=images" class="tab{{if eq .Tab "images"}} active{{end}}">Images</a>
+    <a href="/docker?tab=volumes" class="tab{{if eq .Tab "volumes"}} active{{end}}">Volumes</a>
+    <a href="/docker?tab=networks" class="tab{{if eq .Tab "networks"}} active{{end}}">Networks</a>
+    <a href="/docker?tab=settings" class="tab{{if eq .Tab "settings"}} active{{end}}">Settings</a>
+  </nav>
+
+  {{if eq .Tab "containers"}}
+  <div id="docker-tab-panel" hx-get="/fragments/docker/containers" hx-trigger="load, every 5s" hx-swap="innerHTML"><p>Memuat…</p></div>
+  {{else if eq .Tab "images"}}
+  <div id="docker-tab-panel" hx-get="/fragments/docker/images" hx-trigger="load" hx-swap="innerHTML"><p>Memuat…</p></div>
+  {{else if eq .Tab "volumes"}}
+  <div id="docker-tab-panel" hx-get="/fragments/docker/volumes" hx-trigger="load" hx-swap="innerHTML"><p>Memuat…</p></div>
+  {{else if eq .Tab "networks"}}
+  <div id="docker-tab-panel" hx-get="/fragments/docker/networks" hx-trigger="load" hx-swap="innerHTML"><p>Memuat…</p></div>
+  {{else}}
+  <div id="docker-tab-panel" hx-get="/fragments/docker/settings" hx-trigger="load" hx-swap="innerHTML"><p>Memuat…</p></div>
+  {{end}}
+  {{end}}
+</main>
+{{end}}
+
+{{define "extra_scripts"}}
+<script src="/static/js/vendor/htmx.min.js"></script>
+{{end}}
+
+{{template "layout" .}}

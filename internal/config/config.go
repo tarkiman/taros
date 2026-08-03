@@ -1,8 +1,8 @@
 // Package config loads TarkimanOS's YAML configuration file.
 //
-// Only the sections implemented so far are parsed. Later fases (Docker,
-// systemd, file explorer, terminal, ...) will extend this struct as those
-// features land — see docs/09-deployment.md for the eventual full shape.
+// Only the sections implemented so far are parsed. Later fases (systemd,
+// file explorer, terminal, ...) will extend this struct as those features
+// land — see docs/09-deployment.md for the eventual full shape.
 package config
 
 import (
@@ -16,6 +16,7 @@ type Config struct {
 	Server  ServerConfig  `yaml:"server"`
 	Auth    AuthConfig    `yaml:"auth"`
 	Polling PollingConfig `yaml:"polling"`
+	Docker  DockerConfig  `yaml:"docker"`
 }
 
 type ServerConfig struct {
@@ -40,6 +41,16 @@ type PollingConfig struct {
 	TempIntervalSec      int `yaml:"tempIntervalSec"`
 }
 
+// DockerConfig — see docs/04-features.md §4.2. WatchIntervalSec is a
+// target, not a guarantee: refreshing container stats is self-throttling
+// (internal/docker.Watcher), so on a host with many containers the actual
+// cadence can end up slower than this.
+type DockerConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	SocketPath       string `yaml:"socketPath"`
+	WatchIntervalSec int    `yaml:"watchIntervalSec"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -55,6 +66,11 @@ func Default() Config {
 			CPUMemNetIntervalSec: 2,
 			DiskUsageIntervalSec: 10,
 			TempIntervalSec:      5,
+		},
+		Docker: DockerConfig{
+			Enabled:          true,
+			SocketPath:       "/var/run/docker.sock",
+			WatchIntervalSec: 5,
 		},
 	}
 }

@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/css/app.css">
   {{block "extra_head" .}}{{end}}
 </head>
-<body>
+<body{{if .CSRFToken}} hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'{{end}}>
   {{template "content" .}}
   {{block "extra_scripts" .}}{{end}}
 </body>

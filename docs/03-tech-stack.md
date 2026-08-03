@@ -70,13 +70,20 @@ distribution, dsb) — signifikan menambah ukuran binary & kompleksitas `go.mod`
 kita yang sebenarnya sederhana meski sudah mencakup containers, images, volumes, & networks
 (lihat [04-features.md](04-features.md) §4.2):
 
-- Containers: `GET /containers/json`, `GET /containers/{id}/stats`, `GET /containers/{id}/json`,
+- Containers: `GET /containers/json`, `GET /containers/{id}/stats?stream=false`,
   `POST /containers/{id}/start|stop|restart`, `DELETE /containers/{id}`.
-- Images: `GET /images/json`, `DELETE /images/{id}`.
-- Volumes: `GET /volumes`, `DELETE /volumes/{name}`.
-- Networks: `GET /networks`, `DELETE /networks/{id}`.
-- Ringkasan disk usage (dipakai untuk ukuran image/volume & panel Settings):
-  `GET /system/df?verbose=1`.
+- Images: `GET /images/json` (sudah termasuk `Size` per image, dipakai langsung untuk tabel
+  Images — tidak perlu `/system/df` per item), `DELETE /images/{id}`.
+- Volumes: `GET /volumes`, `DELETE /volumes/{name}`. **Catatan**: endpoint ini tidak
+  menyertakan ukuran data (lihat [04-features.md](04-features.md) §4.2 "Volumes").
+- Networks: `GET /networks` untuk daftar dasar + `GET /networks/{id}` per-network untuk
+  jumlah container terhubung (field `Containers` di response list dasar selalu kosong,
+  dikonfirmasi terhadap Docker 29.x — bukan cuma perlu `?filters=`, endpoint list-nya
+  memang tidak pernah mengisi field itu).
+- Ringkasan disk usage (panel Settings): `GET /system/df` — **tanpa** `?verbose=1`; response
+  Docker 29.x sudah menyertakan agregat siap pakai per kategori (`ImageUsage.TotalSize`,
+  `.Reclaimable`, dst) tanpa perlu menjumlahkan array item satu-satu seperti API docs versi
+  lama menggambarkan.
 - Info daemon (panel Settings): `GET /info`.
 - Cleanup (panel Settings): `POST /containers/prune`, `POST /images/prune`,
   `POST /volumes/prune`, `POST /networks/prune`.

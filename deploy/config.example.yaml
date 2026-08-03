@@ -1,8 +1,8 @@
 # Contoh config.yaml untuk TarkimanOS — hanya berisi bagian yang sudah
-# diimplementasikan (Fase 0: server + auth; Fase 1: polling metrics).
-# Section lain (fileExplorer, docker, systemd, terminal, thresholds, dst —
-# lihat docs/09-deployment.md §9.6) akan ditambahkan seiring fase
-# implementasinya selesai.
+# diimplementasikan (Fase 0: server + auth; Fase 1: polling metrics;
+# Fase 2: docker). Section lain (fileExplorer, systemd, terminal,
+# thresholds, dst — lihat docs/09-deployment.md §9.6) akan ditambahkan
+# seiring fase implementasinya selesai.
 
 server:
   listen: "0.0.0.0:8090"
@@ -17,3 +17,8 @@ polling:
   cpuMemNetIntervalSec: 2
   diskUsageIntervalSec: 10
   tempIntervalSec: 5
+
+docker:
+  enabled: true
+  socketPath: "/var/run/docker.sock"
+  watchIntervalSec: 5   # target minimum jeda antar refresh cache container — lihat 05-data-storage.md

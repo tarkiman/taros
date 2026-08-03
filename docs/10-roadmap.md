@@ -29,15 +29,47 @@ Dipecah jadi fase supaya ada checkpoint yang bisa dites di perangkat asli (khusu
 
 ## Fase 2 — Docker & Service Monitoring
 
+Dikerjakan sebagai **dua PR terpisah** (konsisten dengan alur kerja "satu fitur = satu PR" —
+lihat memori proyek/`README.md` "Menjaga Dokumentasi Tetap Relevan"), meski digambar sebagai
+satu fase besar di roadmap ini.
+
+### 2a — Docker (selesai)
+
 - `docker/`: klien Unix socket — containers (list + stats + start/stop/restart/remove),
   images (list + remove), volumes (list + remove), networks (list + remove), `system.go`
-  (info daemon, `/system/df`, prune actions).
+  (info daemon, `/system/df`, prune actions), `watcher.go` (cache background untuk stats
+  container — lihat [05-data-storage.md](05-data-storage.md) kenapa ini ternyata perlu,
+  bukan sekadar optimisasi opsional).
+- Halaman Docker (sub-tab Containers/Images/Volumes/Networks/Settings, SSR + htmx fragment
+  untuk refresh berkala & aksi) — lihat [04-features.md](04-features.md) §4.2.
+- **Checkpoint tercapai** (diuji langsung terhadap Docker daemon nyata dengan 37 container
+  berjalan di mesin dev, bukan lingkungan sintetis):
+  - List + live stats container, image, volume, network semuanya menampilkan angka akurat
+    (CPU% tervalidasi terhadap `docker stats` CLI resmi).
+  - Aksi start/stop/restart/remove diuji end-to-end pakai container throwaway (bukan
+    container produksi milik user) — termasuk konfirmasi bahwa **remove container yang masih
+    running ditolak dengan pesan jelas** (HTTP 409 dari Docker, bukan force-delete diam-diam).
+  - Graceful degradation diuji dengan socket path sengaja salah pada instance server
+    terpisah (bukan mematikan Docker daemon asli milik user) — halaman tetap 200, fragment
+    menampilkan pesan "Docker tidak terdeteksi" alih-alih crash/500.
+  - RSS dengan Docker watcher aktif (setelah refresh pertama menangani 51 container): ~15MB,
+    tetap di bawah target [09-deployment.md](09-deployment.md) §9.4.
+- **Temuan signifikan selama implementasi** (semua sudah disinkronkan ke dokumen terkait,
+  bukan cuma catatan di sini): `stats?stream=false` Docker ternyata ~1 detik per container
+  (bukan instan) — memaksa desain `Watcher` cache background yang tidak direncanakan di
+  draf awal; skema respons `/system/df` di Docker 29.x berbeda dari asumsi awal
+  (`ImageUsage`/`ContainerUsage`/`VolumeUsage` dengan agregat siap pakai, bukan array
+  `Images[]`/`Containers[]`/`Volumes[]`); `GET /volumes` tidak pernah mengisi ukuran data;
+  `GET /networks` tidak pernah mengisi jumlah container terhubung (butuh inspect per-network).
+
+### 2b — Service/systemd (belum dikerjakan)
+
 - `systemd/`: mulai dari exec `systemctl` (lebih cepat dibuat) untuk list unit + aksi.
-- Halaman Docker (sub-tab Containers/Images/Volumes/Networks/Settings) & Service (SSR + htmx
-  fragment untuk refresh berkala & aksi) — lihat [04-features.md](04-features.md) §4.2.
-- **Checkpoint**: bisa lihat & kontrol container/image/volume/network/service dari dashboard
-  di kedua perangkat; uji graceful degradation (matikan Docker daemon, pastikan tidak crash);
-  uji aksi prune/remove tidak menghapus yang masih dipakai (harus ditolak dengan pesan jelas).
+- Halaman Service (SSR + htmx fragment untuk refresh berkala & aksi) — lihat
+  [04-features.md](04-features.md) §4.3.
+- **Checkpoint**: bisa lihat & kontrol service dari dashboard di kedua perangkat; unit
+  "terproteksi" (lihat [07-security.md](07-security.md)) butuh extra-confirm sebelum
+  stop/restart.
 
 ## Fase 3 — File Explorer & Editor
 

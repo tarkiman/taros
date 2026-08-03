@@ -1,0 +1,20 @@
+<div class="panel">
+<table class="docker-table">
+<thead><tr><th>Nama</th><th>Driver</th><th>Ukuran</th><th>Status</th><th>Aksi</th></tr></thead>
+<tbody>
+{{range .Volumes}}
+<tr>
+  <td>{{.Name}}</td>
+  <td class="text-muted">{{.Driver}}</td>
+  <td>{{if ge .SizeBytes 0}}{{formatBytes .SizeBytes}}{{else}}<span class="text-muted">tidak diketahui</span>{{end}}</td>
+  <td>{{if .InUse}}dipakai{{else}}<span class="text-muted">tidak dipakai</span>{{end}}</td>
+  <td class="actions">
+    <button class="btn-sm btn-danger" hx-post="/fragments/docker/volumes/{{.Name}}/remove" hx-target="#docker-tab-panel" hx-swap="innerHTML" hx-confirm="Hapus volume {{.Name}}?">Hapus</button>
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="text-muted">Tidak ada volume.</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>

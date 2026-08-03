@@ -15,7 +15,7 @@ func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 
-	if !s.rateLimiter.Allow(ip) {
+	if !s.deps.RateLimiter.Allow(ip) {
 		s.tmpl.render(w, http.StatusTooManyRequests, "login.html", map[string]any{
 			"Error": "Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.",
 		})
@@ -29,16 +29,16 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
-	if !s.creds.Verify(username, password) {
-		s.rateLimiter.RecordFailure(ip)
+	if !s.deps.Creds.Verify(username, password) {
+		s.deps.RateLimiter.RecordFailure(ip)
 		s.tmpl.render(w, http.StatusUnauthorized, "login.html", map[string]any{
 			"Error": "Username atau password salah.",
 		})
 		return
 	}
-	s.rateLimiter.RecordSuccess(ip)
+	s.deps.RateLimiter.RecordSuccess(ip)
 
-	token, sess, err := s.sessions.Create(username)
+	token, sess, err := s.deps.Sessions.Create(username)
 	if err != nil {
 		s.tmpl.render(w, http.StatusInternalServerError, "login.html", map[string]any{
 			"Error": "Gagal membuat sesi, coba lagi.",
@@ -60,7 +60,7 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(auth.CookieName); err == nil {
-		s.sessions.Delete(cookie.Value)
+		s.deps.Sessions.Delete(cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.CookieName,

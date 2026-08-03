@@ -26,7 +26,7 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
-		sess := s.sessions.Validate(cookie.Value)
+		sess := s.deps.Sessions.Validate(cookie.Value)
 		if sess == nil {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
