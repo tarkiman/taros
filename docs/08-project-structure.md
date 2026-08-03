@@ -45,7 +45,8 @@ tarkiman-os/
 │   │   ├── jobqueue.go            # antrean job: batas konkuren (semaphore), cancel via
 │   │   │                          # context, reaper job lama (pola sama seperti SessionStore)
 │   │   ├── archive.go             # zip on-the-fly (streaming, archive/zip) untuk download folder
-│   │   └── content.go             # [Fase 3c] baca/tulis isi file (untuk editor)
+│   │   └── content.go             # baca/tulis isi file: deteksi biner (byte null), batas
+│   │                              # 2MB, save atomik (temp+rename), deteksi konflik via mtime
 │   │
 │   ├── terminal/                    # spawn shell dalam PTY, jembatani ke WebSocket
 │   │   ├── pty.go                   # wrapper creack/pty: spawn shell, resize, kill
@@ -91,7 +92,9 @@ tarkiman-os/
 │   │   ├── docker.html
 │   │   ├── services.html
 │   │   ├── files.html
-│   │   ├── editor.html
+│   │   ├── editor.html                    # shell halaman; isi file di-fetch via JS, tidak
+│   │   │                                  # di-render server-side (hindari HTML-escaping
+│   │   │                                  # konten arbitrary besar langsung di template)
 │   │   ├── login.html
 │   │   ├── terminal.html                  # halaman full-screen xterm.js
 │   │   └── fragments/                    # partial template untuk htmx swap — tanpa layout.html,
@@ -110,6 +113,7 @@ tarkiman-os/
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css                   # design tokens + styling custom
+│   │   │   ├── editor.css                 # layout halaman editor saja (dimuat khusus di sana)
 │   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
 │   │       ├── dashboard.js               # SSE listener + chart + render tabel dashboard
@@ -117,10 +121,14 @@ tarkiman-os/
 │   │       │                                # upload via XHR (butuh progress event, fetch tidak
 │   │       │                                # punya ini untuk request body), progress panel
 │   │       │                                # via EventSource ke endpoint job SSE
+│   │       ├── editor.js                   # glue vanilla JS di sekitar window.TkEditor: fetch
+│   │       │                                # isi file, dirty tracking, save/conflict/draft —
+│   │       │                                # file ini SENDIRI tidak di-bundle esbuild
 │   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
 │   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
-│   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built,
-│   │                                       # lihat 03-tech-stack.md); codemirror/xterm.js menyusul
+│   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built),
+│   │                                       # editor.bundle.js (CodeMirror 6, di-build sendiri —
+│   │                                       # lihat scripts/codemirror-build/); xterm.js menyusul
 │   └── embed.go                            # //go:embed directive (package `assets`)
 │
 ├── deploy/
@@ -133,8 +141,15 @@ tarkiman-os/
 ├── docs/                                       # dokumen ini
 │
 ├── scripts/
-│   ├── build.sh                                # cross-compile untuk arm64
-│   └── build-assets.sh                          # build sekali CodeMirror/uPlot jadi JS statis
+│   ├── build.sh                                # [belum dibuat] cross-compile untuk arm64
+│   └── codemirror-build/                        # build-once CodeMirror 6 (bukan build-assets.sh
+│       │                                        # tunggal seperti draf awal — npm project kecil
+│       │                                        # karena CodeMirror butuh bundler sungguhan,
+│       │                                        # beda dari htmx/uPlot yang tinggal fetch dist)
+│       ├── package.json / package-lock.json     # esbuild + paket @codemirror/* + js-yaml
+│       ├── build.mjs                            # jalankan: npm install && npm run build
+│       └── src/editor-entry.js                  # satu-satunya sumber; output-nya di-commit ke
+│                                                 # web/static/js/vendor/editor.bundle.js
 │
 ├── go.mod
 ├── go.sum
@@ -163,13 +178,27 @@ tarkiman-os/
   (urut alfabetis) akan **menimpa** punya file lain secara diam-diam (nama `{{define}}` bersifat
   global dalam satu set `template.Template`, bukan scoped per file). Ini sempat jadi bug nyata
   saat implementasi Fase 0 (dashboard ikut me-render konten login) sebelum diisolasi per halaman.
-- File JS vendor (`web/static/js/vendor/`) adalah hasil build **sekali** di mesin developer
-  (lihat `scripts/build-assets.sh`), **dicommit ke repo** — bukan di-build ulang tiap
-  `go build`, dan bukan diunduh dari CDN saat runtime (device target tidak butuh akses
-  internet untuk menjalankan TarkimanOS). Fase 2: htmx & uPlot diambil langsung sebagai file
-  dist resmi (tidak ada langkah build sama sekali untuk keduanya, lihat
-  [03-tech-stack.md](03-tech-stack.md)) — `scripts/build-assets.sh` belum benar-benar dibuat,
-  baru dibutuhkan nanti saat CodeMirror 6/xterm.js masuk (butuh bundling sungguhan).
+- File JS vendor (`web/static/js/vendor/`) adalah hasil build **sekali** di mesin developer,
+  **dicommit ke repo** — bukan di-build ulang tiap `go build`, dan bukan diunduh dari CDN saat
+  runtime (device target tidak butuh akses internet untuk menjalankan TarkimanOS). htmx &
+  uPlot diambil langsung sebagai file dist resmi (tidak ada langkah build sama sekali). Fase
+  3c: CodeMirror 6 **beda** — modular dan memang butuh bundler sungguhan (lihat
+  [03-tech-stack.md](03-tech-stack.md)) — jadi punya proyek npm kecil sendiri di
+  `scripts/codemirror-build/` (bukan `scripts/build-assets.sh` tunggal seperti draf awal
+  membayangkan), dijalankan manual (`npm install && npm run build`) tiap kali
+  `src/editor-entry.js` atau dependency-nya berubah, hasilnya di-commit sebagai
+  `web/static/js/vendor/editor.bundle.js` (~677KB / ~225KB gzip — jauh lebih kecil dari
+  Monaco meski lebih besar dari perkiraan awal, karena mencakup beberapa bahasa + lint +
+  search + autocomplete sekaligus).
+- **Fitur JS berat (editor) divalidasi dengan headless browser, bukan cuma testing backend.**
+  `go build`/`esbuild` sama-sama sukses tanpa keluhan untuk bug CodeMirror yang bikin editor
+  gagal mount total (lihat [04-features.md](04-features.md) §4.4 "Catatan Implementasi Fase
+  3c") — error itu cuma muncul saat extension benar-benar dievaluasi oleh CodeMirror di
+  runtime browser. Puppeteer + Chromium (sudah terpasang di mesin dev) dipakai untuk buka
+  halaman sungguhan, cek elemen DOM ter-render, warna token syntax highlighting sungguhan
+  (`getComputedStyle`), dan interaksi (ketik, Ctrl+S) — bukan cuma "server merespons 200".
+  Pola ini dicatat di sini supaya fitur JS-berat berikutnya (kalau ada) tahu alat ini tersedia
+  & kenapa perlu dipakai.
 - **Fragment template di-parse & dirender berdiri sendiri, tanpa `layout.html`.** Beda dengan
   halaman penuh, file di `web/templates/fragments/` cuma berisi potongan HTML biasa (tabel,
   panel) tanpa `{{define}}` — `templateSet.renderFragment` mem-parse tiap file sendirian lewat

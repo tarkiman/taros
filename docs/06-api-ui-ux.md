@@ -49,8 +49,8 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | `POST /api/files/op/{jobId}/cancel` | Batalkan job yang sedang berjalan — `context.CancelFunc`, efektif dalam &lt;1 buffer I/O (~256KB) |
 | `POST /api/files/upload?path=` | Multipart streaming langsung ke disk (`io.CopyBuffer`, bukan buffer penuh); `http.MaxBytesReader` menegakkan `fileExplorer.maxUploadSizeMB` dengan memutus baca begitu limit terlampaui, bukan menolak setelah menerima semuanya |
 | `GET /api/files/download?path=` | Download file tunggal (streaming via `http.ServeFile`) atau **folder sebagai zip** (streaming via `archive/zip`, tidak pernah membangun arsip penuh di disk/memori dulu) |
-| `GET /api/files/content?path=` | Baca isi file untuk editor |
-| `PUT /api/files/content?path=` | Simpan isi file dari editor |
+| `GET /api/files/content?path=` | Baca isi file untuk editor → `{content, modTime}`. 413 kalau &gt;2MB, 415 kalau terdeteksi biner (byte null) |
+| `PUT /api/files/content?path=` | Body `{content, expectedModTime?}` → `{modTime}` baru. 409 kalau `expectedModTime` tidak cocok dengan mtime file saat ini (berubah di luar editor) — `expectedModTime` kosong/diabaikan berarti timpa paksa |
 | `POST /api/auth/login` | Login (set cookie session) |
 | `POST /api/auth/logout` | Hapus session |
 | `POST /api/settings/password` | Ganti password |

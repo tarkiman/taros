@@ -367,6 +367,55 @@ polos. Berbasis **CodeMirror 6** (lihat rasional pemilihan di [03-tech-stack.md]
 - Panel bantuan keyboard shortcut (`?` atau tombol kecil di toolbar) — daftar shortcut yang
   tersedia, supaya fitur seperti multi-cursor tidak "tersembunyi" dari user.
 
+### Catatan Implementasi Fase 3c
+
+Diverifikasi lewat headless browser (Puppeteer + Chromium, bukan cuma unit test Go) terhadap
+server sungguhan — mount editor, load isi file, syntax highlighting (dicek warna sungguhan
+tiap token, bukan cuma keberadaan class CSS — lihat catatan bug di bawah), indikator
+unsaved-changes, save via Ctrl+S, lint marker YAML/JSON, toggle word wrap + persist
+`localStorage`, auto-save draft + prompt pulihkan draft, `beforeunload` guard, dan (lewat API
+langsung) deteksi konflik, penolakan file biner, penolakan file >2MB, serta save atomik yang
+mempertahankan permission file asli.
+
+**Bug nyata ditemukan & diperbaiki lewat testing browser** (tidak akan ketahuan dari sekadar
+membaca kode): pemanggilan `jsonParseLinter()` dari `@codemirror/lang-json` butuh dibungkus
+`linter(jsonParseLinter())` — dipakai langsung tanpa bungkus itu membuat CodeMirror melempar
+"Unrecognized extension value" dan **seluruh editor gagal mount**, bukan cuma linting JSON
+yang tidak berfungsi. Ini murni akan lolos dari code review manual karena error-nya cuma
+muncul di runtime browser, bukan saat `go build`/`esbuild` — alasan kenapa langkah testing
+headless-browser ditambahkan ke checklist fase ini, bukan cuma andalan testing backend API.
+
+**Diimplementasikan sesuai deskripsi di atas**: deteksi file (ekstensi + content-sniffing byte
+null), dua tema dark/light mengikuti dashboard (termasuk font monospace sistem yang sama,
+`ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace`), line numbers,
+current-line highlight, highlight whitespace/trailing-space, syntax highlighting (YAML, JSON,
+Markdown, shell, format `key=value` untuk conf/ini/toml/env via `@codemirror/legacy-modes`),
+code folding, auto-closing bracket, find & replace, validasi ringan YAML/JSON dengan marker di
+gutter, word wrap toggle + persist, unsaved-indicator, `beforeunload` guard, auto-save draft +
+restore prompt, deteksi konflik (409 dari server, tidak menimpa data), batas ukuran 2MB, dan
+save atomik (temp file + rename) yang mempertahankan permission.
+
+**Dengan sengaja belum diimplementasikan** di iterasi ini, dicadangkan untuk polish UI
+([10-roadmap.md](10-roadmap.md) Fase 5) — semuanya nice-to-have yang tidak mengorbankan
+keandalan inti (baca/edit/simpan tetap aman tanpa fitur-fitur ini):
+
+- Dropdown ganti bahasa syntax highlighting manual (saat ini murni otomatis dari ekstensi).
+- Ukuran font/line-height yang bisa disesuaikan user (saat ini fixed 14px).
+- Indent guide visual (garis penanda level indentasi) — butuh paket tambahan
+  (`@replit/codemirror-indentation-markers` atau setara) yang belum dimasukkan.
+- Breadcrumb path + status bar posisi baris:kolom di dalam halaman editor (saat ini cuma nama
+  file di toolbar).
+- Auto-deteksi gaya indentasi file yang sudah ada (2 spasi/4 spasi/tab) — saat ini selalu
+  memaksa 2 spasi untuk file baru/indentasi baru.
+- Tombol "Format" (JSON pretty-print, normalisasi YAML).
+- Preview mode Markdown.
+- Panel bantuan keyboard shortcut.
+- Owner file dipertahankan **best-effort** saat save (`chown`) — proses non-root secara
+  inheren tidak selalu bisa mengubah kepemilikan file ke user lain, jadi ini bisa diam-diam
+  gagal (tidak dianggap error) untuk file yang dimiliki user selain `tarkimanos` — konsekuensi
+  langsung dari prinsip least-privilege di [07-security.md](07-security.md), bukan bug yang
+  bisa "diperbaiki" tanpa menaikkan privilege proses.
+
 ## 4.5 Web Terminal
 
 - Halaman `/terminal` menampilkan emulator terminal penuh-layar (xterm.js) yang terhubung

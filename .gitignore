@@ -5,3 +5,8 @@
 # Local dev artifacts — never commit real credentials/config
 /config.yaml
 /credentials.yaml
+
+# Build-once JS bundling (see scripts/codemirror-build) — only the
+# committed output in web/static/js/vendor/ ships, not node_modules.
+# package-lock.json IS committed (reproducible builds), node_modules isn't.
+scripts/codemirror-build/node_modules/
