@@ -34,7 +34,7 @@ func (s *Server) dockerUnavailable(w http.ResponseWriter, err error) {
 	if s.deps.DockerEnabled {
 		msg = "Docker tidak terdeteksi atau tidak bisa diakses."
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+	s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 		"Message": msg,
 		"Detail":  errString(err),
 	})
@@ -157,7 +157,7 @@ func (s *Server) handleDockerContainerAction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 			"Message": "Aksi gagal: " + action,
 			"Detail":  err.Error(),
 		})
@@ -178,7 +178,7 @@ func (s *Server) handleDockerImageRemove(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveImage(ctx, r.PathValue("id")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 			"Message": "Hapus image gagal (mungkin masih dipakai container).",
 			"Detail":  err.Error(),
 		})
@@ -195,7 +195,7 @@ func (s *Server) handleDockerVolumeRemove(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveVolume(ctx, r.PathValue("name")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 			"Message": "Hapus volume gagal (mungkin masih dipakai container).",
 			"Detail":  err.Error(),
 		})
@@ -212,7 +212,7 @@ func (s *Server) handleDockerNetworkRemove(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveNetwork(ctx, r.PathValue("id")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 			"Message": "Hapus network gagal (mungkin builtin atau masih ada container terhubung).",
 			"Detail":  err.Error(),
 		})
@@ -250,7 +250,7 @@ func (s *Server) handleDockerPrune(w http.ResponseWriter, r *http.Request) {
 
 	for _, k := range kinds {
 		if _, err := s.deps.Docker.Prune(ctx, k); err != nil {
-			s.tmpl.renderFragment(w, http.StatusOK, "docker_unavailable.html", map[string]any{
+			s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
 				"Message": "Cleanup gagal: " + string(k),
 				"Detail":  err.Error(),
 			})

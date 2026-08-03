@@ -27,14 +27,15 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | `GET /fragments/docker/volumes` | Tabel volume |
 | `GET /fragments/docker/networks` | Tabel network |
 | `GET /fragments/docker/settings` | Panel info daemon + disk usage + tombol cleanup |
-| `GET /fragments/services/list` | Tabel systemd unit |
+| `GET /fragments/services/list?q=&showAll=&failedOnly=` | Tabel systemd unit — `q` filter nama/deskripsi, `showAll=1` ikutkan socket/timer, `failedOnly=1` hanya yang failed. Sumber trigger-nya **form filter itu sendiri** (`hx-trigger="load, submit, change, every 8s"` langsung di `<form>`), bukan div terpisah — supaya auto-refresh berkala tidak diam-diam mereset filter yang sedang aktif |
+| `GET /fragments/services/{name}/logs` | 50 baris terakhir `journalctl -u {name}`, di-swap ke satu panel log bersama di bawah halaman |
 | `GET /fragments/files/list` | Listing folder (dipakai saat navigasi tanpa reload) |
 | `POST /fragments/docker/containers/{id}/{start\|stop\|restart\|remove}` | Aksi container. Implementasi Fase 2: return **seluruh tabel** ter-refresh (bukan cuma baris), lebih sederhana daripada per-row diff & tetap cukup cepat karena `internal/docker.Watcher` sudah cache di memori — lihat [05-data-storage.md](05-data-storage.md) |
 | `POST /fragments/docker/images/{id}/remove` | Hapus image |
 | `POST /fragments/docker/volumes/{name}/remove` | Hapus volume |
 | `POST /fragments/docker/networks/{id}/remove` | Hapus network |
 | `POST /fragments/docker/prune/{containers\|images\|volumes\|networks\|all}` | Aksi cleanup, return panel Settings ter-update |
-| `POST /fragments/services/{name}/start\|stop\|restart\|reload` | Aksi unit |
+| `POST /fragments/services/{name}/{start\|stop\|restart\|reload}` | Aksi unit (butuh `sudo -n systemctl` bisa jalan — lihat [09-deployment.md](09-deployment.md) §9.2). **Catatan**: return tabel ter-refresh tanpa mempertahankan filter yang sedang aktif (beda dari auto-refresh berkala di atas) — simplifikasi yang disengaja, bukan bug |
 
 ### REST/JSON (dipakai oleh JS klien, misal chart)
 

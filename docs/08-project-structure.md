@@ -28,9 +28,10 @@ tarkiman-os/
 │   │   ├── networks.go            # ListNetworks inspect per-network untuk ConnectedCount
 │   │   └── system.go              # info daemon, /system/df, prune actions
 │   │
-│   ├── systemd/                   # klien D-Bus ke systemd
-│   │   ├── client.go
-│   │   └── units.go
+│   ├── systemd/                   # exec systemctl/journalctl (D-Bus dicadangkan Fase 5)
+│   │   ├── client.go              # exec helper + runPrivileged (sudo -n systemctl ...)
+│   │   ├── units.go               # List (gabung list-units + list-unit-files), aksi
+│   │   └── logs.go                # Tail via journalctl -u, on-demand
 │   │
 │   ├── fileexplorer/               # operasi filesystem + validasi keamanan
 │   │   ├── list.go
@@ -92,7 +93,10 @@ tarkiman-os/
 │   │       ├── docker_volumes.html
 │   │       ├── docker_networks.html
 │   │       ├── docker_settings.html
-│   │       └── docker_unavailable.html    # dipakai semua fragment Docker untuk degradasi/error
+│   │       ├── services_list.html
+│   │       ├── services_logs.html
+│   │       └── error_panel.html           # dipakai semua fragment (Docker & Service) untuk
+│   │                                       # degradasi/error — nama generik sejak dipakai lintas domain
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css                   # design tokens + styling custom

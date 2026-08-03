@@ -137,6 +137,16 @@ bagian ini fokus ke kontrol keamanannya.
   banner singkat yang menjelaskan bahwa ini adalah akses shell sungguhan ke perangkat — bukan
   demo/sandbox — supaya user sadar konsekuensinya (khususnya kalau berencana share akses
   dashboard ke orang lain).
+- **Aksi service (systemd) memakai ulang privilege opt-in yang sama.** Aksi start/stop/
+  restart/reload di halaman Service ([04-features.md](04-features.md) §4.3) dijalankan lewat
+  `sudo -n systemctl ...` — kalau sudoers untuk user `tarkimanos` sudah disiapkan untuk web
+  terminal (mode password atau NOPASSWD di atas), aksi service otomatis ikut berfungsi tanpa
+  konfigurasi tambahan. Kalau user **tidak** mau memberi akses sudo seluas terminal, tersedia
+  alternatif sudoers yang jauh lebih sempit — dibatasi ke binary `systemctl` saja, tidak bisa
+  dipakai untuk apa pun selain start/stop/restart/reload unit — lihat
+  [09-deployment.md](09-deployment.md) §9.2. Tanpa salah satu, monitoring/list service tetap
+  jalan penuh (tidak butuh privilege), hanya tombol aksi yang akan gagal dengan pesan error
+  jelas ("Interactive authentication required") — bukan diam-diam tidak berfungsi.
 
 ## 7.7 Audit Log
 

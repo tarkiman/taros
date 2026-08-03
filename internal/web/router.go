@@ -27,6 +27,10 @@ type Deps struct {
 	DockerEnabled bool
 	Docker        *docker.Client
 	DockerWatcher *docker.Watcher
+
+	// ProtectedUnits get an extra-emphatic confirmation before stop/restart
+	// — see docs/07-security.md.
+	ProtectedUnits map[string]bool
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -67,6 +71,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /fragments/docker/volumes/{name}/remove", s.requireAuth(s.handleDockerVolumeRemove))
 	mux.HandleFunc("POST /fragments/docker/networks/{id}/remove", s.requireAuth(s.handleDockerNetworkRemove))
 	mux.HandleFunc("POST /fragments/docker/prune/{kind}", s.requireAuth(s.handleDockerPrune))
+
+	mux.HandleFunc("GET /services", s.requireAuth(s.handleServicesPage))
+	mux.HandleFunc("GET /fragments/services/list", s.requireAuth(s.handleServicesListFragment))
+	mux.HandleFunc("POST /fragments/services/{name}/{action}", s.requireAuth(s.handleServiceAction))
+	mux.HandleFunc("GET /fragments/services/{name}/logs", s.requireAuth(s.handleServiceLogsFragment))
 
 	mux.Handle("GET /static/", http.FileServerFS(assets.Static))
 

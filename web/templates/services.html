@@ -1,0 +1,39 @@
+{{define "title"}}Service — TarkimanOS{{end}}
+
+{{define "content"}}
+<header class="topnav">
+  <span class="brand">TarkimanOS</span>
+  <nav class="topnav-links">
+    <a href="/">Dashboard</a>
+    <a href="/docker">Docker</a>
+    <a href="/services" class="active">Service</a>
+  </nav>
+  <span class="user">{{.Username}}</span>
+  <form method="post" action="/api/auth/logout">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <button type="submit">Keluar</button>
+  </form>
+</header>
+<main>
+  <form id="filter-form" class="service-filters"
+        hx-get="/fragments/services/list" hx-target="#services-panel" hx-swap="innerHTML"
+        hx-trigger="load, submit, change, every 8s">
+    <input type="search" name="q" placeholder="Cari nama/deskripsi…">
+    <label><input type="checkbox" name="showAll" value="1"> Tampilkan socket &amp; timer</label>
+    <label><input type="checkbox" name="failedOnly" value="1"> Hanya yang failed</label>
+  </form>
+
+  <div id="services-panel"><p>Memuat…</p></div>
+
+  <section class="panel" id="log-panel" style="display:none">
+    <h2>Log</h2>
+    <pre id="log-content"></pre>
+  </section>
+</main>
+{{end}}
+
+{{define "extra_scripts"}}
+<script src="/static/js/vendor/htmx.min.js"></script>
+{{end}}
+
+{{template "layout" .}}

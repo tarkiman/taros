@@ -62,14 +62,33 @@ satu fase besar di roadmap ini.
   `Images[]`/`Containers[]`/`Volumes[]`); `GET /volumes` tidak pernah mengisi ukuran data;
   `GET /networks` tidak pernah mengisi jumlah container terhubung (butuh inspect per-network).
 
-### 2b — Service/systemd (belum dikerjakan)
+### 2b — Service/systemd (selesai)
 
-- `systemd/`: mulai dari exec `systemctl` (lebih cepat dibuat) untuk list unit + aksi.
-- Halaman Service (SSR + htmx fragment untuk refresh berkala & aksi) — lihat
-  [04-features.md](04-features.md) §4.3.
-- **Checkpoint**: bisa lihat & kontrol service dari dashboard di kedua perangkat; unit
-  "terproteksi" (lihat [07-security.md](07-security.md)) butuh extra-confirm sebelum
-  stop/restart.
+- `systemd/`: exec `systemctl`/`journalctl` (D-Bus dicadangkan Fase 5) — list unit (gabungan
+  `list-units` + `list-unit-files` untuk status enabled), aksi start/stop/restart/reload lewat
+  `sudo -n systemctl ...`, log tail on-demand.
+- Halaman Service (SSR + htmx, form filter sekaligus jadi trigger auto-refresh supaya filter
+  tidak reset diam-diam tiap poll) — lihat [04-features.md](04-features.md) §4.3.
+- **Checkpoint tercapai** (diuji terhadap systemd nyata di mesin dev — 170+ unit service,
+  9 timer, bukan lingkungan sintetis):
+  - List + filter (nama/deskripsi, failed-only, toggle socket/timer) menampilkan data akurat,
+    ~500ms untuk gabungan dua panggilan `systemctl` terhadap 170+ unit — cukup cepat tanpa
+    perlu cache/`Watcher` seperti Docker container stats.
+  - Aksi start/stop/restart diuji end-to-end pakai **unit transient** (`systemd-run`, bukan
+    unit produksi milik user) — dikonfirmasi berhasil (state berubah nyata di systemd),
+    lalu unit transient otomatis di-GC systemd sendiri setelah stop.
+  - Unit "terproteksi" (`ssh.service` dkk, dari `systemd.protectedUnits`) dikonfirmasi tampil
+    dengan badge + teks konfirmasi lebih tegas sebelum stop/restart.
+  - Log tail via `journalctl -u` dikonfirmasi menampilkan baris log asli.
+  - RSS dengan semua fitur (collector + Docker watcher + systemd on-demand) aktif: ~18MB,
+    tetap di bawah target [09-deployment.md](09-deployment.md) §9.4.
+- **Temuan signifikan**: aksi systemctl tanpa privilege tambahan gagal dengan "Interactive
+  authentication required" (dikonfirmasi langsung) — bukan sesuatu yang bisa "diperbaiki" di
+  level kode, itu memang bagaimana systemd bekerja untuk user non-root. Solusinya memakai
+  ulang privilege opt-in `sudo` yang sama seperti web terminal ([07-security.md](07-security.md)
+  §7.6), atau sudoers rule yang lebih sempit khusus `systemctl` — lihat
+  [09-deployment.md](09-deployment.md) §9.2. Monitoring/list tetap berfungsi penuh tanpa
+  privilege apa pun; hanya tombol aksi yang butuh setup tambahan opsional itu.
 
 ## Fase 3 — File Explorer & Editor
 

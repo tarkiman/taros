@@ -73,13 +73,19 @@ func runServer(args []string) {
 		Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
 	})
 
+	protectedUnits := make(map[string]bool, len(cfg.Systemd.ProtectedUnits))
+	for _, u := range cfg.Systemd.ProtectedUnits {
+		protectedUnits[u] = true
+	}
+
 	deps := web.Deps{
-		Sessions:      sessions,
-		Creds:         creds,
-		RateLimiter:   rateLimiter,
-		Store:         metricsStore,
-		SSEInterval:   fastInterval,
-		DockerEnabled: cfg.Docker.Enabled,
+		Sessions:       sessions,
+		Creds:          creds,
+		RateLimiter:    rateLimiter,
+		Store:          metricsStore,
+		SSEInterval:    fastInterval,
+		DockerEnabled:  cfg.Docker.Enabled,
+		ProtectedUnits: protectedUnits,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

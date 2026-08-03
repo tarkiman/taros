@@ -34,12 +34,12 @@ Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi):
    → disimpan ter-hash di `/etc/tarkimanos/config.yaml` atau file kredensial terpisah `/etc/tarkimanos/credentials`).
 6. (Opsional, untuk kontrol systemd granular tanpa root penuh) copy
    `deploy/polkit/10-tarkimanos-systemd.rules` ke `/etc/polkit-1/rules.d/`.
-7. **(Opsional, hanya jika web terminal butuh akses `sudo`** — lihat
-   [04-features.md](04-features.md) §4.5 & [07-security.md](07-security.md) §7.6 untuk
-   trade-off-nya sebelum memilih**)**: pilih salah satu mode, **tidak dijalankan otomatis
-   oleh installer**:
+7. **(Opsional, dibutuhkan untuk: sudo di web terminal, DAN/ATAU tombol aksi
+   start/stop/restart/reload di halaman Service** — lihat [04-features.md](04-features.md)
+   §4.3 & §4.5, [07-security.md](07-security.md) §7.6 untuk trade-off-nya sebelum
+   memilih**)**: pilih salah satu mode, **tidak dijalankan otomatis oleh installer**:
    ```bash
-   # Mode "sudo dengan password" (direkomendasikan jika sudo memang dibutuhkan):
+   # Mode "sudo dengan password" (paling lengkap — sudo di terminal + aksi service):
    sudo passwd tarkimanos                # set password sistem (terpisah dari password dashboard)
    echo 'tarkimanos ALL=(ALL) ALL' | sudo tee /etc/sudoers.d/tarkimanos
    sudo chmod 440 /etc/sudoers.d/tarkimanos
@@ -47,9 +47,18 @@ Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi):
    # ATAU mode "NOPASSWD" (hanya untuk device yang sudah terisolasi jaringan kuat):
    echo 'tarkimanos ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/tarkimanos
    sudo chmod 440 /etc/sudoers.d/tarkimanos
+
+   # ATAU mode "hanya aksi service" (tidak buka sudo di terminal sama sekali — cocok kalau
+   # web terminal sengaja tidak dipakai untuk sudo, tapi tetap mau tombol start/stop/restart
+   # service berfungsi dari dashboard):
+   echo 'tarkimanos ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *' | sudo tee /etc/sudoers.d/tarkimanos-systemctl
+   sudo chmod 440 /etc/sudoers.d/tarkimanos-systemctl
    ```
    Selalu `visudo -c` (atau setara) setelah menulis file ini untuk validasi syntax sebelum
    dipakai — sudoers rule yang salah syntax bisa mengunci akses sudo sistem secara keseluruhan.
+   Tanpa salah satu mode ini, halaman Service tetap bisa **memonitor** (list unit, status,
+   log) sepenuhnya — hanya tombol aksi yang akan gagal dengan pesan "Interactive
+   authentication required" sampai salah satu sudoers rule di atas disiapkan.
 8. Copy `deploy/systemd/tarkimanos.service` ke `/etc/systemd/system/`, lalu:
    ```bash
    sudo systemctl daemon-reload

@@ -1,0 +1,34 @@
+<div class="panel">
+<table class="docker-table">
+<thead><tr><th>Nama</th><th>Deskripsi</th><th>Status</th><th>Aktif Saat Boot</th><th>Aksi</th></tr></thead>
+<tbody>
+{{range .Units}}
+<tr>
+  <td>{{.Name}}{{if .Protected}} <span class="badge badge-warn">terproteksi</span>{{end}}</td>
+  <td class="text-muted">{{.Description}}</td>
+  <td>
+    <span class="badge badge-state-{{if eq .Active "active"}}running{{else if eq .Active "failed"}}failed{{else}}exited{{end}}">{{.Active}}/{{.Sub}}</span>
+  </td>
+  <td class="text-muted">{{if .Enabled}}{{.Enabled}}{{else}}—{{end}}</td>
+  <td class="actions">
+    <button class="btn-sm" hx-get="/fragments/services/{{.Name}}/logs" hx-target="#log-content" hx-swap="innerHTML" onclick="document.getElementById('log-panel').style.display='block'">Log</button>
+    {{if eq .Active "active"}}
+    {{if .Protected}}
+    <button class="btn-sm btn-danger" hx-post="/fragments/services/{{.Name}}/stop" hx-target="#services-panel" hx-swap="innerHTML" hx-confirm="PERINGATAN: {{.Name}} adalah unit terproteksi. Yakin ingin stop?">Stop</button>
+    <button class="btn-sm btn-danger" hx-post="/fragments/services/{{.Name}}/restart" hx-target="#services-panel" hx-swap="innerHTML" hx-confirm="PERINGATAN: {{.Name}} adalah unit terproteksi. Yakin ingin restart?">Restart</button>
+    {{else}}
+    <button class="btn-sm" hx-post="/fragments/services/{{.Name}}/stop" hx-target="#services-panel" hx-swap="innerHTML" hx-confirm="Stop {{.Name}}?">Stop</button>
+    <button class="btn-sm" hx-post="/fragments/services/{{.Name}}/restart" hx-target="#services-panel" hx-swap="innerHTML" hx-confirm="Restart {{.Name}}?">Restart</button>
+    {{end}}
+    <button class="btn-sm" hx-post="/fragments/services/{{.Name}}/reload" hx-target="#services-panel" hx-swap="innerHTML">Reload</button>
+    {{else}}
+    <button class="btn-sm" hx-post="/fragments/services/{{.Name}}/start" hx-target="#services-panel" hx-swap="innerHTML">Start</button>
+    {{end}}
+  </td>
+</tr>
+{{else}}
+<tr><td colspan="5" class="text-muted">Tidak ada unit yang cocok.</td></tr>
+{{end}}
+</tbody>
+</table>
+</div>
