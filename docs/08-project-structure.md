@@ -49,26 +49,25 @@ tarkiman-os/
 │   │   └── store.go
 │   │
 │   ├── auth/                        # login, session, CSRF, rate limit
-│   │   ├── session.go
-│   │   ├── password.go
-│   │   ├── csrf.go
-│   │   └── ratelimit.go
+│   │   ├── session.go              # SessionStore in-memory (create/validate/reap)
+│   │   ├── credentials.go          # load/save admin credentials (bcrypt hash) + Verify
+│   │   ├── csrf.go                 # Session.ValidCSRF (constant-time compare)
+│   │   └── ratelimit.go            # LoginRateLimiter per-IP
 │   │
-│   ├── web/                          # HTTP layer
-│   │   ├── router.go                # setup net/http ServeMux
-│   │   ├── middleware.go             # auth, logging, recover
+│   ├── web/                          # HTTP layer (package `web`)
+│   │   ├── router.go                # Server struct + net/http ServeMux (routes, static)
+│   │   ├── middleware.go             # requireAuth (session+CSRF), logging, recover
 │   │   ├── handlers_dashboard.go
 │   │   ├── handlers_docker.go
 │   │   ├── handlers_services.go
 │   │   ├── handlers_files.go
-│   │   ├── handlers_auth.go
+│   │   ├── handlers_auth.go          # login/logout
 │   │   ├── sse.go                    # endpoint SSE metrics stream
 │   │   ├── ws_terminal.go            # endpoint WebSocket terminal (upgrade, Origin check)
-│   │   └── templates.go              # load & render html/template (dari embed.FS)
+│   │   └── templates.go              # satu *template.Template per halaman (lihat catatan di bawah)
 │   │
 │   ├── config/
-│   │   ├── config.go                 # struct config + load YAML + env override
-│   │   └── default.go
+│   │   └── config.go                 # struct config + Default() + Load() dari YAML
 │   │
 │   └── audit/
 │       └── log.go                     # structured audit logging (slog)
@@ -92,7 +91,7 @@ tarkiman-os/
 │   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
 │   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
 │   │       └── vendor/                    # htmx, alpine, uplot, codemirror, xterm.js (built sekali)
-│   └── embed.go                            # //go:embed directive
+│   └── embed.go                            # //go:embed directive (package `assets`)
 │
 ├── deploy/
 │   ├── systemd/
@@ -122,7 +121,18 @@ tarkiman-os/
   Docker/systemd sungguhan berjalan saat unit test.
 - **`web/embed.go`** memakai `//go:embed templates static` sehingga `go build` menghasilkan
   satu binary yang membawa semua HTML/CSS/JS — tidak ada file eksternal yang harus ikut
-  di-deploy terpisah selain binary + `config.yaml`.
+  di-deploy terpisah selain binary + `config.yaml`. Package-nya sengaja diberi nama `assets`
+  (bukan `web`) — direktori top-level `web/` dan `internal/web/` sama-sama bernama "web", jadi
+  kalau package top-level juga bernama `web`, `internal/web` yang meng-impornya akan bentrok
+  nama dengan package-nya sendiri. Diimpor sebagai `assets "github.com/tarkiman/tarkiman-os/web"`.
+- **Satu `*template.Template` per halaman, bukan satu set gabungan.** `templates.go` mem-parse
+  `layout.html` + tiap file halaman (`login.html`, `dashboard.html`, dst) sebagai set terpisah
+  per halaman, bukan satu `template.ParseFS(fs, "templates/*.html")` untuk semuanya. Alasannya:
+  tiap halaman mendefinisikan block `{{define "title"}}`/`{{define "content"}}` dengan nama yang
+  sama — kalau semua file di-parse jadi satu set, definisi dari file yang di-parse belakangan
+  (urut alfabetis) akan **menimpa** punya file lain secara diam-diam (nama `{{define}}` bersifat
+  global dalam satu set `template.Template`, bukan scoped per file). Ini sempat jadi bug nyata
+  saat implementasi Fase 0 (dashboard ikut me-render konten login) sebelum diisolasi per halaman.
 - File JS vendor (`web/static/js/vendor/`) adalah hasil build **sekali** di mesin developer
   (lihat `scripts/build-assets.sh`), **dicommit ke repo** — bukan di-build ulang tiap
   `go build`, dan bukan diunduh dari CDN saat runtime (device target tidak butuh akses

@@ -1,0 +1,92 @@
+/* Design tokens — see docs/06-api-ui-ux.md §6.6. Dark mode is the default
+   (monitoring dashboards get checked at odd hours); light mode overrides
+   via prefers-color-scheme. */
+:root {
+  --bg: #14161a;
+  --surface: #1d2026;
+  --text: #e6e8eb;
+  --text-muted: #9aa1ab;
+  --accent: #4da3ff;
+  --danger: #ef5a5a;
+  --border: #2a2e36;
+  --radius: 8px;
+  --space: 8px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --text: #14161a;
+    --text-muted: #5b6270;
+    --border: #dfe2e7;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace,
+               -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 2);
+  padding: calc(var(--space) * 4);
+  width: min(320px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.auth-card h1 {
+  margin: 0 0 var(--space);
+  font-size: 1.25rem;
+}
+
+input, button {
+  font: inherit;
+  padding: calc(var(--space) * 1.25);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  background: var(--accent);
+  color: #0b0e12;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.alert-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+  padding: var(--space) calc(var(--space) * 2);
+  border-bottom: 1px solid var(--border);
+}
+
+.topnav .brand { font-weight: 700; }
+.topnav .user { margin-left: auto; color: var(--text-muted); }
+
+main { padding: calc(var(--space) * 3); }
