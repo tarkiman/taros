@@ -102,7 +102,8 @@ tarkiman-os/
 │   │   │   │                            # dari scripts/codemirror-build/ (dihapus), sekarang
 │   │   │   │                            # ES module biasa yang diimpor EditorView.vue,
 │   │   │   │                            # bukan window global dari bundle esbuild terpisah
-│   │   │   ├── composables/              # useMetricsStream.ts (SSE), usePrefersDark.ts
+│   │   │   ├── composables/              # useMetricsStream.ts (SSE), useTheme.ts (system/
+│   │   │   │                            # manual dark-light override)
 │   │   │   ├── stores/auth.ts            # pinia — authenticated/username, set CSRF token
 │   │   │   ├── api/                      # client.ts (fetch wrapper), metrics.ts, files.ts,
 │   │   │   │                            # content.ts, docker.ts, service.ts

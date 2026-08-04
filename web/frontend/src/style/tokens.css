@@ -1,7 +1,9 @@
 /* Design tokens — see docs/06-api-ui-ux.md. Dark mode is the default
    (monitoring dashboards get checked at odd hours); light mode overrides
-   via prefers-color-scheme. No web fonts: system font stack only, so the
-   UI never depends on network access to render (this is a LAN appliance
+   via [data-theme="light"] on <html> — see the light-theme block below and
+   useTheme.ts (system preference by default, user can override to a fixed
+   light/dark, persisted). No web fonts: system font stack only, so the UI
+   never depends on network access to render (this is a LAN appliance
    dashboard, see docs/09-deployment.md). Monospace is reserved for code/
    logs/editor — using it for body text everywhere was the #1 reason the
    old UI read as "plain"/spreadsheet-like instead of a polished dashboard. */
@@ -43,17 +45,20 @@
   --transition-base: 200ms ease;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f4f5f7;
-    --surface: #ffffff;
-    --surface-raised: #ffffff;
-    --border: #e2e5ea;
-    --text: #14161a;
-    --text-muted: #5b6270;
-    --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
-    --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.08);
-  }
+/* data-theme is set on <html> — by the blocking bootstrap script in
+   index.html before first paint (avoids a flash of the wrong theme), then
+   kept in sync by useTheme.ts as the user's system preference changes or
+   they pick an explicit override. Not a prefers-color-scheme media query:
+   that can't be overridden by a manual light/dark choice. */
+:root[data-theme='light'] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #e2e5ea;
+  --text: #14161a;
+  --text-muted: #5b6270;
+  --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
+  --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.08);
 }
 
 * {

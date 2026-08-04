@@ -459,10 +459,57 @@ sudah tercapai di atas.
 - Polkit rules untuk kontrol systemd tanpa root penuh.
 - Audit logging lengkap (semua aksi state-changing, termasuk sesi terminal).
 - Rate limiting login, hardening session.
-- UI polish: dark/light theme toggle, loading states, toast notifications, mobile responsive
-  review menyeluruh, aksesibilitas dasar.
 - Profiling memory & CPU di STB (target [09-deployment.md](09-deployment.md) §9.4 tercapai
   di kondisi realistis: Docker + beberapa container jalan bersamaan + sesi terminal aktif).
+
+### UI polish (selesai-dev; validasi STB fisik tertunda)
+
+- **Toggle tema manual** (Sistem → Terang → Gelap, siklus lewat satu tombol di topbar):
+  `composables/useTheme.ts` menggantikan `usePrefersDark.ts` lama — state `mode` (`system`/
+  `light`/`dark`) disimpan module-level (bukan per-komponen) supaya semua konsumen (App.vue,
+  GaugeChart, LineChart, TerminalView, EditorView) berbagi satu sumber kebenaran, persisten
+  di `localStorage` (`tk-theme-mode`, dihapus lagi kalau kembali ke "system"). `tokens.css`
+  pindah dari `@media (prefers-color-scheme: light)` ke selector `:root[data-theme="light"]`
+  supaya bisa di-override manual (media query murni tidak bisa dilawan dari JS) — `data-theme`
+  di-set oleh script kecil **blocking** di `index.html` sebelum render pertama (baca
+  `localStorage` + `matchMedia` secara sinkron) untuk menghindari flash tema salah saat load,
+  lalu disinkronkan lagi oleh `useTheme.ts` setelah Vue jalan.
+- **Sidebar auto-collapse di viewport sempit** (`AppShell.vue`, breakpoint 768px): default
+  collapsed di HP, tetap bisa di-toggle manual (memakai collapse bawaan `NLayoutSider`,
+  bukan pola hamburger/drawer terpisah seperti draft awal [06-api-ui-ux.md](06-api-ui-ux.md)
+  §6.2 — dipilih karena sudah tersedia siap pakai dari Naive UI dan secara fungsional
+  menyelesaikan masalah yang sama). Nav item icon-only saat collapsed dapat `aria-label`.
+  Teks "Keluar" di tombol logout disembunyikan di layar sempit (ikon tetap ada + `aria-label`).
+- **Bug nyata ditemukan & diperbaiki lewat testing headless browser di viewport mobile**:
+  kolom `NDataTable` dengan `fixed: 'right'` (dipakai di kolom Aksi lebar di Files/Service/
+  Docker) ternyata membuat kolom itu di-overlay di atas area scroll tabel — di desktop tidak
+  kelihatan efeknya (tabel sudah cukup lebar, tidak pernah butuh scroll), tapi di viewport HP
+  kolom Aksi yang lebar (190-260px) menutupi hampir seluruh area tabel yang sempit, membuat
+  kolom **Nama** (kolom paling penting) sama sekali tidak terlihat tanpa scroll manual —
+  padahal datanya ada, cuma tertutup. Diperbaiki dengan menghapus `fixed: 'right'` dari semua
+  6 kolom Aksi (Files, Service, Docker×4) — karena `scroll-x` di desktop pada praktiknya tidak
+  pernah trigger (kontennya selalu muat), `fixed: 'right'` di sana adalah no-op, jadi
+  menghapusnya nol dampak ke desktop dan memperbaiki mobile sepenuhnya. Juga ditambahkan
+  `minWidth` eksplisit ke kolom-kolom `ellipsis`-only tanpa `width` (kolom Nama di Files,
+  Deskripsi di Service, Tag/Nama di Docker images/volumes/networks) — tanpa ini kolom
+  fleksibel bisa collapse ke lebar sangat kecil di bawah `scroll-x`.
+  Tabel Docker Images/Volumes/Networks yang sebelumnya sama sekali tidak punya `scroll-x`
+  (beda dari tabel Containers yang sudah punya) juga disamakan — sebelumnya berpotensi
+  overflow halaman di viewport sempit alih-alih scroll rapi di dalam tabel.
+- **Aksesibilitas dasar**: `aria-label`/`title` pada tombol icon-only (unduh/ganti nama/hapus
+  di Files; toggle tema, item nav sidebar saat collapsed, logout di AppShell) — tombol dengan
+  teks yang sudah terlihat (mayoritas tombol aksi Docker/Service/Editor) tidak disentuh, sudah
+  cukup deskriptif dari teksnya sendiri. Toast notification (`useMessage()`) dan loading state
+  (`:loading`/`NSpin`) untuk hampir semua aksi ternyata **sudah** diimplementasi konsisten
+  sejak fase-fase migrasi Vue sebelumnya (Docker/Service/Files/Editor) — bukan item baru di
+  fase ini, cuma diverifikasi ulang di sini.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer) di viewport desktop
+  (1280px) dan mobile (375px), tema terang & gelap**: tidak ada horizontal overflow di
+  level dokumen pada halaman manapun di kedua viewport (sebelum fase ini belum pernah
+  diuji eksplisit di lebar mobile); siklus toggle tema (sistem→terang→gelap→sistem) sesuai
+  ekspektasi termasuk `localStorage` (kosong di mode "system", terisi di mode eksplisit);
+  pilihan tema eksplisit bertahan setelah reload penuh tanpa flash; tema CodeMirror (Editor)
+  ikut berganti sinkron dengan toggle global, bukan cuma komponen Naive UI/ECharts.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 

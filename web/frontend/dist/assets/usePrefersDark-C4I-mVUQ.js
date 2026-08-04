@@ -1,1 +1,0 @@
-import{An as e,Kn as t,jn as n}from"./auth-CKvW4zla.js";function r(){let r=t(window.matchMedia(`(prefers-color-scheme: dark)`).matches),i;function a(e){r.value=e.matches}return e(()=>{i=window.matchMedia(`(prefers-color-scheme: dark)`),i.addEventListener(`change`,a)}),n(()=>{i?.removeEventListener(`change`,a)}),r}export{r as t};

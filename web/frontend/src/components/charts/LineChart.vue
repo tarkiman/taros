@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import { tokens } from '../../theme'
-import { usePrefersDark } from '../../composables/usePrefersDark'
+import { useTheme } from '../../composables/useTheme'
 
 export interface LineSeries {
   name: string
@@ -19,7 +19,7 @@ const props = withDefaults(
   { unit: '', height: 220 },
 )
 
-const prefersDark = usePrefersDark()
+const prefersDark = useTheme()
 const t = computed(() => (prefersDark.value ? tokens.dark : tokens.light))
 const palette = computed(() => [t.value.accent, t.value.success, t.value.warning, t.value.danger])
 

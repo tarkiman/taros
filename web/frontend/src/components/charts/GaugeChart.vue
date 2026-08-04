@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import { tokens } from '../../theme'
-import { usePrefersDark } from '../../composables/usePrefersDark'
+import { useTheme } from '../../composables/useTheme'
 
 const props = withDefaults(
   defineProps<{
@@ -18,7 +18,7 @@ const props = withDefaults(
   { unit: '%', max: 100, thresholds: () => [0.7, 0.9] },
 )
 
-const prefersDark = usePrefersDark()
+const prefersDark = useTheme()
 const t = computed(() => (prefersDark.value ? tokens.dark : tokens.light))
 
 const color = computed(() => {

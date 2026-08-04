@@ -147,7 +147,8 @@ ECharts (`GaugeChart` dari `echarts/charts`, custom tree-shaken build lewat `ech
   `warning`, `danger`) — **bukan** lewat CSS custom property langsung di opsi ECharts,
   karena canvas 2D (`fillStyle`/`strokeStyle`) tidak konsisten me-resolve `var(--x)` di semua
   browser; komponen membaca nilai literal dari `theme.ts` berdasarkan preferensi dark/light
-  saat ini (`usePrefersDark()` composable), supaya tetap konsisten dengan tema Naive UI.
+  saat ini (`useTheme()` composable — resolusi sistem/manual override, lihat Fase 5 di
+  [10-roadmap.md](10-roadmap.md)), supaya tetap konsisten dengan tema Naive UI.
 - Aksesibilitas: nilai numerik tetap dirender sebagai teks di tengah gauge oleh ECharts
   sendiri (`detail.formatter`), bukan cuma visual.
 

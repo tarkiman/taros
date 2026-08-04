@@ -106,7 +106,6 @@ const containerColumns: DataTableColumns<Container> = [
     title: 'Aksi',
     key: 'actions',
     width: 220,
-    fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 'small' }, () => [
         row.state === 'running'
@@ -158,17 +157,20 @@ const imageColumns: DataTableColumns<Image> = [
   {
     title: 'Tag',
     key: 'tag',
+    minWidth: 200,
+    ellipsis: { tooltip: true },
     render: (row) =>
       row.dangling
         ? h(NSpace, { size: 'small', align: 'center' }, () => [row.tag, h(NTag, { size: 'small', type: 'warning' }, () => 'dangling')])
         : row.tag,
   },
-  { title: 'Ukuran', key: 'sizeBytes', render: (row) => formatBytes(row.sizeBytes) },
-  { title: 'Dipakai', key: 'containers', render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? 'tidak dipakai' : `${row.containers} container`) },
-  { title: 'Dibuat', key: 'created', render: (row) => formatDate(row.created) },
+  { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => formatBytes(row.sizeBytes) },
+  { title: 'Dipakai', key: 'containers', width: 140, render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? 'tidak dipakai' : `${row.containers} container`) },
+  { title: 'Dibuat', key: 'created', width: 150, render: (row) => formatDate(row.created) },
   {
     title: 'Aksi',
     key: 'actions',
+    width: 100,
     render: (row) =>
       h(
         NPopconfirm,
@@ -209,17 +211,19 @@ async function removeVolume(name: string) {
 }
 
 const volumeColumns: DataTableColumns<Volume> = [
-  { title: 'Nama', key: 'name' },
-  { title: 'Driver', key: 'driver' },
-  { title: 'Ukuran', key: 'sizeBytes', render: (row) => (row.sizeBytes < 0 ? 'tidak diketahui' : formatBytes(row.sizeBytes)) },
+  { title: 'Nama', key: 'name', minWidth: 180, ellipsis: { tooltip: true } },
+  { title: 'Driver', key: 'driver', width: 100 },
+  { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => (row.sizeBytes < 0 ? 'tidak diketahui' : formatBytes(row.sizeBytes)) },
   {
     title: 'Status',
     key: 'inUse',
+    width: 120,
     render: (row) => h(NTag, { size: 'small', type: row.inUse ? 'success' : 'default' }, () => (row.inUse ? 'dipakai' : 'tidak dipakai')),
   },
   {
     title: 'Aksi',
     key: 'actions',
+    width: 100,
     render: (row) =>
       h(
         NPopconfirm,
@@ -263,17 +267,20 @@ const networkColumns: DataTableColumns<Network> = [
   {
     title: 'Nama',
     key: 'name',
+    minWidth: 160,
+    ellipsis: { tooltip: true },
     render: (row) =>
       row.builtin
         ? h(NSpace, { size: 'small', align: 'center' }, () => [row.name, h(NTag, { size: 'small' }, () => 'builtin')])
         : row.name,
   },
-  { title: 'Driver', key: 'driver' },
-  { title: 'Subnet', key: 'subnet', render: (row) => row.subnet || '—' },
-  { title: 'Container Terhubung', key: 'connectedCount' },
+  { title: 'Driver', key: 'driver', width: 100 },
+  { title: 'Subnet', key: 'subnet', width: 150, render: (row) => row.subnet || '—' },
+  { title: 'Container Terhubung', key: 'connectedCount', width: 170 },
   {
     title: 'Aksi',
     key: 'actions',
+    width: 100,
     render: (row) =>
       row.builtin
         ? null
@@ -356,15 +363,15 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />
-        <NDataTable v-else :columns="imageColumns" :data="images" :loading="imagesLoading" :row-key="(r: Image) => r.id" />
+        <NDataTable v-else :columns="imageColumns" :data="images" :loading="imagesLoading" :row-key="(r: Image) => r.id" :scroll-x="700" />
       </NTabPane>
       <NTabPane name="volumes" tab="Volumes">
         <NAlert v-if="volumesUnavailable" type="warning" :title="volumesUnavailable.error" />
-        <NDataTable v-else :columns="volumeColumns" :data="volumes" :loading="volumesLoading" :row-key="(r: Volume) => r.name" />
+        <NDataTable v-else :columns="volumeColumns" :data="volumes" :loading="volumesLoading" :row-key="(r: Volume) => r.name" :scroll-x="610" />
       </NTabPane>
       <NTabPane name="networks" tab="Networks">
         <NAlert v-if="networksUnavailable" type="warning" :title="networksUnavailable.error" />
-        <NDataTable v-else :columns="networkColumns" :data="networks" :loading="networksLoading" :row-key="(r: Network) => r.id" />
+        <NDataTable v-else :columns="networkColumns" :data="networks" :loading="networksLoading" :row-key="(r: Network) => r.id" :scroll-x="680" />
       </NTabPane>
       <NTabPane name="settings" tab="Settings">
         <NAlert v-if="settingsUnavailable" type="warning" :title="settingsUnavailable.error" />

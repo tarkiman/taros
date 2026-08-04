@@ -8,13 +8,13 @@ import { contentApi } from '../api/content'
 import { filesApi } from '../api/files'
 import { ApiError } from '../api/client'
 import { createEditor } from '../editor/codemirror'
-import { usePrefersDark } from '../composables/usePrefersDark'
+import { useTheme } from '../composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
 const dialog = useDialog()
 const message = useMessage()
-const prefersDark = usePrefersDark()
+const prefersDark = useTheme()
 
 const filePath = computed(() => (typeof route.query.path === 'string' ? route.query.path : ''))
 const filename = computed(() => filePath.value.split('/').pop() || filePath.value)
