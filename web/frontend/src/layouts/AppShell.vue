@@ -32,12 +32,10 @@ async function handleLogout() {
           <NIcon :component="Server" size="18" />
           <span v-if="!collapsed">Service</span>
         </RouterLink>
-        <!-- Files is still server-rendered (htmx), not yet migrated to
-             Vue — plain full-page link, not RouterLink. -->
-        <a href="/files" class="side-nav-item">
+        <RouterLink to="/files" class="side-nav-item" active-class="active">
           <NIcon :component="FolderOpen" size="18" />
           <span v-if="!collapsed">Files</span>
-        </a>
+        </RouterLink>
       </nav>
     </NLayoutSider>
     <NLayout>

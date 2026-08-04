@@ -12,6 +12,7 @@ const router = createRouter({
     { path: '/', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
     { path: '/docker', name: 'docker', component: () => import('../views/DockerView.vue') },
     { path: '/services', name: 'services', component: () => import('../views/ServiceView.vue') },
+    { path: '/files', name: 'files', component: () => import('../views/FilesView.vue') },
   ],
 })
 

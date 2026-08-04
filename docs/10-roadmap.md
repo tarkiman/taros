@@ -278,6 +278,58 @@ sekaligus), dengan model deployment satu-binary tetap dipertahankan penuh.
   diverifikasi lewat pembacaan kode, identik logikanya dengan versi htmx yang sudah terbukti
   jalan.
 
+### D — Migrasi Files (selesai-dev; validasi STB fisik tertunda)
+
+**Diskusi sebelum implementasi**: sempat dipertimbangkan pakai library file-manager Vue
+pihak ketiga (VueFinder — 596★, MIT, paling matang di ekosistemnya) alih-alih membangun
+sendiri. Diputuskan **tidak** — kontrak API VueFinder (`list/upload/rename/delete/copy/move/
+...`) murni request-response sinkron, tanpa mekanisme progress/streaming, dan tidak ada
+backend Go resmi. Itu bentrok langsung dengan alasan utama fitur ini ada (lihat
+[01-overview.md](01-overview.md)): job queue + SSE progress + cancellation untuk copy/move
+file besar, dibangun langsung merespons CasaOS yang dulu nge-hang di Raspberry Pi user saat
+copy file besar. Keputusan: bangun sendiri pakai Naive UI (konsisten dengan halaman lain),
+contek ide UI/UX dari VueFinder (grid rapi, drag&drop, breadcrumb) tanpa depend ke library-nya.
+
+- Sebagian besar endpoint **sudah** JSON sejak awal (`POST /api/files/op`, `.../op/{id}/stream`,
+  `.../op/{id}/cancel`, `/api/files/upload`, `/api/files/download`) — cuma listing
+  (`GET /api/files/list`, gantikan `/fragments/files/list`) yang perlu dikonversi. Halaman
+  Editor (`/files/edit`) **tidak disentuh** — masih SSR, migrasinya sendiri di fase berikutnya.
+  `fileexplorer.Entry` dapat json tag camelCase eksplisit, sama seperti fase-fase sebelumnya.
+- `web/templates/fragments/` sekarang **kosong total** dan dihapus dari repo (git tidak bisa
+  melacak direktori kosong) — dikonfirmasi lewat build+run manual bahwa `//go:embed templates`
+  & `fs.Glob` di `templates.go` tetap aman terhadap direktori yang tidak ada sama sekali.
+  `error_panel.html` juga dihapus — sudah tidak dipakai handler manapun sejak Docker & Service
+  pindah ke JSON.
+- `FilesView.vue`: breadcrumb, tabel (Naive UI `NDataTable` dengan seleksi bawaan), toolbar
+  (cari, folder/file baru, upload, tempel), selection bar (salin/potong/hapus massal —
+  sekuensial, bukan paralel, sengaja sama seperti versi lama), modal prompt tunggal yang
+  dipakai ulang untuk folder baru/file baru/rename (bukan tiga modal terpisah). Upload lewat
+  `<NUpload>` (progress & daftar file per-item gratis dari library, satu request per file —
+  beda dari versi lama yang mengirim semua file terpilih dalam satu request batch). **Drag &
+  drop ditambahkan** — fitur yang sudah lama didokumentasikan sebagai rencana
+  ([04-features.md](04-features.md) §4.4) tapi tidak pernah benar-benar dibangun di versi htmx.
+- Panel progress job (paste file besar) tetap custom (SSE, bukan lewat `NUpload` yang cuma
+  urusan upload) — kartu mengambang kanan-bawah dengan progress bar, kecepatan transfer,
+  nama file berjalan, tombol Batalkan — inti fitur yang paling penting di halaman ini.
+- **Bug nyata ditemukan & diperbaiki lewat testing browser**: navigasi ke sub-folder
+  membangun path anak dari `route.query.path` mentah (kosong di load pertama, karena path
+  absolut root jail belum diketahui sisi klien) alih-alih path absolut yang dikembalikan
+  server — akibatnya klik folder mengirim path tidak valid, `Jail.Resolve` menolaknya, dan
+  listing lama tetap tertampil diam-diam (kelihatan seperti "tidak terjadi apa-apa", bukan
+  error yang jelas). Diperbaiki dengan `resolvedPath` terpisah dari `route.query.path`, dipakai
+  untuk semua konstruksi path anak; URL juga dinormalisasi ke path absolut setelah load pertama
+  supaya tetap bisa dibagikan/bookmark seperti perilaku `hx-push-url` versi lama.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium) terhadap
+  sandbox aman** (bukan filesystem nyata — `fileExplorer.rootDir` diarahkan ke direktori temp
+  khusus test, termasuk file 80MB untuk menguji job besar sungguhan): navigasi masuk/keluar
+  folder & breadcrumb, pencarian, buat folder/file, ganti nama, hapus (dengan konfirmasi),
+  salin+tempel file kecil, dan **salin+tempel file 80MB dengan progress SSE nyata** (26%→100%,
+  kecepatan transfer ~1.2GB/s lokal, nama file berjalan, tombol batal) — inti reliability yang
+  jadi alasan fitur ini dibangun, terbukti tetap utuh setelah migrasi ke Vue.
+- **Belum**: context menu klik-kanan (row buttons + selection bar sudah cover semua aksi,
+  diputuskan cukup untuk saat ini — lihat diskusi scope sebelum implementasi), migrasi halaman
+  Editor (`/files/edit`, fase berikutnya).
+
 **Fase 4 (Web Terminal) di-hold** atas permintaan eksplisit — dilanjutkan setelah migrasi
 UI/UX halaman-halaman lain selesai, atau lebih cepat kalau user memutuskan untuk
 memprioritaskannya lagi.

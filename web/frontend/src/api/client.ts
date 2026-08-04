@@ -9,6 +9,13 @@ export function setCsrfToken(token: string) {
   csrfToken = token
 }
 
+// Exposed for callers that can't go through request() below — e.g. the
+// Files upload flow, which needs raw XMLHttpRequest (not fetch) to get
+// upload progress events.
+export function getCsrfToken(): string {
+  return csrfToken
+}
+
 export class ApiError extends Error {
   status: number
   // Parsed JSON error body, when the server sent one (all our handlers do
