@@ -40,7 +40,7 @@
     {{if .IsDir}}
     <a href="/files?path={{$fullPath}}" hx-get="/fragments/files/list?path={{$fullPath}}" hx-target="#files-panel" hx-swap="innerHTML" hx-push-url="/files?path={{$fullPath}}">📁 {{.Name}}</a>
     {{else}}
-    📄 {{.Name}}
+    📄 <a href="/files/edit?path={{$fullPath}}">{{.Name}}</a>
     {{end}}
   </td>
   <td class="text-muted">{{if not .IsDir}}{{formatBytes .SizeBytes}}{{end}}</td>

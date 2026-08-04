@@ -143,14 +143,34 @@ Dipecah jadi tiga PR (pola yang sama seperti Fase 2 — lihat memori proyek/`REA
   tercapai** — sama seperti fase-fase sebelumnya, lihat [10-roadmap.md](10-roadmap.md)
   "Definisi Selesai" untuk kenapa dua tingkat validasi ini dipisahkan.
 
-### 3c — Text Editor (belum dikerjakan)
+### 3c — Text Editor (selesai)
 
-- `content.go`: baca/tulis isi file dengan deteksi biner, save atomik (tulis ke temp file lalu
-  rename).
-- Integrasi CodeMirror 6 (butuh langkah build sungguhan — beda dari htmx/uPlot di fase
-  sebelumnya yang dipakai langsung dari dist resmi, lihat [03-tech-stack.md](03-tech-stack.md)).
-- Validasi ringan YAML/JSON, auto-save draft ke `localStorage`, deteksi konflik — lihat
-  [04-features.md](04-features.md) §4.4 "Text Editor Terintegrasi".
+- `content.go`: baca/tulis isi file dengan deteksi biner (byte null), batas 2MB, save atomik
+  (temp file + rename, permission dipertahankan, owner best-effort), deteksi konflik via mtime.
+- Integrasi CodeMirror 6 lewat proyek npm build-once (`scripts/codemirror-build/`) — beda dari
+  htmx/uPlot yang dipakai langsung dari dist resmi tanpa build (lihat
+  [03-tech-stack.md](03-tech-stack.md)); hasil build (~677KB/~225KB gzip) di-commit ke
+  `web/static/js/vendor/editor.bundle.js`.
+- Syntax highlighting (YAML, JSON, Markdown, shell, format `key=value` untuk conf/ini/toml),
+  code folding, auto-closing bracket, find & replace, validasi ringan YAML/JSON dengan marker
+  gutter, word wrap toggle + persist, unsaved-indicator + `beforeunload` guard, auto-save
+  draft ke `localStorage` + restore prompt, deteksi konflik (409) — lihat
+  [04-features.md](04-features.md) §4.4 "Text Editor Terintegrasi" untuk daftar lengkap
+  termasuk apa yang **belum** diimplementasikan (dropdown bahasa manual, indent guide visual,
+  breadcrumb+status bar di editor, tombol Format, preview Markdown — semua dicadangkan ke
+  Fase 5 polish, bukan blocker untuk keandalan inti baca/edit/simpan).
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium), bukan
+  cuma testing backend API**: mount editor, load konten, syntax highlighting (warna token
+  sungguhan dicek via `getComputedStyle`, bukan cuma keberadaan class CSS), lint marker
+  YAML/JSON, word wrap + persist, auto-save draft + restore prompt, `beforeunload` guard, dan
+  (lewat API langsung) deteksi konflik tanpa kehilangan data, penolakan file biner/&gt;2MB,
+  save atomik yang mempertahankan permission.
+- **Bug nyata ditemukan lewat testing browser** (bukan dari membaca kode atau dari `go build`/
+  `esbuild` yang sama-sama sukses): `jsonParseLinter()` dipakai tanpa dibungkus `linter(...)`
+  membuat CodeMirror melempar error di runtime dan **seluruh editor gagal mount** — bukan
+  cuma fitur lint JSON yang rusak. Ini alasan headless-browser testing masuk jadi bagian
+  standar checklist untuk fitur JS-berat ke depannya, dicatat di
+  [08-project-structure.md](08-project-structure.md).
 
 ## Fase 4 — Web Terminal
 

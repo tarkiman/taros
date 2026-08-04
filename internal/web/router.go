@@ -91,6 +91,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/files/op/{jobId}/cancel", s.requireAuth(s.handleFilesOpCancel))
 	mux.HandleFunc("POST /api/files/upload", s.requireAuth(s.handleFilesUpload))
 	mux.HandleFunc("GET /api/files/download", s.requireAuth(s.handleFilesDownload))
+	mux.HandleFunc("GET /files/edit", s.requireAuth(s.handleEditorPage))
+	mux.HandleFunc("GET /api/files/content", s.requireAuth(s.handleFilesContentGet))
+	mux.HandleFunc("PUT /api/files/content", s.requireAuth(s.handleFilesContentPut))
 
 	mux.Handle("GET /static/", http.FileServerFS(assets.Static))
 

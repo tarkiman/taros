@@ -123,7 +123,11 @@ xterm.js sama-sama di-*bundle* **sekali saat development** (pakai `esbuild` atau
 bukan di perangkat target), hasil akhirnya berupa file JS statis yang di-embed ke binary Go —
 perangkat ARM tidak pernah menjalankan build step apa pun. Keduanya tetap jauh lebih ringan
 dari alternatif yang lebih "lengkap" (Monaco untuk editor, atau reimplementasi terminal dari
-nol) yang tidak sepadan untuk kebutuhan aplikasi ini.
+nol) yang tidak sepadan untuk kebutuhan aplikasi ini. Angka nyata dari build CodeMirror 6
+Fase 3c (YAML+JSON+Markdown+shell/conf, lint, search, autocomplete, fold, sekaligus):
+**~677KB minified / ~225KB gzip** — lebih besar dari perkiraan sangat kasar di awal proyek
+karena mencakup beberapa bahasa & fitur sekaligus, tapi tetap jauh di bawah Monaco (umumnya
+2–5MB+) yang jadi pembanding utamanya.
 
 Untuk validasi YAML/JSON inline (lihat [04-features.md](04-features.md) "Text Editor
 Terintegrasi"), dipakai `@codemirror/lint` (framework marker error bawaan CodeMirror 6) —
