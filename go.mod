@@ -1,4 +1,4 @@
-module github.com/tarkiman/tarkiman-os
+module github.com/tarkiman/taros
 
 go 1.25.0
 

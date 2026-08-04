@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/auth"
-	"github.com/tarkiman/tarkiman-os/internal/docker"
-	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
-	"github.com/tarkiman/tarkiman-os/internal/store"
-	"github.com/tarkiman/tarkiman-os/internal/terminal"
+	"github.com/tarkiman/taros/internal/auth"
+	"github.com/tarkiman/taros/internal/docker"
+	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/store"
+	"github.com/tarkiman/taros/internal/terminal"
 )
 
 // Deps are every dependency Server's handlers need. Passed as a struct

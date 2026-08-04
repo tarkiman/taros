@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/docker"
+	"github.com/tarkiman/taros/internal/docker"
 )
 
 // dockerUnavailableJSON is the JSON counterpart of the old error_panel.html

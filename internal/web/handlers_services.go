@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/systemd"
+	"github.com/tarkiman/taros/internal/systemd"
 )
 
 // serviceUnitJSON adds Protected (config-driven, see internal/config
