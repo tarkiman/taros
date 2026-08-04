@@ -32,10 +32,27 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 
 ## 9.2 Instalasi di Perangkat
 
-Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi). Proyek ini bisa
-dipakai siapa saja (repo publik) dengan setup rumah yang berbeda-beda, jadi langkah di bawah
-ditulis dengan `SERVICE_USER` sebagai variabel — bukan asumsi harus selalu user dedicated baru
-bernama `taros`. Set sekali di awal, lalu salin-tempel apa adanya:
+**`scripts/install.sh` mengotomatisasi langkah 1–4, 6, dan 9 di bawah** (binary, user servis,
+config, kredensial admin, systemd unit) — non-interaktif kecuali prompt username/password di
+langkah 6, dikendalikan lewat flag (`./scripts/install.sh --help` untuk daftar lengkap):
+
+```bash
+sudo ./scripts/install.sh --binary dist/taros-arm64
+# atau untuk Opsi B (pakai user login yang sudah ada, bukan user dedicated baru):
+sudo ./scripts/install.sh --binary dist/taros-arm64 --service-user pi --no-create-user
+```
+
+Idempoten — aman dijalankan ulang (mis. setelah upgrade binary): user/config/kredensial yang
+sudah ada tidak ditimpa diam-diam kecuali diminta eksplisit (`--force-setup` untuk reset
+password admin). Langkah 5, 7, dan 8 **sengaja tetap manual** (butuh keputusan sadar per
+device — akses lintas-pemilik untuk file explorer, dan trade-off keamanan mode sudo) dan
+dicetak sebagai pengingat di akhir output script.
+
+Langkah manual lengkap di bawah ini tetap didokumentasikan — untuk yang ingin paham persis apa
+yang dilakukan script di atas, mau kustomisasi di luar flag yang tersedia, atau troubleshooting.
+Proyek ini bisa dipakai siapa saja (repo publik) dengan setup rumah yang berbeda-beda, jadi
+langkah di bawah ditulis dengan `SERVICE_USER` sebagai variabel — bukan asumsi harus selalu
+user dedicated baru bernama `taros`. Set sekali di awal, lalu salin-tempel apa adanya:
 
 ```bash
 SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
@@ -239,6 +256,7 @@ polling:
   cpuMemNetIntervalSec: 2
   diskUsageIntervalSec: 10
   tempIntervalSec: 5
+  procIntervalSec: 5
 
 terminal:
   enabled: true
