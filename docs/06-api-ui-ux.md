@@ -14,12 +14,12 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 | `GET /login` | Halaman login (`LoginView.vue`) |
 | `GET /` | Dashboard utama (`DashboardView.vue`) |
 | `GET /docker` | Docker — tab Containers/Images/Volumes/Networks/Settings (`DockerView.vue`, tab sebagai state client, bukan lagi `?tab=` query) |
+| `GET /services` | Daftar & kontrol systemd unit (`ServiceView.vue`) |
 
 ### Halaman (SSR, `GET` → HTML lengkap) — belum dimigrasi ke Vue
 
 | Route | Deskripsi |
 |---|---|
-| `GET /services` | Halaman daftar systemd unit |
 | `GET /files` | File explorer (path via query `?path=`) |
 | `GET /files/edit` | Editor teks (`?path=`) |
 | `GET /terminal` | Halaman web terminal (xterm.js full-screen) — belum dibangun, lihat [10-roadmap.md](10-roadmap.md) |
@@ -27,14 +27,12 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 
 ### Fragment (htmx, `GET`/`POST` → potongan HTML untuk swap)
 
-Docker tidak lagi di sini — lihat REST/JSON di bawah, dimigrasi bersamaan dengan `DockerView.vue`.
+Docker dan Service tidak lagi di sini — lihat REST/JSON di bawah, dimigrasi bersamaan dengan
+`DockerView.vue`/`ServiceView.vue`.
 
 | Route | Deskripsi |
 |---|---|
-| `GET /fragments/services/list?q=&showAll=&failedOnly=` | Tabel systemd unit — `q` filter nama/deskripsi, `showAll=1` ikutkan socket/timer, `failedOnly=1` hanya yang failed. Sumber trigger-nya **form filter itu sendiri** (`hx-trigger="load, submit, change, every 8s"` langsung di `<form>`), bukan div terpisah — supaya auto-refresh berkala tidak diam-diam mereset filter yang sedang aktif |
-| `GET /fragments/services/{name}/logs` | 50 baris terakhir `journalctl -u {name}`, di-swap ke satu panel log bersama di bawah halaman |
 | `GET /fragments/files/list` | Listing folder (dipakai saat navigasi tanpa reload) |
-| `POST /fragments/services/{name}/{start\|stop\|restart\|reload}` | Aksi unit (butuh `sudo -n systemctl` bisa jalan — lihat [09-deployment.md](09-deployment.md) §9.2). **Catatan**: return tabel ter-refresh tanpa mempertahankan filter yang sedang aktif (beda dari auto-refresh berkala di atas) — simplifikasi yang disengaja, bukan bug |
 
 ### REST/JSON (dipakai oleh JS klien, misal chart)
 
@@ -50,6 +48,9 @@ Docker tidak lagi di sini — lihat REST/JSON di bawah, dimigrasi bersamaan deng
 | `POST /api/docker/networks/{id}/remove` | Hapus network, return list network ter-refresh |
 | `GET /api/docker/settings` | `{info, diskUsage}` — info daemon + ringkasan disk usage. Bisa makan beberapa detik (`/system/df` daemon-side mahal dengan banyak image/container — perilaku Docker sendiri, bukan regresi migrasi ini), `DockerView.vue` menampilkan spinner selama itu, bukan panel kosong |
 | `POST /api/docker/prune/{containers\|images\|volumes\|networks\|all}` | Cleanup, return `{info, diskUsage}` ter-update |
+| `GET /api/services/list?q=&showAll=&failedOnly=` | Daftar systemd unit, filter sama seperti versi htmx lama — `q` cocok substring nama/deskripsi, `showAll=1` ikutkan socket/timer (default cuma `service`), `failedOnly=1` hanya `active=="failed"`. Tiap unit dapat field `protected` (dari `config.yaml` `systemd.protectedUnits`) |
+| `POST /api/services/{name}/{start\|stop\|restart\|reload}` | Aksi unit (butuh `sudo -n systemctl` bisa jalan — lihat [09-deployment.md](09-deployment.md) §9.2), return daftar ter-refresh. Menerima `?q=&showAll=&failedOnly=` yang sama seperti request GET-nya, sehingga daftar yang di-refresh **mempertahankan filter aktif** — beda dari versi htmx lama yang sengaja reset filter (lihat 10-roadmap.md Fase UI/UX §C); di Vue ini praktis gratis karena klien memang sudah menyimpan state filter, jadi tidak ada alasan mempertahankan simplifikasi lama |
+| `GET /api/services/{name}/logs` | `{unit, logs}` — 50 baris terakhir `journalctl -u {name}`, ditampilkan di drawer (`NDrawer`), bukan panel inline seperti sebelumnya |
 | `POST /api/files/op` | Body JSON: `{action, path, newPath?, paths?}`. `mkdir\|create\|rename\|delete` sinkron (instan/`os.Rename`). `copy\|cut` cuma menyimpan `paths` ke clipboard sesi (`auth.Session`), tidak ada I/O. `paste` **selalu** mengembalikan `{jobId}` — bahkan kalau semua entry ternyata instant-rename, satu jalur kode klien untuk semua kasus |
 | `GET /api/files/op/{jobId}/stream` | **SSE** — progress job file besar (`JobSnapshot`: persentase, `bytesPerSec`, `currentFile`) |
 | `POST /api/files/op/{jobId}/cancel` | Batalkan job yang sedang berjalan — `context.CancelFunc`, efektif dalam &lt;1 buffer I/O (~256KB) |

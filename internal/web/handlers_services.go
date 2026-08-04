@@ -9,26 +9,20 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/systemd"
 )
 
-func (s *Server) handleServicesPage(w http.ResponseWriter, r *http.Request) {
-	sess := sessionFromContext(r.Context())
-	s.tmpl.render(w, http.StatusOK, "services.html", map[string]any{
-		"Username":  sess.Username,
-		"CSRFToken": sess.CSRFToken,
-	})
-}
-
-type serviceViewUnit struct {
+// serviceUnitJSON adds Protected (config-driven, see internal/config
+// SystemdConfig.ProtectedUnits) onto the raw systemd.Unit — same shape the
+// old serviceViewUnit gave templates, now with explicit json tags.
+type serviceUnitJSON struct {
 	systemd.Unit
-	Protected bool
+	Protected bool `json:"protected"`
 }
 
-// handleServicesListFragment supports ?showAll=1 (include socket/timer,
-// not just service) and ?q=<text> / ?failedOnly=1 filters — see
-// docs/04-features.md §4.3. Unlike Docker's container stats, systemctl
-// itself responds in well under a second even for 170+ units on this dev
-// box, so this queries systemd directly per request — no background
-// cache needed here, see docs/05-data-storage.md.
-func (s *Server) handleServicesListFragment(w http.ResponseWriter, r *http.Request) {
+// handleAPIServicesList supports ?showAll=1 (include socket/timer, not
+// just service) and ?q=<text> / ?failedOnly=1 filters — see
+// docs/04-features.md §4.3. systemctl responds well under a second even
+// for 170+ units on this dev box, so this queries systemd directly per
+// request — no background cache needed, see docs/05-data-storage.md.
+func (s *Server) handleAPIServicesList(w http.ResponseWriter, r *http.Request) {
 	types := "service"
 	if r.URL.Query().Get("showAll") == "1" {
 		types = "service,socket,timer"
@@ -38,17 +32,14 @@ func (s *Server) handleServicesListFragment(w http.ResponseWriter, r *http.Reque
 	defer cancel()
 	units, err := systemd.List(ctx, types)
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "systemd tidak terdeteksi atau tidak bisa diakses.",
-			"Detail":  err.Error(),
-		})
+		writeJSONError(w, http.StatusServiceUnavailable, "systemd tidak terdeteksi atau tidak bisa diakses: "+err.Error())
 		return
 	}
 
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	failedOnly := r.URL.Query().Get("failedOnly") == "1"
 
-	filtered := make([]serviceViewUnit, 0, len(units))
+	filtered := make([]serviceUnitJSON, 0, len(units))
 	for _, u := range units {
 		if failedOnly && u.Active != "failed" {
 			continue
@@ -56,15 +47,10 @@ func (s *Server) handleServicesListFragment(w http.ResponseWriter, r *http.Reque
 		if q != "" && !strings.Contains(strings.ToLower(u.Name), q) && !strings.Contains(strings.ToLower(u.Description), q) {
 			continue
 		}
-		filtered = append(filtered, serviceViewUnit{Unit: u, Protected: s.deps.ProtectedUnits[u.Name]})
+		filtered = append(filtered, serviceUnitJSON{Unit: u, Protected: s.deps.ProtectedUnits[u.Name]})
 	}
 
-	s.tmpl.renderFragment(w, http.StatusOK, "services_list.html", map[string]any{
-		"Units":      filtered,
-		"ShowAll":    types != "service",
-		"Query":      r.URL.Query().Get("q"),
-		"FailedOnly": failedOnly,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"units": filtered})
 }
 
 var validServiceActions = map[string]func(context.Context, string) error{
@@ -74,7 +60,14 @@ var validServiceActions = map[string]func(context.Context, string) error{
 	"reload":  systemd.Reload,
 }
 
-func (s *Server) handleServiceAction(w http.ResponseWriter, r *http.Request) {
+// handleAPIServiceAction runs the action then returns the refreshed list
+// using the SAME query params the request carried, if any. Note this is a
+// slight behavior improvement over the old htmx version, which always
+// reset to unfiltered after an action (documented there as "simplifikasi
+// yang disengaja, bukan bug") — for Vue this comes for free since the
+// client just re-runs its own current-filter fetch after a successful
+// action, so there's no reason to keep the old reset behavior.
+func (s *Server) handleAPIServiceAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	action := r.PathValue("action")
 
@@ -87,32 +80,24 @@ func (s *Server) handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := fn(ctx, name); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Aksi gagal: " + action + " " + name,
-			"Detail":  err.Error() + " — lihat docs/09-deployment.md §9.2 soal privilege yang dibutuhkan aksi ini.",
-		})
+		writeJSONError(w, http.StatusInternalServerError,
+			"Aksi gagal: "+action+" "+name+": "+err.Error()+" — lihat docs/09-deployment.md §9.2 soal privilege yang dibutuhkan aksi ini.")
 		return
 	}
 
-	s.handleServicesListFragment(w, r)
+	s.handleAPIServicesList(w, r)
 }
 
-func (s *Server) handleServiceLogsFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIServiceLogs(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
 	logs, err := systemd.Tail(ctx, name, 50)
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Gagal membaca log: " + name,
-			"Detail":  err.Error(),
-		})
+		writeJSONError(w, http.StatusInternalServerError, "Gagal membaca log: "+name+": "+err.Error())
 		return
 	}
 
-	s.tmpl.renderFragment(w, http.StatusOK, "services_logs.html", map[string]any{
-		"Unit": name,
-		"Logs": logs,
-	})
+	writeJSON(w, http.StatusOK, map[string]any{"unit": name, "logs": logs})
 }

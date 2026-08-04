@@ -249,6 +249,35 @@ sekaligus), dengan model deployment satu-binary tetap dipertahankan penuh.
   instance ini karena container-nya nyata/produksi milik user — hanya diverifikasi lewat
   pembacaan kode/logika yang identik dengan versi htmx yang sudah terbukti jalan sebelumnya.
 
+### C — Migrasi Service (selesai-dev; validasi STB fisik tertunda)
+
+- Endpoint JSON baru menggantikan fragment htmx Service: `GET /api/services/list?q=&showAll=
+  &failedOnly=`, `POST /api/services/{name}/{action}`, `GET /api/services/{name}/logs` — lihat
+  [06-api-ui-ux.md](06-api-ui-ux.md) §6.1. `systemd.Unit` dapat json tag camelCase eksplisit,
+  sama seperti struct `internal/docker/*` di sub-fase B.
+- **Perbaikan kecil dibanding versi htmx**: aksi start/stop/restart/reload sekarang
+  mempertahankan filter yang sedang aktif di hasil refresh-nya (request POST membawa
+  `?q=&showAll=&failedOnly=` yang sama dengan state klien saat itu) — versi htmx lama sengaja
+  reset ke filter kosong setelah aksi ("simplifikasi yang disengaja, bukan bug", dicatat di
+  §6.1 versi sebelumnya). Di Vue ini nyaris gratis karena klien sudah menyimpan state filter
+  di memori, jadi tidak ada alasan mempertahankan keterbatasan lama.
+- `ServiceView.vue`: filter (pencarian nama/deskripsi lewat Enter/blur — bukan tiap keystroke,
+  supaya tidak membanjiri exec `systemctl` tiap ketikan; checkbox showAll/failedOnly langsung
+  trigger), tabel unit auto-refresh tiap 8 detik (sama seperti `hx-trigger="every 8s"` versi
+  lama) mempertahankan filter aktif, badge "terproteksi" untuk unit di `systemd.protectedUnits`
+  dengan pesan konfirmasi (`NPopconfirm`) yang lebih tegas. Log ditampilkan lewat `NDrawer`
+  (panel slide-in) alih-alih panel inline di bawah halaman seperti sebelumnya.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium) terhadap
+  systemd sungguhan** (175 unit nyata di dev machine, termasuk unit CasaOS yang masih
+  terpasang — proyek yang justru digantikan TarkimanOS): navigasi via sidebar `RouterLink`,
+  pencarian filter bekerja benar (termasuk badge "terproteksi" muncul untuk `ssh.service`),
+  checkbox showAll benar memperluas hasil (5→175 unit), dan drawer log berhasil menampilkan
+  isi `journalctl` sungguhan (~4.8KB teks) untuk sebuah unit nyata. Aksi mutasi
+  (start/stop/restart/reload) **tidak** diuji lewat browser otomatis terhadap instance ini
+  karena unit-nya nyata/produksi (termasuk `ssh.service`, `docker.service`) — hanya
+  diverifikasi lewat pembacaan kode, identik logikanya dengan versi htmx yang sudah terbukti
+  jalan.
+
 **Fase 4 (Web Terminal) di-hold** atas permintaan eksplisit — dilanjutkan setelah migrasi
 UI/UX halaman-halaman lain selesai, atau lebih cepat kalau user memutuskan untuk
 memprioritaskannya lagi.
