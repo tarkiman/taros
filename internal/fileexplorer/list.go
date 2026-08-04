@@ -12,13 +12,13 @@ import (
 )
 
 type Entry struct {
-	Name      string
-	IsDir     bool
-	SizeBytes int64
-	Mode      string // e.g. "-rw-r--r--"
-	Owner     string // username, falls back to numeric uid as a string if unresolvable
-	Group     string
-	ModTime   time.Time
+	Name      string    `json:"name"`
+	IsDir     bool      `json:"isDir"`
+	SizeBytes int64     `json:"sizeBytes"`
+	Mode      string    `json:"mode"` // e.g. "-rw-r--r--"
+	Owner     string    `json:"owner"` // username, falls back to numeric uid as a string if unresolvable
+	Group     string    `json:"group"`
+	ModTime   time.Time `json:"modTime"`
 }
 
 // List returns the contents of dir (already jail-resolved by the caller —

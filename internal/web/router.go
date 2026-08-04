@@ -66,6 +66,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.serveSPA)
 	mux.HandleFunc("GET /docker", s.serveSPA)
 	mux.HandleFunc("GET /services", s.serveSPA)
+	mux.HandleFunc("GET /files", s.serveSPA)
 	mux.Handle("GET /assets/", spaAssets)
 
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
@@ -90,8 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.requireAuth(s.handleAPIServiceAction))
 	mux.HandleFunc("GET /api/services/{name}/logs", s.requireAuth(s.handleAPIServiceLogs))
 
-	mux.HandleFunc("GET /files", s.requireAuth(s.handleFilesPage))
-	mux.HandleFunc("GET /fragments/files/list", s.requireAuth(s.handleFilesListFragment))
+	mux.HandleFunc("GET /api/files/list", s.requireAuth(s.handleAPIFilesList))
 	mux.HandleFunc("POST /api/files/op", s.requireAuth(s.handleFilesOp))
 	mux.HandleFunc("GET /api/files/op/{jobId}/stream", s.requireAuth(s.handleFilesOpStream))
 	mux.HandleFunc("POST /api/files/op/{jobId}/cancel", s.requireAuth(s.handleFilesOpCancel))

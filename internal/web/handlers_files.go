@@ -15,8 +15,8 @@ import (
 )
 
 type breadcrumbItem struct {
-	Name string
-	Path string
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 // breadcrumbs builds crumbs from root downward only — never from
@@ -56,39 +56,25 @@ func (s *Server) currentDir(r *http.Request) (string, error) {
 	return s.deps.Jail.Resolve(path)
 }
 
-func (s *Server) handleFilesPage(w http.ResponseWriter, r *http.Request) {
-	sess := sessionFromContext(r.Context())
-	dir, err := s.currentDir(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	clip, cut := sess.Clipboard()
-	s.tmpl.render(w, http.StatusOK, "files.html", map[string]any{
-		"Username":      sess.Username,
-		"CSRFToken":     sess.CSRFToken,
-		"CurrentPath":   dir,
-		"ClipboardSize": len(clip),
-		"ClipboardCut":  cut,
-	})
+type filesListResponse struct {
+	CurrentPath   string             `json:"currentPath"`
+	ParentPath    string             `json:"parentPath"`
+	Breadcrumbs   []breadcrumbItem   `json:"breadcrumbs"`
+	Entries       []fileexplorer.Entry `json:"entries"`
+	ClipboardSize int                `json:"clipboardSize"`
+	ClipboardCut  bool               `json:"clipboardCut"`
 }
 
-func (s *Server) handleFilesListFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIFilesList(w http.ResponseWriter, r *http.Request) {
 	dir, err := s.currentDir(r)
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Path tidak valid.",
-			"Detail":  err.Error(),
-		})
+		writeJSONError(w, http.StatusBadRequest, "Path tidak valid: "+err.Error())
 		return
 	}
 
 	entries, err := fileexplorer.List(dir)
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Gagal membaca direktori.",
-			"Detail":  err.Error(),
-		})
+		writeJSONError(w, http.StatusInternalServerError, "Gagal membaca direktori: "+err.Error())
 		return
 	}
 
@@ -123,14 +109,13 @@ func (s *Server) handleFilesListFragment(w http.ResponseWriter, r *http.Request)
 	sess := sessionFromContext(r.Context())
 	clip, cut := sess.Clipboard()
 
-	s.tmpl.renderFragment(w, http.StatusOK, "files_list.html", map[string]any{
-		"CurrentPath":   dir,
-		"ParentPath":    parent,
-		"Breadcrumbs":   breadcrumbs(s.deps.Jail.Root, dir),
-		"Entries":       entries,
-		"Query":         r.URL.Query().Get("q"),
-		"ClipboardSize": len(clip),
-		"ClipboardCut":  cut,
+	writeJSON(w, http.StatusOK, filesListResponse{
+		CurrentPath:   dir,
+		ParentPath:    parent,
+		Breadcrumbs:   breadcrumbs(s.deps.Jail.Root, dir),
+		Entries:       entries,
+		ClipboardSize: len(clip),
+		ClipboardCut:  cut,
 	})
 }
 

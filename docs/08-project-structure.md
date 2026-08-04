@@ -90,7 +90,7 @@ tarkiman-os/
 │   │   │                                # 03-tech-stack.md "Kenapa pivot ke Vue?"
 │   │   ├── src/
 │   │   │   ├── views/                   # LoginView.vue, DashboardView.vue, DockerView.vue,
-│   │   │   │                           # ServiceView.vue — satu per route
+│   │   │   │                           # ServiceView.vue, FilesView.vue — satu per route
 │   │   │   ├── layouts/AppShell.vue      # sidebar + topbar, dipakai halaman ber-auth
 │   │   │   ├── components/charts/        # GaugeChart.vue, LineChart.vue (wrapper ECharts)
 │   │   │   ├── composables/              # useMetricsStream.ts (SSE), usePrefersDark.ts
@@ -109,32 +109,22 @@ tarkiman-os/
 │   │   │                                # menjalankan Vite/npm
 │   │   └── package.json / package-lock.json
 │   ├── templates/                       # html/template files — halaman yang BELUM dimigrasi
-│   │   │                                # ke Vue (lihat web/frontend/ di atas untuk yang sudah)
+│   │   │                                # ke Vue (lihat web/frontend/ di atas untuk yang sudah).
+│   │   │                                # `fragments/` (htmx partial swaps) sudah kosong dan
+│   │   │                                # dihapus total — Docker/Service/Files semuanya sudah
+│   │   │                                # Vue, dan halaman terakhir yang tersisa (editor.html)
+│   │   │                                # tidak pernah punya fragment sejak awal (isinya
+│   │   │                                # di-fetch via JS, bukan di-render server-side)
 │   │   ├── layout.html
-│   │   ├── files.html
-│   │   ├── editor.html                    # shell halaman; isi file di-fetch via JS, tidak
-│   │   │                                  # di-render server-side (hindari HTML-escaping
-│   │   │                                  # konten arbitrary besar langsung di template)
-│   │   ├── terminal.html                  # [belum dibuat] halaman full-screen xterm.js
-│   │   └── fragments/                    # partial template untuk htmx swap — tanpa layout.html,
-│   │       │                              # di-parse & di-render standalone (lihat catatan di bawah).
-│   │       │                              # Docker & Service dihapus — dimigrasi ke Vue, lihat
-│   │       │                              # web/frontend/src/views/{Docker,Service}View.vue di atas
-│   │       ├── files_list.html            # listing + breadcrumb; entry yang match blocklist
-│   │       │                              # difilter di sini, bukan cuma ditolak saat diklik
-│   │       └── error_panel.html           # dipakai fragment Files untuk degradasi/error — nama
-│   │                                       # generik dari saat masih dipakai lintas domain
-│   │                                       # (Docker/Service), sekarang cuma Files
+│   │   └── editor.html                    # shell halaman; isi file di-fetch via JS, tidak
+│   │                                       # di-render server-side (hindari HTML-escaping
+│   │                                       # konten arbitrary besar langsung di template)
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css                   # design tokens + styling custom
 │   │   │   ├── editor.css                 # layout halaman editor saja (dimuat khusus di sana)
 │   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
-│   │       ├── files.js                    # mkdir/rename/delete/copy/cut/paste (fetch JSON),
-│   │       │                                # upload via XHR (butuh progress event, fetch tidak
-│   │       │                                # punya ini untuk request body), progress panel
-│   │       │                                # via EventSource ke endpoint job SSE
 │   │       ├── editor.js                   # glue vanilla JS di sekitar window.TkEditor: fetch
 │   │       │                                # isi file, dirty tracking, save/conflict/draft —
 │   │       │                                # file ini SENDIRI tidak di-bundle esbuild
@@ -190,7 +180,7 @@ tarkiman-os/
   `SPA` ke `frontend/dist` supaya path-nya cocok dengan yang direferensikan `index.html`
   hasil build Vite (`/assets/...`).
 - **Satu `*template.Template` per halaman, bukan satu set gabungan.** `templates.go` mem-parse
-  `layout.html` + tiap file halaman (`files.html`, `editor.html`, dst — halaman yang belum
+  `layout.html` + tiap file halaman (saat ini cuma `editor.html` — satu-satunya yang belum
   dimigrasi ke Vue) sebagai set terpisah
   per halaman, bukan satu `template.ParseFS(fs, "templates/*.html")` untuk semuanya. Alasannya:
   tiap halaman mendefinisikan block `{{define "title"}}`/`{{define "content"}}` dengan nama yang
@@ -224,7 +214,11 @@ tarkiman-os/
   panel) tanpa `{{define}}` — `templateSet.renderFragment` mem-parse tiap file sendirian lewat
   `template.New(name)...ParseFS(fs, f)` lalu `ExecuteTemplate(w, name, data)`, dipakai baik
   untuk fetch awal (`hx-trigger="load"`) maupun tiap swap sesudahnya (auto-refresh atau
-  setelah aksi) — satu fungsi render yang sama untuk kedua kasus.
+  setelah aksi) — satu fungsi render yang sama untuk kedua kasus. **Status saat ini**: tidak
+  ada fragment tersisa (Docker/Service/Files sudah semua Vue) — `renderFragment` & `fs.Glob`
+  atas `templates/fragments/*.html` tetap ada di `templates.go` (aman terhadap direktori yang
+  tidak ada sama sekali, dikonfirmasi lewat build+run manual), siap dipakai lagi kalau suatu
+  saat ada fragment htmx baru, bukan dihapus preventif.
 - **`web.Deps` struct, bukan parameter positional yang terus bertambah.** `NewServer` menerima
   satu struct `Deps` (sessions, creds, store, docker client+watcher, dst) alih-alih daftar
   parameter panjang — diperkenalkan tepat saat Fase 2 menambah dependency Docker karena daftar

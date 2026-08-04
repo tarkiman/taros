@@ -1,1 +1,0 @@
-import{f as e}from"./auth-CDeeRorZ.js";function t(e){let{opacityDisabled:t,heightTiny:n,heightSmall:r,heightMedium:i,heightLarge:a,heightHuge:o,primaryColor:s,fontSize:c}=e;return{fontSize:c,textColor:s,sizeTiny:n,sizeSmall:r,sizeMedium:i,sizeLarge:a,sizeHuge:o,color:s,opacitySpinning:t}}var n={name:`Spin`,common:e,self:t};export{n,t};
