@@ -41,9 +41,14 @@ async function handleLogout() {
 </script>
 
 <template>
-  <NLayout has-sider style="height: 100vh">
+  <div class="app-backdrop">
+    <div class="app-blob a"></div>
+    <div class="app-blob b"></div>
+    <div class="app-blob c"></div>
+  </div>
+  <NLayout has-sider style="height: 100vh; position: relative; z-index: 1">
     <NLayoutSider bordered :width="220" :collapsed-width="64" collapsible v-model:collapsed="collapsed">
-      <div class="brand">{{ collapsed ? 'T' : 'TarkimanOS' }}</div>
+      <div class="brand">{{ collapsed ? 'T' : 'TarOS' }}</div>
       <nav class="side-nav" aria-label="Navigasi utama">
         <RouterLink to="/" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Dashboard' : undefined">
           <NIcon :component="LayoutDashboard" size="18" />

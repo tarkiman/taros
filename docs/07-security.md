@@ -6,7 +6,7 @@ permukaan risikonya besar jika tidak dijaga. Bagian ini mendefinisikan pagar pen
 ## 7.1 Autentikasi & Session
 
 - **Single admin user**, kredensial dikonfigurasi saat first-run (setup wizard sederhana
-  di CLI: `tarkimanos setup` — set username & password) atau via `config.yaml` (password
+  di CLI: `taros setup` — set username & password) atau via `config.yaml` (password
   disimpan sebagai **bcrypt hash**, tidak pernah plaintext).
 - Login via form → cek bcrypt → jika valid, buat session token random (32 byte,
   `crypto/rand`), simpan di map in-memory `token → session`, set sebagai **cookie
@@ -70,16 +70,16 @@ tidak ada jalur kode yang lupa memvalidasi:
 
 ## 7.4 Docker & Systemd — Privilege
 
-- Untuk akses Docker socket (`/var/run/docker.sock`), proses TarkimanOS harus jadi anggota
+- Untuk akses Docker socket (`/var/run/docker.sock`), proses TarOS harus jadi anggota
   **group `docker`** (bukan berjalan sebagai root). Ini didokumentasikan jelas saat instalasi
   — catatan penting: keanggotaan grup `docker` secara efektif setara root (container bisa
   mount `/` host), jadi ini **trade-off yang disadari dan didokumentasikan**, bukan diam-diam.
 - Untuk kontrol systemd (start/stop/restart unit) via D-Bus, dibutuhkan **PolicyKit (polkit)
-  rule** yang mengizinkan user TarkimanOS memanggil method tertentu di
+  rule** yang mengizinkan user TarOS memanggil method tertentu di
   `org.freedesktop.systemd1.Manager` tanpa perlu jadi root penuh — lebih granular dibanding
   menjalankan seluruh proses sebagai root. Contoh rule polkit disediakan di
-  `deploy/polkit/10-tarkimanos-systemd.rules` (lihat [09-deployment.md](09-deployment.md)).
-- **Tidak berjalan sebagai root.** Proses jalan sebagai user sistem dedicated `tarkimanos`
+  `deploy/polkit/10-taros-systemd.rules` (lihat [09-deployment.md](09-deployment.md)).
+- **Tidak berjalan sebagai root.** Proses jalan sebagai user sistem dedicated `taros`
   (dibuat saat instalasi), dengan hanya membership/permission yang benar-benar dibutuhkan.
 - **Aksi destruktif Docker** (remove container/image/volume/network, semua bentuk prune —
   lihat [04-features.md](04-features.md) §4.2) mengikuti pola konfirmasi yang sama dengan
@@ -101,22 +101,22 @@ tidak ada jalur kode yang lupa memvalidasi:
 
 Web terminal secara desain adalah **shell access lewat browser** — ini fitur dengan
 permukaan risiko tertinggi di seluruh aplikasi, jadi diperlakukan dengan pagar berlapis.
-Keputusan mendasar (privilege = user service `tarkimanos`, bukan root, bukan PAM) sudah dibahas
+Keputusan mendasar (privilege = user service `taros`, bukan root, bukan PAM) sudah dibahas
 di [02-architecture.md](02-architecture.md) & [04-features.md](04-features.md) §4.5 —
 bagian ini fokus ke kontrol keamanannya.
 
-- **Tidak ada privilege escalation dari dalam aplikasi.** TarkimanOS tidak pernah memanggil `sudo`,
+- **Tidak ada privilege escalation dari dalam aplikasi.** TarOS tidak pernah memanggil `sudo`,
   `su`, atau setuid apa pun untuk sesi terminal — shell yang di-spawn selalu punya uid/gid
-  identik dengan proses TarkimanOS. Kalau user secara sadar menambahkan sudoers rule untuk user
-  `tarkimanos` di level OS, itu keputusan & risiko di luar aplikasi, bukan default TarkimanOS.
+  identik dengan proses TarOS. Kalau user secara sadar menambahkan sudoers rule untuk user
+  `taros` di level OS, itu keputusan & risiko di luar aplikasi, bukan default TarOS.
 - **Sudo di dalam terminal — trade-off yang harus dipilih sadar.** Karena banyak tugas admin
   (`apt`, kelola systemd unit di luar yang sudah diizinkan polkit, edit file di luar root file
-  explorer, dst) memang butuh root, sudo untuk user `tarkimanos` **didukung tapi tidak aktif
+  explorer, dst) memang butuh root, sudo untuk user `taros` **didukung tapi tidak aktif
   secara default** — harus disiapkan manual saat instalasi (lihat
   [09-deployment.md](09-deployment.md) §9.2 & [04-features.md](04-features.md) §4.5). Dua mode:
   - **Sudo dengan password** (direkomendasikan): butuh password sistem terpisah dari password
     dashboard. Ini artinya **kompromi kredensial dashboard saja belum otomatis = akses root** —
-    penyerang juga perlu tahu password sistem `tarkimanos`. Tetap catat: begitu user sungguhan
+    penyerang juga perlu tahu password sistem `taros`. Tetap catat: begitu user sungguhan
     login lalu `sudo`, sesi itu bisa disalahgunakan sampai sudo timestamp expire (~15 menit)
     kalau device diambil alih di momen itu — trade-off yang sama seperti sudo di terminal biasa.
   - **Sudo NOPASSWD**: nol hambatan tambahan — **kompromi kredensial dashboard = akses root
@@ -126,7 +126,7 @@ bagian ini fokus ke kontrol keamanannya.
   - Kedua mode **tidak diaktifkan otomatis oleh installer** — perlu langkah eksplisit
     (`visudo`/file di `/etc/sudoers.d/`), supaya keputusan ini selalu sadar, bukan default
     diam-diam yang mengubah keseluruhan model ancaman aplikasi.
-- **"Non-root" bukan berarti "tidak berbahaya".** User `tarkimanos` sendiri berpotensi punya akses
+- **"Non-root" bukan berarti "tidak berbahaya".** User `taros` sendiri berpotensi punya akses
   luas: kalau `docker` group diaktifkan (§7.4 di atas), user itu **setara root** (bisa mount
   `/` host lewat container); kalau file explorer di-root ke `/`, shell ini juga bisa baca/tulis
   apa pun yang bisa diakses file explorer. Jangan anggap fitur ini "aman karena non-root" —
@@ -137,7 +137,7 @@ bagian ini fokus ke kontrol keamanannya.
 - **Proteksi CSWSH (Cross-Site WebSocket Hijacking).** Cookie otomatis ikut terkirim browser
   saat WebSocket handshake same-origin, tapi berbeda dari form HTTP biasa, WebSocket **tidak**
   otomatis terlindungi oleh CSRF token konvensional — mitigasinya server **memvalidasi header
-  `Origin`** pada request upgrade, menolak handshake yang originnya bukan host TarkimanOS sendiri.
+  `Origin`** pada request upgrade, menolak handshake yang originnya bukan host TarOS sendiri.
 - **Satu sesi aktif pada satu waktu** (default, [§4.5](04-features.md)) — selain menjaga
   resource STB, ini juga membatasi blast radius (tidak ada banyak shell background berjalan
   tanpa sepengetahuan user).
@@ -164,7 +164,7 @@ bagian ini fokus ke kontrol keamanannya.
   dashboard ke orang lain).
 - **Aksi service (systemd) memakai ulang privilege opt-in yang sama.** Aksi start/stop/
   restart/reload di halaman Service ([04-features.md](04-features.md) §4.3) dijalankan lewat
-  `sudo -n systemctl ...` — kalau sudoers untuk user `tarkimanos` sudah disiapkan untuk web
+  `sudo -n systemctl ...` — kalau sudoers untuk user `taros` sudah disiapkan untuk web
   terminal (mode password atau NOPASSWD di atas), aksi service otomatis ikut berfungsi tanpa
   konfigurasi tambahan. Kalau user **tidak** mau memberi akses sudo seluas terminal, tersedia
   alternatif sudoers yang jauh lebih sempit — dibatasi ke binary `systemctl` saja, tidak bisa
@@ -180,7 +180,7 @@ bagian ini fokus ke kontrol keamanannya.
   image/volume/network, semua bentuk prune), aksi systemd (start/stop/restart/reload unit),
   perubahan settings, **sesi terminal (mulai/selesai saja, lihat §7.6)**.
 - Ditulis ke stdout/stderr → ditangkap `journald` (standar systemd service) — tidak perlu
-  TarkimanOS mengelola file log sendiri (rotasi dsb sudah ditangani journald).
+  TarOS mengelola file log sendiri (rotasi dsb sudah ditangani journald).
 
 ## 7.8 Ringkasan Ancaman & Mitigasi
 
@@ -197,4 +197,4 @@ bagian ini fokus ke kontrol keamanannya.
 | Shell interaktif disalahgunakan kalau kredensial dashboard bocor | Non-root, idle timeout, 1 sesi konkuren, bisa di-disable total, rekomendasi network isolation |
 | Proses/PTY menumpuk (resource exhaustion) dari sesi terminal | Kill otomatis saat koneksi terputus, batas sesi konkuren |
 | Kredensial dashboard bocor → akses root instan (kalau sudo NOPASSWD aktif) | Sudo tidak aktif default; mode "dengan password" direkomendasikan; NOPASSWD didokumentasikan eksplisit sebagai risiko tinggi, bukan default |
-| Terminal langsung exit karena shell akun `tarkimanos` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |
+| Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |

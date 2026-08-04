@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { NGrid, NGi, NCard, NSpin } from 'naive-ui'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { NGrid, NGi, NCard, NSpin, NIcon } from 'naive-ui'
+import { ShieldCheck, TriangleAlert, HardDrive, Wifi, Box, LayoutDashboard, Server, FolderOpen, SquareTerminal } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
 import { useMetricsStream } from '../composables/useMetricsStream'
 import { fetchHistory } from '../api/metrics'
+import { dockerApi } from '../api/docker'
+import { serviceApi } from '../api/service'
+import { useTerminalStore } from '../stores/terminal'
 import type { Sample } from '../types/metrics'
+import type { Container } from '../types/docker'
 import { formatBytes } from '../utils/format'
 
+const terminal = useTerminalStore()
 const { snapshot } = useMetricsStream()
 
 // ~15 min at a ~1s SSE tick — matches the ring buffer retention documented
@@ -20,25 +26,20 @@ const cpuHistory = ref<[number, number][]>([])
 const diskReadHistory = ref<[number, number][]>([])
 const diskWriteHistory = ref<[number, number][]>([])
 
-function toPoints(samples: Sample[]): [number, number][] {
-  return samples.map((s) => [new Date(s.t).getTime(), s.v])
+// scale defaults to 1 (CPU history is already a percentage); diskRead/
+// diskWrite history comes back in bytes/sec from the API, same as the live
+// SSE values pushPoint below converts to MB/s — without matching that
+// conversion here, the initial history load and the live tail after it
+// were on wildly different scales (a real bug: the Y axis showed a
+// "25000000 MB/s" tick because raw byte values were plotted unconverted).
+function toPoints(samples: Sample[], scale = 1): [number, number][] {
+  return samples.map((s) => [new Date(s.t).getTime(), s.v * scale])
 }
 
 function pushPoint(buf: [number, number][], time: string, value: number) {
   buf.push([new Date(time).getTime(), value])
   if (buf.length > HISTORY_LIMIT) buf.shift()
 }
-
-onMounted(async () => {
-  const [cpu, diskRead, diskWrite] = await Promise.all([
-    fetchHistory('cpu'),
-    fetchHistory('diskRead'),
-    fetchHistory('diskWrite'),
-  ])
-  cpuHistory.value = toPoints(cpu)
-  diskReadHistory.value = toPoints(diskRead)
-  diskWriteHistory.value = toPoints(diskWrite)
-})
 
 watch(snapshot, (snap) => {
   if (!snap) return
@@ -63,6 +64,111 @@ const maxTemp = computed(() => {
   if (temps.length === 0) return null
   return temps.reduce((max, t) => (t.celsius > max.celsius ? t : max))
 })
+
+const netTotal = computed(() => {
+  const ifaces = snapshot.value?.net ?? []
+  return ifaces.reduce(
+    (acc, n) => ({ rx: acc.rx + n.rxBytesPerSec, tx: acc.tx + n.txBytesPerSec }),
+    { rx: 0, tx: 0 },
+  )
+})
+
+// --- live clock — purely cosmetic, no server round-trip ---
+const clockTime = ref('')
+const clockDate = ref('')
+const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu']
+const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+let clockTimer: ReturnType<typeof setInterval> | undefined
+
+function tickClock() {
+  const now = new Date()
+  clockTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  clockDate.value = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`
+}
+
+// --- Docker snapshot: reused for both the health banner and the "Container
+// Teratas" widget, so it's fetched once here rather than duplicating
+// DockerView's own polling loop for a lighter-weight summary view. ---
+const containers = ref<Container[]>([])
+const dockerAvailable = ref(false)
+const dockerChecked = ref(false)
+
+async function loadDockerSummary() {
+  try {
+    const res = await dockerApi.containers()
+    containers.value = res.containers
+    dockerAvailable.value = true
+  } catch {
+    dockerAvailable.value = false
+  } finally {
+    dockerChecked.value = true
+  }
+}
+
+const runningCount = computed(() => containers.value.filter((c) => c.state === 'running').length)
+const topContainers = computed(() =>
+  containers.value
+    .filter((c) => c.hasStats)
+    .slice()
+    .sort((a, b) => b.stats.cpuPercent - a.stats.cpuPercent)
+    .slice(0, 5),
+)
+
+// --- Service health: just the failed-unit count, cheap enough to ask for
+// directly rather than polling the full unit list like ServiceView does. ---
+const failedCount = ref(0)
+const serviceAvailable = ref(false)
+const serviceChecked = ref(false)
+
+async function loadServiceSummary() {
+  try {
+    const res = await serviceApi.list({ failedOnly: true })
+    failedCount.value = res.units.length
+    serviceAvailable.value = true
+  } catch {
+    serviceAvailable.value = false
+  } finally {
+    serviceChecked.value = true
+  }
+}
+
+const healthReady = computed(() => dockerChecked.value && serviceChecked.value)
+const healthLine = computed(() => {
+  const parts: string[] = []
+  if (dockerAvailable.value) parts.push(`${runningCount.value}/${containers.value.length} container aktif`)
+  if (serviceAvailable.value) {
+    parts.push(failedCount.value === 0 ? 'tidak ada unit gagal' : `${failedCount.value} unit systemd gagal`)
+  }
+  if (parts.length === 0) return 'Docker dan systemd tidak tersedia untuk dipantau dari sini.'
+  return parts.join(' · ')
+})
+const hasWarning = computed(() => serviceAvailable.value && failedCount.value > 0)
+
+onMounted(async () => {
+  tickClock()
+  clockTimer = setInterval(tickClock, 15000)
+  await Promise.allSettled([
+    fetchHistory('cpu').then((s) => { cpuHistory.value = toPoints(s) }),
+    fetchHistory('diskRead').then((s) => { diskReadHistory.value = toPoints(s, 1 / 1024 / 1024) }),
+    fetchHistory('diskWrite').then((s) => { diskWriteHistory.value = toPoints(s, 1 / 1024 / 1024) }),
+    loadDockerSummary(),
+    loadServiceSummary(),
+  ])
+})
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
+})
+
+const quickLinks = computed(() => {
+  const links = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/docker', label: 'Docker', icon: Box },
+    { to: '/services', label: 'Service', icon: Server },
+    { to: '/files', label: 'Files', icon: FolderOpen },
+  ]
+  if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
+  return links
+})
 </script>
 
 <template>
@@ -70,37 +176,97 @@ const maxTemp = computed(() => {
     <div class="dashboard">
       <div v-if="!snapshot" class="loading"><NSpin size="large" /></div>
       <template v-else>
-        <NGrid cols="1 s:2 m:4" :x-gap="16" :y-gap="16" responsive="screen">
-          <NGi>
-            <NCard><GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" /></NCard>
-          </NGi>
-          <NGi>
-            <NCard><GaugeChart :value="snapshot.mem.usedPercent" label="RAM" /></NCard>
-          </NGi>
-          <NGi>
-            <NCard>
-              <GaugeChart
-                v-if="primaryDisk"
-                :value="primaryDisk.usedPercent"
-                :label="primaryDisk.mountPoint"
-              />
-              <div v-else class="text-muted">Tidak ada data disk</div>
+        <div class="hero-row">
+          <div class="glass-card clock-card">
+            <div class="clock-time">{{ clockTime }}</div>
+            <div class="clock-date">{{ clockDate }}</div>
+          </div>
+          <div class="glass-card banner-card">
+            <div class="banner-copy">
+              <h2>{{ !healthReady ? 'Memeriksa status layanan…' : hasWarning ? 'Ada yang perlu diperiksa' : 'Semua layanan berjalan normal' }}</h2>
+              <p>{{ healthLine }}</p>
+            </div>
+            <div class="banner-pill" :class="{ warn: hasWarning }">
+              <NIcon :component="hasWarning ? TriangleAlert : ShieldCheck" size="15" />
+              {{ hasWarning ? 'Perlu perhatian' : 'Sehat' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="main-grid">
+          <NCard class="status-card">
+            <template #header>Ringkasan Sistem</template>
+            <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
+              <NGi><GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" /></NGi>
+              <NGi><GaugeChart :value="snapshot.mem.usedPercent" label="RAM" /></NGi>
+              <NGi>
+                <GaugeChart v-if="primaryDisk" :value="primaryDisk.usedPercent" :label="primaryDisk.mountPoint" />
+                <div v-else class="text-muted empty-gauge">Tidak ada data disk</div>
+              </NGi>
+              <NGi>
+                <GaugeChart
+                  v-if="maxTemp"
+                  :value="maxTemp.celsius"
+                  :max="100"
+                  :thresholds="[0.7, 0.85]"
+                  :label="maxTemp.label"
+                  :formatter="(v: number) => v.toFixed(0) + '°'"
+                />
+                <div v-else class="text-muted empty-gauge">Sensor suhu tidak tersedia</div>
+              </NGi>
+            </NGrid>
+
+            <div class="io-strip">
+              <div class="io-tile">
+                <NIcon :component="HardDrive" size="18" />
+                <div>
+                  <div class="io-label">Disk I/O</div>
+                  <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
+                </div>
+              </div>
+              <div class="io-tile">
+                <NIcon :component="Wifi" size="18" />
+                <div>
+                  <div class="io-label">Jaringan</div>
+                  <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
+                </div>
+              </div>
+            </div>
+          </NCard>
+
+          <div class="side-col">
+            <NCard class="proc-card">
+              <template #header>Container Teratas</template>
+              <ul v-if="topContainers.length > 0" class="proc-list">
+                <li v-for="c in topContainers" :key="c.id" class="proc-row">
+                  <span class="proc-dot"></span>
+                  <span class="proc-name">{{ c.name }}</span>
+                  <span class="proc-pct">{{ c.stats.cpuPercent.toFixed(1) }}%</span>
+                </li>
+              </ul>
+              <p v-else class="text-muted empty-note">
+                {{ dockerAvailable ? 'Belum ada container dengan statistik.' : 'Docker tidak tersedia.' }}
+              </p>
             </NCard>
-          </NGi>
-          <NGi>
-            <NCard>
-              <GaugeChart
-                v-if="maxTemp"
-                :value="maxTemp.celsius"
-                :max="100"
-                :thresholds="[0.7, 0.85]"
-                :label="maxTemp.label"
-                :formatter="(v: number) => v.toFixed(0) + '°'"
-              />
-              <div v-else class="text-muted">Sensor suhu tidak tersedia</div>
+
+            <NCard class="docker-card">
+              <template #header>Docker</template>
+              <template v-if="dockerAvailable">
+                <div class="docker-count">{{ runningCount }}</div>
+                <div class="docker-count-label">container aktif dari {{ containers.length }} total</div>
+              </template>
+              <p v-else class="text-muted empty-note">Docker dinonaktifkan atau tidak terdeteksi.</p>
             </NCard>
-          </NGi>
-        </NGrid>
+          </div>
+        </div>
+
+        <p class="eyebrow section">Akses cepat</p>
+        <div class="quick-grid">
+          <RouterLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="glass-card quick-tile">
+            <span class="quick-icon"><NIcon :component="link.icon" size="20" /></span>
+            <span class="quick-name">{{ link.label }}</span>
+          </RouterLink>
+        </div>
 
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>
@@ -159,6 +325,223 @@ const maxTemp = computed(() => {
   margin-top: 24px;
 }
 
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 12px 2px;
+}
+
+/* NCard already picks up the glass look app-wide via theme.ts — these are
+   for elements that aren't NCard (clock/banner/quick-tile), styled to match. */
+.glass-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.hero-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.clock-card {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.clock-time {
+  font-family: var(--font-mono);
+  font-size: 2.2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.clock-date {
+  margin-top: 6px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.banner-card {
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.banner-copy h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.banner-copy p {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+.banner-pill {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.banner-pill.warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.main-grid {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.empty-gauge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 160px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.io-strip {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.io-tile {
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--track);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+.io-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.io-value {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.proc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.proc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.proc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.proc-name {
+  flex: 1;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proc-pct {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-note {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.docker-count {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.docker-count-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.quick-tile {
+  padding: 18px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.quick-tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.quick-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.quick-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.quick-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .detail-table {
   width: 100%;
   border-collapse: collapse;
@@ -167,7 +550,7 @@ const maxTemp = computed(() => {
 
 .detail-table td {
   padding: 6px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .detail-table tr:last-child td {
@@ -176,5 +559,12 @@ const maxTemp = computed(() => {
 
 .text-muted {
   color: var(--text-muted);
+}
+
+@media (max-width: 860px) {
+  .hero-row { grid-template-columns: 1fr; }
+  .main-grid { grid-template-columns: 1fr; }
+  .quick-grid { grid-template-columns: repeat(3, 1fr); }
+  .io-strip { grid-template-columns: 1fr; }
 }
 </style>

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const CookieName = "tarkimanos_session"
+const CookieName = "taros_session"
 
 type Session struct {
 	Username  string

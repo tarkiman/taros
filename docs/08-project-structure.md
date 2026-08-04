@@ -6,7 +6,7 @@ tanggung jawab sesuai komponen arsitektur di [02-architecture.md](02-architectur
 ```
 tarkiman-os/
 ├── cmd/
-│   └── tarkimanos/
+│   └── taros/
 │       └── main.go              # entrypoint: load config, wire komponen, start server
 │
 ├── internal/
@@ -122,9 +122,9 @@ tarkiman-os/
 │
 ├── deploy/
 │   ├── systemd/
-│   │   └── tarkimanos.service                   # unit file systemd
+│   │   └── taros.service                   # unit file systemd
 │   ├── polkit/
-│   │   └── 10-tarkimanos-systemd.rules            # rule polkit untuk kontrol unit tanpa root
+│   │   └── 10-taros-systemd.rules            # rule polkit untuk kontrol unit tanpa root
 │   └── config.example.yaml
 │
 ├── docs/                                       # dokumen ini

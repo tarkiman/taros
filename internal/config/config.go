@@ -1,4 +1,4 @@
-// Package config loads TarkimanOS's YAML configuration file.
+// Package config loads TarOS's YAML configuration file.
 //
 // Only the sections implemented so far are parsed. Later fases (file
 // explorer, terminal, ...) will extend this struct as those features land
@@ -28,7 +28,7 @@ type ServerConfig struct {
 
 type AuthConfig struct {
 	// CredentialsFile holds the bcrypt-hashed admin username/password,
-	// managed separately from this config file (see `tarkimanos setup`).
+	// managed separately from this config file (see `taros setup`).
 	CredentialsFile string `yaml:"credentialsFile"`
 	// SessionIdleTimeoutMin is how long an idle session stays valid.
 	SessionIdleTimeoutMin int `yaml:"sessionIdleTimeoutMin"`
@@ -113,7 +113,7 @@ func Default() Config {
 			WatchIntervalSec: 5,
 		},
 		Systemd: SystemdConfig{
-			ProtectedUnits: []string{"ssh.service", "docker.service", "tarkimanos.service"},
+			ProtectedUnits: []string{"ssh.service", "docker.service", "taros.service"},
 		},
 		FileExplorer: FileExplorerConfig{
 			RootDir: "/",

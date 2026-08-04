@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Credentials is the single admin account TarkimanOS ships with (see
+// Credentials is the single admin account TarOS ships with (see
 // docs/07-security.md §7.1). It is stored separately from config.yaml so
 // the file can carry stricter permissions (0600).
 type Credentials struct {

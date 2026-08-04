@@ -17,7 +17,7 @@ mengacu ke perangkat ini sebagai baseline, bukan ke Raspberry Pi 5 yang lebih le
 Sebelumnya STB ini menjalankan **CasaOS** untuk kebutuhan monitoring & manajemen Docker.
 Masalahnya, CasaOS sendiri (dashboard + gateway + app management stack-nya) memakan RAM yang
 lumayan besar di perangkat 2GB — cukup signifikan untuk bersaing dengan container lain yang
-memang jadi tujuan utama STB ini dijalankan. TarkimanOS dibuat spesifik untuk **jauh lebih
+memang jadi tujuan utama STB ini dijalankan. TarOS dibuat spesifik untuk **jauh lebih
 hemat RAM daripada CasaOS**, dengan cara mengambil subset fitur yang benar-benar dipakai
 sehari-hari (monitoring resource, Docker, service, file explorer + editor, terminal) dan
 membuang bagian yang tidak dibutuhkan (app store/marketplace, multi-service gateway,
@@ -32,7 +32,7 @@ ini khas *dirty-page write-back* yang menumpuk tak terkendali (biasa dipicu apli
 buffer seluruh file di memori dan/atau menulis tanpa throttle) — parah di storage lambat
 seperti eMMC/microSD yang justru dipakai STB. Ini alasan kenapa "Keandalan Operasi File
 Besar/Banyak" di [04-features.md](04-features.md) jadi bagian desain inti file explorer
-TarkimanOS, bukan detail implementasi biasa — streaming I/O, throttle, dan job queue di sana
+TarOS, bukan detail implementasi biasa — streaming I/O, throttle, dan job queue di sana
 secara langsung menutup celah yang bikin CasaOS crash.
 
 Ini juga alasan kenapa **"lebih ringan & lebih stabil dari CasaOS" jadi tolok ukur konkret**, bukan cuma
@@ -63,7 +63,7 @@ Supaya scope tidak melebar dan tetap fokus ke "ringan + fitur inti", hal-hal ber
   dengan satu klik dari katalog) — ini justru salah satu bagian CasaOS yang ikut menyumbang
   beban resource-nya tapi tidak masuk kebutuhan inti di sini; instalasi container tetap lewat
   cara manual (docker CLI via web terminal, atau `docker-compose` yang dijalankan sendiri),
-  TarkimanOS hanya **memonitor & mengelola** yang sudah berjalan, bukan menjadi platform
+  TarOS hanya **memonitor & mengelola** yang sudah berjalan, bukan menjadi platform
   distribusi aplikasi.
 
 (Web-based terminal **termasuk dalam scope** — lihat [04-features.md](04-features.md) §4.5.)
@@ -103,8 +103,8 @@ Konsekuensi penting: **RPi 5 16GB tidak merepresentasikan batasan resource STB 2
 yang "terasa ringan" saat dites di RPi 5 belum tentu aman di STB. Supaya batasan STB tetap
 jadi acuan nyata selama development (bukan baru ketahuan pas deploy ke STB fisik), disarankan:
 
-- Jalankan TarkimanOS di RPi 5 dengan **batas memory disimulasikan** mendekati kondisi STB, misal
-  lewat cgroup: `systemd-run --scope -p MemoryMax=1800M --uid=tarkimanos /usr/local/bin/tarkimanos ...`
+- Jalankan TarOS di RPi 5 dengan **batas memory disimulasikan** mendekati kondisi STB, misal
+  lewat cgroup: `systemd-run --scope -p MemoryMax=1800M --uid=taros /usr/local/bin/taros ...`
   (2GB dikurangi alokasi kasar untuk OS + Docker container lain di STB), supaya kalau ada
   memory leak/lonjakan usage, langsung ketahuan (proses ter-OOM-kill) sebelum sempat dites
   di perangkat fisik.

@@ -64,7 +64,7 @@ func looksBinary(data []byte) bool {
 // permission bits. Ownership is preserved best-effort: a non-root process
 // can only chown files it already owns to begin with, so this quietly
 // no-ops rather than failing the save when it can't — see
-// docs/07-security.md for why TarkimanOS runs unprivileged.
+// docs/07-security.md for why TarOS runs unprivileged.
 //
 // If expectedModTime is non-zero and doesn't match the file's current
 // mtime, returns ErrConflict without writing anything — someone else

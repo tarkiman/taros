@@ -35,7 +35,12 @@ async function handleSubmit() {
 
 <template>
   <main class="auth-page">
-    <NCard class="auth-card" title="TarkimanOS">
+    <div class="app-backdrop">
+      <div class="app-blob a"></div>
+      <div class="app-blob b"></div>
+      <div class="app-blob c"></div>
+    </div>
+    <NCard class="auth-card" title="TarOS">
       <NForm @submit.prevent="handleSubmit">
         <NAlert v-if="error" type="error" :show-icon="false" style="margin-bottom: 16px">
           {{ error }}
@@ -64,10 +69,11 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
 }
 
 .auth-card {
+  position: relative;
+  z-index: 1;
   width: min(360px, 90vw);
 }
 </style>

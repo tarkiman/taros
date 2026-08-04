@@ -1,5 +1,5 @@
 /dist/
-/tarkimanos
+/taros
 *.test
 
 # Local dev artifacts — never commit real credentials/config

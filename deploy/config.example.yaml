@@ -1,4 +1,4 @@
-# Contoh config.yaml untuk TarkimanOS — semua section fase inti (0-4)
+# Contoh config.yaml untuk TarOS — semua section fase inti (0-4)
 # sudah tercakup di sini. Section lain (mis. thresholds gauge per-metric —
 # lihat docs/09-deployment.md §9.6) akan ditambahkan seiring fase
 # implementasinya selesai.
@@ -7,7 +7,7 @@ server:
   listen: "0.0.0.0:8090"
 
 auth:
-  credentialsFile: "/etc/tarkimanos/credentials.yaml"
+  credentialsFile: "/etc/taros/credentials.yaml"
   sessionIdleTimeoutMin: 1440
   loginRateLimitAttempts: 5
   loginRateLimitWindowSec: 300
@@ -26,7 +26,7 @@ systemd:
   protectedUnits:
     - "ssh.service"
     - "docker.service"
-    - "tarkimanos.service"
+    - "taros.service"
 
 fileExplorer:
   rootDir: "/"
@@ -50,6 +50,6 @@ terminal:
   # docs/04-features.md §4.5 & docs/07-security.md §7.6 sebelum
   # mengaktifkan, terutama soal sudo di dalam sesi terminal.
   enabled: false
-  shell: "/bin/bash"          # eksplisit, TIDAK mengikuti shell akun tarkimanos di /etc/passwd
+  shell: "/bin/bash"          # eksplisit, TIDAK mengikuti shell akun taros di /etc/passwd
   idleTimeoutMin: 15
   maxConcurrentSessions: 1

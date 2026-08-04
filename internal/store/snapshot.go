@@ -2,7 +2,7 @@ package store
 
 import "time"
 
-// Snapshot is the latest reading of every metric TarkimanOS collects. It is
+// Snapshot is the latest reading of every metric TarOS collects. It is
 // serialized as-is for both the initial dashboard render and each SSE tick
 // (see internal/web/sse.go) — see docs/06-api-ui-ux.md §6.1.
 type Snapshot struct {

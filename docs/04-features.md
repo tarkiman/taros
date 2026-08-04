@@ -39,7 +39,7 @@
   mode "advanced" jika perlu.
 - **Deteksi hot-plug**: saat halaman/dashboard dibuka, daftar mount di-refresh (bukan cache
   lama) — jadi kalau user colok USB drive baru lalu mount manual, storage tsb otomatis muncul
-  di listing berikutnya tanpa perlu restart service. Tidak ada auto-mount otomatis oleh TarkimanOS
+  di listing berikutnya tanpa perlu restart service. Tidak ada auto-mount otomatis oleh TarOS
   sendiri (di luar scope — mounting tetap tanggung jawab OS/user).
 - Device block yang **belum ter-mount** (mis. USB drive tercolok tapi belum di-mount) opsional
   ditampilkan di mode "advanced" (dari `/proc/partitions` / `/sys/block/*`) sebagai info saja
@@ -83,7 +83,7 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
 - Per container: nama, image, status, uptime, port mapping, dan **live stats**:
   - CPU% (dihitung dari delta `cpu_stats`/`precpu_stats` dalam **satu** panggilan
     `stats?stream=false` — terkonfirmasi Docker sudah mengembalikan `precpu_stats` yang valid
-    dari sampel internalnya sendiri, jadi TarkimanOS tidak perlu polling dua kali sendiri
+    dari sampel internalnya sendiri, jadi TarOS tidak perlu polling dua kali sendiri
     seperti collector `/proc` host di [Fase 1](10-roadmap.md)).
   - Memory usage vs limit (+ persentase) — **catatan implementasi**: di sebagian host
     cgroup v2, Docker mengembalikan `memory_stats.usage`/`.limit` kosong (0) — dikonfirmasi
@@ -162,7 +162,7 @@ kalau memang dibutuhkan (lihat "Non-Tujuan" di bawah):
 mengedit `daemon.json` (log driver, insecure registries, dst), kelola registry/credential
 login, `docker-compose`/stack deployment, pull/build image baru dari UI, buat network dengan
 driver/opsi custom. Semua itu tetap bisa dilakukan manual lewat **file explorer** (edit
-`daemon.json`) atau **web terminal** (§4.5 di bawah) — bukan lewat UI Docker TarkimanOS.
+`daemon.json`) atau **web terminal** (§4.5 di bawah) — bukan lewat UI Docker TarOS.
 
 ### Graceful Degradation
 
@@ -180,7 +180,7 @@ bukan error 500.
   filter di sisi server terhadap hasil `list-units`, bukan query systemd terpisah.
 - Aksi: **start / stop / restart / reload**, dengan konfirmasi lebih tegas (teks peringatan
   eksplisit) untuk unit "terproteksi" yang bisa dikonfigurasi lewat `systemd.protectedUnits`
-  di `config.yaml` (default: `ssh.service`, `docker.service`, `tarkimanos.service` — dicek
+  di `config.yaml` (default: `ssh.service`, `docker.service`, `taros.service` — dicek
   langsung terhadap nama unit sebenarnya di sistem Debian/Raspberry Pi OS, bukan `sshd.service`
   seperti asumsi awal sebelum divalidasi).
 - Tampilkan 50 baris terakhir log unit (via `journalctl -u <unit> -n 50 --no-pager`,
@@ -196,7 +196,7 @@ bukan error 500.
   seperti Docker container stats (lihat [05-data-storage.md](05-data-storage.md)).
 - **Aksi (start/stop/restart/reload) butuh privilege elevated** — dikonfirmasi langsung:
   tanpa setup tambahan, `systemctl restart <unit>` yang dijalankan oleh user service
-  `tarkimanos` (non-root) gagal dengan "Interactive authentication required." Implementasi
+  `taros` (non-root) gagal dengan "Interactive authentication required." Implementasi
   memanggil `sudo -n systemctl <aksi> <unit>` (`-n`/non-interaktif supaya gagal cepat &
   jelas, bukan menggantung menunggu password yang tidak akan pernah datang) — ini **memakai
   privilege opt-in yang sama** yang sudah didokumentasikan untuk web terminal
@@ -412,7 +412,7 @@ keandalan inti (baca/edit/simpan tetap aman tanpa fitur-fitur ini):
 - Panel bantuan keyboard shortcut.
 - Owner file dipertahankan **best-effort** saat save (`chown`) — proses non-root secara
   inheren tidak selalu bisa mengubah kepemilikan file ke user lain, jadi ini bisa diam-diam
-  gagal (tidak dianggap error) untuk file yang dimiliki user selain `tarkimanos` — konsekuensi
+  gagal (tidak dianggap error) untuk file yang dimiliki user selain `taros` — konsekuensi
   langsung dari prinsip least-privilege di [07-security.md](07-security.md), bukan bug yang
   bisa "diperbaiki" tanpa menaikkan privilege proses.
 
@@ -420,11 +420,11 @@ keandalan inti (baca/edit/simpan tetap aman tanpa fitur-fitur ini):
 
 - Halaman `/terminal` menampilkan emulator terminal penuh-layar (xterm.js) yang terhubung
   ke shell sungguhan di perangkat via WebSocket + PTY.
-- **Privilege**: shell berjalan sebagai user service `tarkimanos` (non-root) — **sama persis**
-  dengan privilege proses TarkimanOS sendiri, tidak ada mekanisme elevasi privilege dari dalam
-  aplikasi itu sendiri (TarkimanOS tidak pernah memanggil `sudo`/`su` untuk user). **Sudo tetap
+- **Privilege**: shell berjalan sebagai user service `taros` (non-root) — **sama persis**
+  dengan privilege proses TarOS sendiri, tidak ada mekanisme elevasi privilege dari dalam
+  aplikasi itu sendiri (TarOS tidak pernah memanggil `sudo`/`su` untuk user). **Sudo tetap
   bisa dipakai** di dalam sesi terminal ini — persis seperti terminal biasa — selama user
-  `tarkimanos` memang diberi akses sudo di level OS (opsional, disiapkan saat instalasi, lihat
+  `taros` memang diberi akses sudo di level OS (opsional, disiapkan saat instalasi, lihat
   [09-deployment.md](09-deployment.md) §9.2). Detail & implikasi keamanan kedua mode sudo ada
   di [07-security.md](07-security.md) §7.6.
 
@@ -433,15 +433,15 @@ sadar oleh user, lihat [09-deployment.md](09-deployment.md)):
 
 | Mode | Perilaku | Kapan cocok |
 |---|---|---|
-| **Sudo dengan password** (direkomendasikan kalau sudo diaktifkan) | User `tarkimanos` diberi **password sistem sendiri** (terpisah dari password login dashboard); menjalankan `sudo <perintah>` di terminal akan minta password itu, persis seperti terminal biasa — termasuk sudo timestamp caching standar (~15 menit tidak perlu re-entry) | Kasus umum — tetap ada "gesekan" sengaja sebelum eksekusi command root, mengurangi risiko kalau sesi dashboard ditinggal terbuka |
+| **Sudo dengan password** (direkomendasikan kalau sudo diaktifkan) | User `taros` diberi **password sistem sendiri** (terpisah dari password login dashboard); menjalankan `sudo <perintah>` di terminal akan minta password itu, persis seperti terminal biasa — termasuk sudo timestamp caching standar (~15 menit tidak perlu re-entry) | Kasus umum — tetap ada "gesekan" sengaja sebelum eksekusi command root, mengurangi risiko kalau sesi dashboard ditinggal terbuka |
 | **Sudo tanpa password (NOPASSWD)** | `sudo <perintah>` langsung jalan tanpa prompt apa pun | Hanya untuk yang benar-benar paham konsekuensinya: kompromi login dashboard = akses root instan tanpa hambatan tambahan |
 
-Kedua mode dikonfigurasi lewat `/etc/sudoers.d/tarkimanos` (dibuat manual/lewat installer,
-bukan oleh proses TarkimanOS saat runtime) — lihat [09-deployment.md](09-deployment.md) §9.2
+Kedua mode dikonfigurasi lewat `/etc/sudoers.d/taros` (dibuat manual/lewat installer,
+bukan oleh proses TarOS saat runtime) — lihat [09-deployment.md](09-deployment.md) §9.2
 untuk langkah setup & [07-security.md](07-security.md) §7.6 untuk pembahasan risikonya.
 - Shell ditentukan **eksplisit** dari `terminal.shell` di `config.yaml` (default `/bin/bash`) —
-  **tidak** bergantung pada shell akun `tarkimanos` di `/etc/passwd`. Ini penting: akun sistem
-  `tarkimanos` dibuat dengan shell `nologin` demi keamanan ([09-deployment.md](09-deployment.md)
+  **tidak** bergantung pada shell akun `taros` di `/etc/passwd`. Ini penting: akun sistem
+  `taros` dibuat dengan shell `nologin` demi keamanan ([09-deployment.md](09-deployment.md)
   §9.2), jadi kalau konfigurasi ini justru fallback ke shell akun, sesi terminal akan langsung
   ter-exit begitu dibuka (nologin cuma cetak pesan lalu keluar) — dengan `terminal.shell`
   eksplisit, masalah ini tidak muncul sama sekali.
@@ -488,4 +488,4 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
 - Konfigurasi root direktori file explorer.
 - Konfigurasi daftar unit systemd "terproteksi" (butuh extra-confirm sebelum stop/restart).
 - Konfigurasi terminal: enable/disable, shell default, idle timeout, max concurrent session.
-- Lihat versi aplikasi, uptime service TarkimanOS sendiri.
+- Lihat versi aplikasi, uptime service TarOS sendiri.

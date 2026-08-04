@@ -23,7 +23,7 @@ Single-node, single-binary, monolith modular. Tidak ada proses terpisah untuk
                         └───────────────┬───────────────────────────┘
                                         │ HTTP/HTTPS (LAN)
                         ┌───────────────▼───────────────────────────┐
-                        │            TarkimanOS (1 process Go)            │
+                        │            TarOS (1 process Go)            │
                         │                                             │
                         │  ┌───────────┐  ┌─────────────────────┐   │
                         │  │  web/      │  │  auth/               │   │
@@ -49,13 +49,13 @@ Single-node, single-binary, monolith modular. Tidak ada proses terpisah untuk
                         │  └──────────────────────────────────────┘ │
                         │  ┌──────────────────────────────────────┐ │
                         │  │  terminal/ (spawn shell + PTY, sebagai │ │
-                        │  │  user 'tarkimanos' — bukan root)             │ │
+                        │  │  user 'taros' — bukan root)             │ │
                         │  └──────────────────────────────────────┘ │
                         └────────┬────────────────┬──────────────────┘
                                  │                 │
                        /proc, /sys        /var/run/docker.sock
                                           org.freedesktop.systemd1 (D-Bus)
-                                          /bin/sh atau $SHELL (PTY, uid=tarkimanos)
+                                          /bin/sh atau $SHELL (PTY, uid=taros)
 ```
 
 ## Komponen Utama
@@ -66,7 +66,7 @@ Single-node, single-binary, monolith modular. Tidak ada proses terpisah untuk
 | `docker/` | Klien minimal ke Docker Engine API via Unix socket — list container + stats |
 | `systemd/` | Klien D-Bus ke systemd — list unit, status, start/stop/restart |
 | `fileexplorer/` | Operasi filesystem: list, create, rename, move/copy, delete, read/write file |
-| `terminal/` | Spawn shell dalam PTY sebagai user `tarkimanos`, jembatani I/O ke WebSocket (lihat [07](07-security.md) §7.6) |
+| `terminal/` | Spawn shell dalam PTY sebagai user `taros`, jembatani I/O ke WebSocket (lihat [07](07-security.md) §7.6) |
 | `store/` | Ring buffer in-memory untuk histori metrics jangka pendek (lihat [05](05-data-storage.md)) |
 | `web/` | HTTP handler, template rendering (SSR), SSE endpoint, WebSocket endpoint, static asset (embed) |
 | `auth/` | Login, session cookie, CSRF, rate limiting percobaan login |
@@ -115,8 +115,8 @@ menggantikan SSE untuk metrics (lihat rasionalnya juga di [03-tech-stack.md](03-
   [04-features.md](04-features.md) "Keandalan Operasi File Besar/Banyak".
 - **Terminal mewarisi identitas proses, tidak lebih — aplikasi sendiri tidak mengelevasi apa pun.**
   Shell yang di-spawn `terminal/` berjalan dengan uid/gid **yang sama persis** dengan proses
-  TarkimanOS (user `tarkimanos`); kode TarkimanOS sendiri tidak pernah memanggil `sudo`/`su`/setuid.
+  TarOS (user `taros`); kode TarOS sendiri tidak pernah memanggil `sudo`/`su`/setuid.
   User **boleh** menjalankan `sudo` sendiri di dalam sesi shell interaktif itu — persis seperti
   terminal biasa — tapi itu murni karena sudoers rule OS yang disiapkan terpisah saat instalasi
   (opsional, lihat [09-deployment.md](09-deployment.md) §9.2), bukan sesuatu yang dilakukan
-  TarkimanOS atas nama user. Trade-off keamanannya dibahas di [07-security.md](07-security.md) §7.6.
+  TarOS atas nama user. Trade-off keamanannya dibahas di [07-security.md](07-security.md) §7.6.

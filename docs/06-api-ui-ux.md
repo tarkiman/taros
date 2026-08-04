@@ -98,7 +98,7 @@ Endpoint dikelompokkan:
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ [Logo] TarkimanOS     Dashboard Docker Service Files Terminal   [⚙][🌙][User▾] │
+│ [Logo] TarOS     Dashboard Docker Service Files Terminal   [⚙][🌙][User▾] │
 ├────────────────────────────────────────────────────────────────────┤
 │                                                                        │
 │   ╭───────╮   ╭───────╮   ╭───────╮   ╭───────╮                    │

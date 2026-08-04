@@ -1,5 +1,5 @@
-// Command tarkimanos is the TarkimanOS service entrypoint. Run without
-// arguments to start the web server, or `tarkimanos setup` once to create
+// Command taros is the TarOS service entrypoint. Run without
+// arguments to start the web server, or `taros setup` once to create
 // the admin credentials — see docs/09-deployment.md §9.2.
 package main
 
@@ -37,7 +37,7 @@ func main() {
 }
 
 func runServer(args []string) {
-	fs := flag.NewFlagSet("tarkimanos", flag.ExitOnError)
+	fs := flag.NewFlagSet("taros", flag.ExitOnError)
 	configPath := fs.String("config", "./config.yaml", "path to config.yaml")
 	_ = fs.Parse(args)
 
@@ -49,7 +49,7 @@ func runServer(args []string) {
 
 	creds, err := auth.LoadCredentials(cfg.Auth.CredentialsFile)
 	if err != nil {
-		slog.Error("load credentials — run `tarkimanos setup` first", "err", err)
+		slog.Error("load credentials — run `taros setup` first", "err", err)
 		os.Exit(1)
 	}
 
@@ -135,7 +135,7 @@ func runServer(args []string) {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	slog.Info("tarkimanos starting", "listen", cfg.Server.Listen)
+	slog.Info("taros starting", "listen", cfg.Server.Listen)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)
@@ -143,7 +143,7 @@ func runServer(args []string) {
 }
 
 func runSetup(args []string) {
-	fs := flag.NewFlagSet("tarkimanos setup", flag.ExitOnError)
+	fs := flag.NewFlagSet("taros setup", flag.ExitOnError)
 	configPath := fs.String("config", "./config.yaml", "path to config.yaml")
 	_ = fs.Parse(args)
 
