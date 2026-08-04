@@ -2,9 +2,9 @@
 import { computed } from 'vue'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme } from 'naive-ui'
 import { darkThemeOverrides, lightThemeOverrides } from './theme'
-import { usePrefersDark } from './composables/usePrefersDark'
+import { useTheme } from './composables/useTheme'
 
-const prefersDark = usePrefersDark()
+const prefersDark = useTheme()
 const theme = computed(() => (prefersDark.value ? darkTheme : null))
 const themeOverrides = computed(() => (prefersDark.value ? darkThemeOverrides : lightThemeOverrides))
 </script>

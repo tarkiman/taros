@@ -6,9 +6,9 @@ import '@xterm/xterm/css/xterm.css'
 import { NAlert, NButton, NSpin } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import { terminalApi } from '../api/terminal'
-import { usePrefersDark } from '../composables/usePrefersDark'
+import { useTheme } from '../composables/useTheme'
 
-const prefersDark = usePrefersDark()
+const prefersDark = useTheme()
 
 type Status = 'checking' | 'disabled' | 'connecting' | 'connected' | 'closed' | 'error'
 const status = ref<Status>('checking')

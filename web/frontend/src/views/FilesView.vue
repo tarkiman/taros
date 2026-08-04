@@ -236,6 +236,7 @@ const columns: DataTableColumns<Entry> = [
   {
     title: 'Nama',
     key: 'name',
+    minWidth: 180,
     ellipsis: { tooltip: true },
     render: (row) => {
       const icon = h(NIcon, { component: row.isDir ? Folder : FileIcon, size: 16, style: 'margin-right: 6px; vertical-align: -3px' })
@@ -268,20 +269,35 @@ const columns: DataTableColumns<Entry> = [
     title: 'Aksi',
     key: 'actions',
     width: 190,
-    fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 'small' }, () => [
         row.isDir
           ? null
-          : h(NButton, { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)) }, { icon: () => h(NIcon, { component: Download }) }),
+          : h(
+              NButton,
+              { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)), title: 'Unduh', 'aria-label': `Unduh ${row.name}` },
+              { icon: () => h(NIcon, { component: Download }) },
+            ),
         row.isDir
           ? h(NButton, { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)) }, () => 'Zip')
           : null,
-        h(NButton, { size: 'tiny', onClick: () => renameEntry(row) }, { icon: () => h(NIcon, { component: Pencil }) }),
+        h(
+          NButton,
+          { size: 'tiny', onClick: () => renameEntry(row), title: 'Ganti nama', 'aria-label': `Ganti nama ${row.name}` },
+          { icon: () => h(NIcon, { component: Pencil }) },
+        ),
         h(
           NPopconfirm,
           { onPositiveClick: () => removeEntry(row) },
-          { trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, { icon: () => h(NIcon, { component: Trash2 }) }), default: () => `Hapus "${row.name}"?` },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                { size: 'tiny', type: 'error', ghost: true, title: 'Hapus', 'aria-label': `Hapus ${row.name}` },
+                { icon: () => h(NIcon, { component: Trash2 }) },
+              ),
+            default: () => `Hapus "${row.name}"?`,
+          },
         ),
       ]),
   },

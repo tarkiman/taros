@@ -9,7 +9,17 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TarkimanOS</title>
-    <script type="module" crossorigin src="/assets/index-C1VM_UG_.js"></script>
+    <script>
+      // Resolves the theme synchronously before first paint, so there's no
+      // flash of the wrong theme while the app JS (useTheme.ts) loads —
+      // must stay logically identical to the resolution logic there.
+      (function () {
+        var m = localStorage.getItem('tk-theme-mode');
+        var dark = m === 'dark' || (m !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-BgfuwNX6.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/echarts-_GabNuqF.js">
     <link rel="modulepreload" crossorigin href="/assets/auth-CKvW4zla.js">
     <link rel="modulepreload" crossorigin href="/assets/misc-DDs3MKLt.js">
@@ -24,13 +34,12 @@
     <link rel="modulepreload" crossorigin href="/assets/context-DHOg2Ck6.js">
     <link rel="modulepreload" crossorigin href="/assets/light-Ef3rSKQZ.js">
     <link rel="modulepreload" crossorigin href="/assets/_common-DnEpalBx.js">
-    <link rel="modulepreload" crossorigin href="/assets/light-D3KYNMdO.js">
+    <link rel="modulepreload" crossorigin href="/assets/useTheme-CT1V7Wfn.js">
     <link rel="modulepreload" crossorigin href="/assets/light-7AQuyFOf.js">
     <link rel="modulepreload" crossorigin href="/assets/light-B3_5dsCs.js">
     <link rel="modulepreload" crossorigin href="/assets/light-DHP9au91.js">
     <link rel="modulepreload" crossorigin href="/assets/light-DkB7KYbe.js">
-    <link rel="modulepreload" crossorigin href="/assets/usePrefersDark-C4I-mVUQ.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-CIcRfT8w.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-BERMjVzg.css">
   </head>
   <body>
     <div id="app"></div>

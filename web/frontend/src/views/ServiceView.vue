@@ -96,7 +96,7 @@ const columns: DataTableColumns<Unit> = [
         ? h(NSpace, { size: 'small', align: 'center', wrap: false }, () => [row.name, h(NTag, { size: 'small', type: 'warning' }, () => 'terproteksi')])
         : row.name,
   },
-  { title: 'Deskripsi', key: 'description', ellipsis: { tooltip: true } },
+  { title: 'Deskripsi', key: 'description', minWidth: 200, ellipsis: { tooltip: true } },
   {
     title: 'Status',
     key: 'active',
@@ -108,7 +108,6 @@ const columns: DataTableColumns<Unit> = [
     title: 'Aksi',
     key: 'actions',
     width: 260,
-    fixed: 'right',
     render: (row) => {
       const confirmMsg = row.protected
         ? `"${row.name}" adalah unit terproteksi — yakin ingin melanjutkan? Ini bisa mengganggu layanan inti.`
