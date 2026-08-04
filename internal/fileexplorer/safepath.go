@@ -46,6 +46,28 @@ func NewJail(root string, blocklist []string) (*Jail, error) {
 	return &Jail{Root: resolvedRoot, Blocklist: cleanedBlocklist}, nil
 }
 
+// CheckWritable does a best-effort write+remove probe in Root, returning a
+// human-readable problem description if the running process can't write
+// there (nil if it can). Meant for a one-time startup warning, not a
+// blocking error — read-only deployments are a legitimate choice, and
+// silently discovering this only when a user actually tries to
+// upload/paste/rename/delete is a bad first experience. See
+// docs/09-deployment.md §9.2 "Akses baca/tulis untuk File Explorer" — this
+// exact gap (service user has no write access to the configured root) was
+// found via real use, not anticipated in advance.
+func (j *Jail) CheckWritable() error {
+	probe := filepath.Join(j.Root, ".tarkimanos-write-check")
+	f, err := os.Create(probe)
+	if err != nil {
+		return fmt.Errorf("root %q tidak bisa ditulis oleh user servis ini: %w", j.Root, err)
+	}
+	f.Close()
+	if err := os.Remove(probe); err != nil {
+		return fmt.Errorf("bisa membuat file di %q tapi gagal menghapusnya lagi: %w", j.Root, err)
+	}
+	return nil
+}
+
 // Resolve validates a client-supplied absolute path and returns the real
 // (symlink-resolved) filesystem path, or an error if it's outside Root,
 // blocklisted, or escapes Root via a symlink anywhere in its chain. The
