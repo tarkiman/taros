@@ -24,17 +24,17 @@ type rawContainer struct {
 
 // Container is one row in the Containers tab — see docs/04-features.md §4.2.
 type Container struct {
-	ID      string
-	Name    string
-	Image   string
-	State   string // running, exited, paused, ...
-	Status  string // human string, e.g. "Up 3 hours"
-	Created time.Time
-	Ports   string // pre-formatted "8080->80/tcp, ..." for simplicity in the template
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Image   string    `json:"image"`
+	State   string    `json:"state"`  // running, exited, paused, ...
+	Status  string    `json:"status"` // human string, e.g. "Up 3 hours"
+	Created time.Time `json:"created"`
+	Ports   string    `json:"ports"` // pre-formatted "8080->80/tcp, ..." for simplicity in the template
 
 	// Populated only for running containers — see ListWithStats.
-	HasStats bool
-	Stats    ContainerStats
+	HasStats bool           `json:"hasStats"`
+	Stats    ContainerStats `json:"stats"`
 }
 
 func (c *Client) ListContainers(ctx context.Context, all bool) ([]Container, error) {

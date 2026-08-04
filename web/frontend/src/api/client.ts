@@ -11,9 +11,14 @@ export function setCsrfToken(token: string) {
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  // Parsed JSON error body, when the server sent one (all our handlers do
+  // via writeJSONError/writeJSON) — lets callers branch on structured
+  // fields (e.g. docker's {error, enabled}) instead of parsing .message.
+  body: unknown
+  constructor(status: number, message: string, body?: unknown) {
     super(message)
     this.status = status
+    this.body = body
   }
 }
 
@@ -34,6 +39,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(401, 'unauthorized')
   }
   if (!res.ok) {
+    const contentType = res.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) {
+      const body = await res.json().catch(() => undefined)
+      const message = body && typeof body === 'object' && 'error' in body ? String((body as { error: unknown }).error) : `${method} ${path} failed: ${res.status}`
+      throw new ApiError(res.status, message, body)
+    }
     const text = await res.text().catch(() => '')
     throw new ApiError(res.status, text || `${method} ${path} failed: ${res.status}`)
   }

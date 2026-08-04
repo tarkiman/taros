@@ -6,16 +6,16 @@ import (
 )
 
 type Info struct {
-	ServerVersion     string
-	APIVersion        string
-	OperatingSystem   string
-	KernelVersion     string
-	StorageDriver     string
-	DockerRootDir     string
-	ContainersRunning int
-	ContainersPaused  int
-	ContainersStopped int
-	Images            int
+	ServerVersion     string `json:"serverVersion"`
+	APIVersion        string `json:"apiVersion"`
+	OperatingSystem   string `json:"operatingSystem"`
+	KernelVersion     string `json:"kernelVersion"`
+	StorageDriver     string `json:"storageDriver"`
+	DockerRootDir     string `json:"dockerRootDir"`
+	ContainersRunning int    `json:"containersRunning"`
+	ContainersPaused  int    `json:"containersPaused"`
+	ContainersStopped int    `json:"containersStopped"`
+	Images            int    `json:"images"`
 }
 
 func (c *Client) Info(ctx context.Context) (Info, error) {
@@ -47,11 +47,11 @@ func (c *Client) Info(ctx context.Context) (Info, error) {
 }
 
 type DiskUsage struct {
-	ImagesTotalBytes        int64
-	ImagesReclaimableBytes  int64
-	ContainersTotalBytes    int64
-	VolumesTotalBytes       int64
-	VolumesReclaimableBytes int64
+	ImagesTotalBytes        int64 `json:"imagesTotalBytes"`
+	ImagesReclaimableBytes  int64 `json:"imagesReclaimableBytes"`
+	ContainersTotalBytes    int64 `json:"containersTotalBytes"`
+	VolumesTotalBytes       int64 `json:"volumesTotalBytes"`
+	VolumesReclaimableBytes int64 `json:"volumesReclaimableBytes"`
 }
 
 type dfUsage struct {

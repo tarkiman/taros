@@ -210,6 +210,45 @@ sekaligus), dengan model deployment satu-binary tetap dipertahankan penuh.
   `[0.7, 0.85]` tetap di komponen, bukan dibaca dari config seperti rencana awal — lihat
   [06-api-ui-ux.md](06-api-ui-ux.md) §6.5).
 
+### B — Migrasi Docker (selesai-dev; validasi STB fisik tertunda)
+
+- Endpoint JSON baru menggantikan seluruh fragment htmx Docker: `GET /api/docker/{containers,
+  images,volumes,networks,settings}`, `POST /api/docker/containers/{id}/{action}`,
+  `POST /api/docker/{images,volumes,networks}/.../remove`, `POST /api/docker/prune/{kind}` —
+  lihat [06-api-ui-ux.md](06-api-ui-ux.md) §6.1. Semua struct publik di `internal/docker/`
+  (`Container`, `Image`, `Network`, `Volume`, `Info`, `DiskUsage`, `ContainerStats`) dapat
+  json tag camelCase eksplisit (sebelumnya tidak perlu — cuma dipakai lewat akses field Go
+  langsung di template lama).
+- Degradasi graceful dipertahankan identik: response `503 {error, enabled}` membedakan
+  "off di config" vs "on tapi unreachable", sama seperti pesan `error_panel.html` versi htmx
+  — cuma bentuknya sekarang JSON terstruktur, bukan teks pesan yang perlu di-parse.
+- `DockerView.vue`: 5 tab (Naive UI `NTabs`), masing-masing **lazy-load** — data tab baru
+  di-fetch pertama kali diaktifkan, bukan semua sekaligus di page load. Tab Containers
+  auto-refresh tiap 5 detik selama tab itu aktif (sama seperti `hx-trigger="every 5s"` versi
+  lama). Aksi (start/stop/restart/remove/prune) pakai `NPopconfirm` untuk konfirmasi
+  destruktif, error dari daemon Docker (mis. 409 "masih dipakai") ditampilkan lewat toast
+  (`useMessage()`), bukan flash-panel seperti sebelumnya.
+- Docker/Service/Files sekarang campuran nav: Docker jadi `RouterLink` di `AppShell.vue`,
+  Service/Files masih `<a href>` biasa (full page load) sampai gilirannya masing-masing.
+- **Bug nyata ditemukan & diperbaiki lewat testing browser** (bukan dari `npm run build`,
+  yang sukses tanpa keluhan): kolom tabel Containers tanpa lebar tetap membuat satu container
+  dengan 100+ published port meng-crush kolom Nama jadi selebar satu karakter (teks jadi
+  vertikal, tidak terbaca) — diperbaiki dengan lebar tetap per kolom + `ellipsis: {tooltip}`
+  untuk kolom Ports + `scroll-x` pada tabel, kolom Aksi di-pin (`fixed: 'right'`). Terpisah,
+  tab Settings sempat menampilkan panel kosong (field Info Daemon blank) alih-alih spinner
+  saat data masih di-fetch — bukan bug data (endpoint-nya benar, cuma butuh beberapa detik
+  karena `/system/df` Docker sendiri lambat dengan banyak image/container), tapi UI-nya salah
+  menampilkan "kosong" bukan "sedang memuat"; ditambahkan state loading eksplisit.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium) terhadap
+  Docker sungguhan** (bukan mock): 51 container nyata ter-render dengan benar di tab
+  Containers, ke-4 tab lain (Images/Volumes/Networks/Settings) berhasil lazy-load datanya
+  masing-masing (termasuk Settings yang butuh beberapa detik untuk `/system/df`), dan path
+  degradasi "Docker off di config" diverifikasi terpisah lewat instance kedua dengan
+  `docker.enabled: false` → response `503 {error:"...", enabled:false}` sesuai desain. Aksi
+  destruktif (start/stop/remove/prune) **tidak** diuji lewat browser otomatis terhadap
+  instance ini karena container-nya nyata/produksi milik user — hanya diverifikasi lewat
+  pembacaan kode/logika yang identik dengan versi htmx yang sudah terbukti jalan sebelumnya.
+
 **Fase 4 (Web Terminal) di-hold** atas permintaan eksplisit — dilanjutkan setelah migrasi
 UI/UX halaman-halaman lain selesai, atau lebih cepat kalau user memutuskan untuk
 memprioritaskannya lagi.

@@ -13,12 +13,12 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 |---|---|
 | `GET /login` | Halaman login (`LoginView.vue`) |
 | `GET /` | Dashboard utama (`DashboardView.vue`) |
+| `GET /docker` | Docker — tab Containers/Images/Volumes/Networks/Settings (`DockerView.vue`, tab sebagai state client, bukan lagi `?tab=` query) |
 
 ### Halaman (SSR, `GET` → HTML lengkap) — belum dimigrasi ke Vue
 
 | Route | Deskripsi |
 |---|---|
-| `GET /docker` | Halaman Docker (sub-tab Containers/Images/Volumes/Networks/Settings via `?tab=`) |
 | `GET /services` | Halaman daftar systemd unit |
 | `GET /files` | File explorer (path via query `?path=`) |
 | `GET /files/edit` | Editor teks (`?path=`) |
@@ -27,21 +27,13 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 
 ### Fragment (htmx, `GET`/`POST` → potongan HTML untuk swap)
 
+Docker tidak lagi di sini — lihat REST/JSON di bawah, dimigrasi bersamaan dengan `DockerView.vue`.
+
 | Route | Deskripsi |
 |---|---|
-| `GET /fragments/docker/containers` | Tabel container (di-refresh berkala via `hx-trigger`) |
-| `GET /fragments/docker/images` | Tabel image |
-| `GET /fragments/docker/volumes` | Tabel volume |
-| `GET /fragments/docker/networks` | Tabel network |
-| `GET /fragments/docker/settings` | Panel info daemon + disk usage + tombol cleanup |
 | `GET /fragments/services/list?q=&showAll=&failedOnly=` | Tabel systemd unit — `q` filter nama/deskripsi, `showAll=1` ikutkan socket/timer, `failedOnly=1` hanya yang failed. Sumber trigger-nya **form filter itu sendiri** (`hx-trigger="load, submit, change, every 8s"` langsung di `<form>`), bukan div terpisah — supaya auto-refresh berkala tidak diam-diam mereset filter yang sedang aktif |
 | `GET /fragments/services/{name}/logs` | 50 baris terakhir `journalctl -u {name}`, di-swap ke satu panel log bersama di bawah halaman |
 | `GET /fragments/files/list` | Listing folder (dipakai saat navigasi tanpa reload) |
-| `POST /fragments/docker/containers/{id}/{start\|stop\|restart\|remove}` | Aksi container. Implementasi Fase 2: return **seluruh tabel** ter-refresh (bukan cuma baris), lebih sederhana daripada per-row diff & tetap cukup cepat karena `internal/docker.Watcher` sudah cache di memori — lihat [05-data-storage.md](05-data-storage.md) |
-| `POST /fragments/docker/images/{id}/remove` | Hapus image |
-| `POST /fragments/docker/volumes/{name}/remove` | Hapus volume |
-| `POST /fragments/docker/networks/{id}/remove` | Hapus network |
-| `POST /fragments/docker/prune/{containers\|images\|volumes\|networks\|all}` | Aksi cleanup, return panel Settings ter-update |
 | `POST /fragments/services/{name}/{start\|stop\|restart\|reload}` | Aksi unit (butuh `sudo -n systemctl` bisa jalan — lihat [09-deployment.md](09-deployment.md) §9.2). **Catatan**: return tabel ter-refresh tanpa mempertahankan filter yang sedang aktif (beda dari auto-refresh berkala di atas) — simplifikasi yang disengaja, bukan bug |
 
 ### REST/JSON (dipakai oleh JS klien, misal chart)
@@ -51,6 +43,13 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 | `GET /api/stream/metrics` | **SSE** — push snapshot metrics (CPU/RAM/disk/temp/net) tiap tick |
 | `GET /api/metrics/history?metric=cpu` | Data histori untuk chart (dari ring buffer). Fase 1: `metric` ∈ `cpu\|mem\|diskRead\|diskWrite\|tempMax`, selalu mengembalikan seluruh isi buffer (~15 menit) — parameter `range` dicadangkan untuk nanti kalau tingkat retensi lebih panjang (lihat [05-data-storage.md](05-data-storage.md)) sudah ada untuk dipilih |
 | `GET /api/terminal/ws` | **WebSocket** — sesi PTY interaktif (stdin/stdout + resize control message) |
+| `GET /api/docker/{containers\|images\|volumes\|networks}` | List, dikonsumsi `DockerView.vue` per-tab (lazy: fetch pertama kali tab diaktifkan, bukan semua sekaligus di awal). 503 `{error, enabled}` kalau Docker off di config atau daemon tidak terjangkau — `enabled` membedakan dua kasus itu tanpa klien perlu parse teks pesan |
+| `POST /api/docker/containers/{id}/{start\|stop\|restart\|remove}` | Aksi container, return list container ter-refresh (sama seperti perilaku fragment lama, sekarang JSON) — error daemon (mis. 409 masih berjalan) diteruskan dengan status code aslinya, bukan diratakan jadi 500 |
+| `POST /api/docker/images/{id}/remove` | Hapus image, return list image ter-refresh |
+| `POST /api/docker/volumes/{name}/remove` | Hapus volume, return list volume ter-refresh |
+| `POST /api/docker/networks/{id}/remove` | Hapus network, return list network ter-refresh |
+| `GET /api/docker/settings` | `{info, diskUsage}` — info daemon + ringkasan disk usage. Bisa makan beberapa detik (`/system/df` daemon-side mahal dengan banyak image/container — perilaku Docker sendiri, bukan regresi migrasi ini), `DockerView.vue` menampilkan spinner selama itu, bukan panel kosong |
+| `POST /api/docker/prune/{containers\|images\|volumes\|networks\|all}` | Cleanup, return `{info, diskUsage}` ter-update |
 | `POST /api/files/op` | Body JSON: `{action, path, newPath?, paths?}`. `mkdir\|create\|rename\|delete` sinkron (instan/`os.Rename`). `copy\|cut` cuma menyimpan `paths` ke clipboard sesi (`auth.Session`), tidak ada I/O. `paste` **selalu** mengembalikan `{jobId}` — bahkan kalau semua entry ternyata instant-rename, satu jalur kode klien untuk semua kasus |
 | `GET /api/files/op/{jobId}/stream` | **SSE** — progress job file besar (`JobSnapshot`: persentase, `bytesPerSec`, `currentFile`) |
 | `POST /api/files/op/{jobId}/cancel` | Batalkan job yang sedang berjalan — `context.CancelFunc`, efektif dalam &lt;1 buffer I/O (~256KB) |
