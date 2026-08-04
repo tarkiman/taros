@@ -59,10 +59,16 @@ func NewServer(deps Deps) (*Server, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /login", s.handleLoginPage)
-	mux.HandleFunc("POST /api/auth/login", s.handleLoginSubmit)
+	// Vue-owned routes — see web/frontend/src/router/index.ts. Auth is
+	// enforced client-side (router guard) plus server-side on every API
+	// call; the shell itself is public HTML like any SPA's index.html.
+	mux.HandleFunc("GET /{$}", s.serveSPA)
+	mux.HandleFunc("GET /login", s.serveSPA)
+	mux.Handle("GET /assets/", spaAssets)
+
+	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("GET /api/auth/session", s.handleAuthSession)
 	mux.HandleFunc("POST /api/auth/logout", s.requireAuth(s.handleLogout))
-	mux.HandleFunc("GET /{$}", s.requireAuth(s.handleDashboard))
 
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
 	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))

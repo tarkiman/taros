@@ -17,8 +17,15 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 - `CGO_ENABLED=0` wajib karena kita menghindari dependency yang butuh CGO
   (lihat alasan pemilihan `modernc.org/sqlite` alih-alih `mattn/go-sqlite3` di
   [03-tech-stack.md](03-tech-stack.md) jika opsi persistensi diaktifkan nanti).
-- Sebelum build, jalankan `scripts/build-assets.sh` (sekali, atau saat aset frontend
-  berubah) untuk membangun `web/static/js/vendor/*` dari source CodeMirror/uPlot.
+- Sebelum `go build`, kalau ada perubahan di aset frontend yang butuh langkah build sendiri,
+  jalankan itu dulu — hasilnya di-commit ke repo, jadi langkah ini **tidak** perlu diulang
+  tiap kali build binary, hanya saat sumbernya berubah:
+  - `cd scripts/codemirror-build && npm install && npm run build` — kalau
+    `src/editor-entry.js`/dependency-nya berubah, hasil ke `web/static/js/vendor/editor.bundle.js`.
+  - `cd web/frontend && npm install && npm run build` — kalau ada perubahan di halaman Vue
+    (lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"), hasil ke
+    `web/frontend/dist/`, di-embed via `web/embed.go` (var `SPA`).
+  - htmx & uPlot **tidak** perlu langkah build — dipakai langsung sebagai file dist resmi.
 
 ## 9.2 Instalasi di Perangkat
 
@@ -105,6 +112,12 @@ explorer memang butuh akses baca/tulis luas ke filesystem sesuai konfigurasi
 
 Target ini diverifikasi manual saat MVP selesai (lihat [10-roadmap.md](10-roadmap.md)) dengan
 `systemctl status tarkimanos` (memory) dan `top`/`htop` saat idle vs saat dashboard dibuka beberapa klien.
+
+**Catatan pasca pivot ke Vue** (lihat [03-tech-stack.md](03-tech-stack.md)): target di atas
+tidak berubah, karena semuanya mengukur RSS proses `tarkimanos` di device target — Vue
+dirender di browser klien yang mengakses dashboard (laptop/HP), bukan di proses Go/di device
+target itu sendiri. Ukuran bundle JS (lihat rincian per-chunk di komit yang menambahkan
+`web/frontend/`) memengaruhi waktu-muat/RAM browser klien, bukan resource budget STB.
 
 ### Benchmark Pembanding: CasaOS
 

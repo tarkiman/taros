@@ -1,0 +1,26 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+# dist/ is intentionally NOT ignored — it's the go:embed source, see
+# docs/03-tech-stack.md and docs/09-deployment.md. Committed like
+# scripts/codemirror-build's output, not rebuilt as part of `go build`.
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -2,21 +2,28 @@
 
 ## 6.1 Desain API
 
-Sebagian besar navigasi adalah **SSR** (server render halaman penuh) + **htmx** untuk
-partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokkan:
+Navigasi sekarang campuran dua model, tergantung apakah halamannya sudah dimigrasi ke Vue
+(lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"): **SPA** (Vue, client-side
+routing) untuk halaman yang sudah dimigrasi, dan **SSR** (`html/template`) + **htmx** untuk
+partial update pada halaman yang belum. Endpoint dikelompokkan:
 
-### Halaman (SSR, `GET` → HTML lengkap)
+### Halaman (Vue SPA, `GET` → shell `index.html`, routing di client)
 
 | Route | Deskripsi |
 |---|---|
-| `GET /login` | Halaman login |
-| `GET /` | Dashboard utama |
+| `GET /login` | Halaman login (`LoginView.vue`) |
+| `GET /` | Dashboard utama (`DashboardView.vue`) |
+
+### Halaman (SSR, `GET` → HTML lengkap) — belum dimigrasi ke Vue
+
+| Route | Deskripsi |
+|---|---|
 | `GET /docker` | Halaman Docker (sub-tab Containers/Images/Volumes/Networks/Settings via `?tab=`) |
 | `GET /services` | Halaman daftar systemd unit |
 | `GET /files` | File explorer (path via query `?path=`) |
 | `GET /files/edit` | Editor teks (`?path=`) |
-| `GET /terminal` | Halaman web terminal (xterm.js full-screen) |
-| `GET /settings` | Halaman pengaturan |
+| `GET /terminal` | Halaman web terminal (xterm.js full-screen) — belum dibangun, lihat [10-roadmap.md](10-roadmap.md) |
+| `GET /settings` | Halaman pengaturan — belum dibangun |
 
 ### Fragment (htmx, `GET`/`POST` → potongan HTML untuk swap)
 
@@ -51,8 +58,9 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 | `GET /api/files/download?path=` | Download file tunggal (streaming via `http.ServeFile`) atau **folder sebagai zip** (streaming via `archive/zip`, tidak pernah membangun arsip penuh di disk/memori dulu) |
 | `GET /api/files/content?path=` | Baca isi file untuk editor → `{content, modTime}`. 413 kalau &gt;2MB, 415 kalau terdeteksi biner (byte null) |
 | `PUT /api/files/content?path=` | Body `{content, expectedModTime?}` → `{modTime}` baru. 409 kalau `expectedModTime` tidak cocok dengan mtime file saat ini (berubah di luar editor) — `expectedModTime` kosong/diabaikan berarti timpa paksa |
-| `POST /api/auth/login` | Login (set cookie session) |
-| `POST /api/auth/logout` | Hapus session |
+| `POST /api/auth/login` | Body JSON `{username, password}` → `{authenticated, username, csrfToken}`. Set cookie session. Login sekarang selalu JSON — halaman login form-post lama sudah dihapus bersamaan dengan migrasi ke Vue |
+| `GET /api/auth/session` | Hidrasi auth store Vue saat boot app (`authStore.hydrate()`) → `{authenticated}` atau `{authenticated, username, csrfToken}`. Selalu 200 — "belum login" bukan kondisi error di endpoint ini, karena endpoint ini justru satu-satunya tempat pemanggil tanpa login diharapkan |
+| `POST /api/auth/logout` | Hapus session. Tetap redirect (bukan JSON) karena masih dipanggil dua cara sekaligus selama migrasi bertahap: `<form method="post">` biasa di halaman lama, dan `fetch()` dari Vue (yang mengikuti redirect begitu saja) |
 | `POST /api/settings/password` | Ganti password |
 
 ### Konvensi
@@ -105,8 +113,8 @@ partial update (tidak full-page reload saat berinteraksi). Endpoint dikelompokka
 │   ╰───────╯   ╰───────╯   ╰───────╯   ╰───────╯                    │
 │                                                                        │
 │   ┌──────────────────────┐  ┌──────────────────────┐                │
-│   │  Tren CPU/RAM         │  │  Tren Network          │                │
-│   │  (uPlot line chart)   │  │  (uPlot line chart)    │                │
+│   │  Tren CPU             │  │  Tren Disk I/O          │                │
+│   │  (ECharts line chart) │  │  (ECharts line chart)  │                │
 │   └──────────────────────┘  └──────────────────────┘                │
 │                                                                        │
 │   ┌──────────────────────┐  ┌──────────────────────┐                │
@@ -124,22 +132,30 @@ tidak muncul sama sekali kalau `terminal.enabled: false` (lihat [04-features.md]
 ## 6.5 Gauge/Dial — Implementasi
 
 Gauge radial (dial) dipakai untuk metric "nilai saat ini terhadap ambang batas" — lihat
-tabel pemilihan jenis grafik di [04-features.md](04-features.md) §4.6. Pendekatan implementasi:
+tabel pemilihan jenis grafik di [04-features.md](04-features.md) §4.6. Diimplementasi di
+halaman yang sudah dimigrasi ke Vue (lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot
+ke Vue?") sebagai `web/frontend/src/components/charts/GaugeChart.vue`, dibangun di atas
+ECharts (`GaugeChart` dari `echarts/charts`, custom tree-shaken build lewat `echarts/core`
++ `use([...])` — bukan `import * as echarts from 'echarts'` penuh):
 
-- Satu komponen SVG kecil (`<svg>` dengan dua `<circle>`: satu track abu-abu sebagai
-  background, satu arc berwarna sebagai nilai) — `stroke-dasharray`/`stroke-dashoffset`
-  diatur ulang lewat sedikit JS vanilla setiap ada data baru dari SSE, **tidak** re-render
-  seluruh SVG dari server per tick (murah dari sisi CPU/DOM).
-- **Color-zone otomatis** mengikuti nilai: hijau (< 70%), kuning (70–90%), merah (> 90%) —
-  ambang batas ini dikonfigurasi per metric (suhu punya ambang berbeda dari CPU%, misalnya)
-  di `config.yaml` (`thresholds.cpu`, `thresholds.temp`, dst), bukan di-hardcode.
-- Ukuran & style konsisten dengan design tokens di §6.6 (warna semantik yang sama dipakai
-  ulang di badge status Docker/Service, supaya bahasa visual "hijau=aman, merah=bahaya"
-  konsisten di seluruh aplikasi, bukan cuma di gauge).
-- Animasi transisi halus (CSS `transition` pada `stroke-dashoffset`) saat nilai berubah,
-  supaya terasa "hidup" tanpa terlihat "lompat-lompat" tiap 2 detik.
-- Aksesibilitas: nilai numerik tetap ditulis sebagai teks di tengah gauge (bukan cuma visual)
-  + `aria-label` deskriptif (misal "CPU usage 34 percent, status normal").
+- `<VChart :option="...">` (dari `vue-echarts`) dengan opsi gauge minimal: tidak ada pointer/
+  jarum, cuma progress arc + label + nilai angka di tengah — visualnya setara pendekatan
+  awal (SVG `stroke-dasharray` custom), tapi lewat komponen ECharts yang sudah menangani
+  animasi transisi nilai (`valueAnimation: true`) dan resize otomatis (`autoresize`) tanpa
+  perlu ditulis manual.
+- **Color-zone otomatis** mengikuti nilai: hijau (default) di bawah ambang warn, kuning di
+  ambang warn, merah di ambang danger. Prop `thresholds` (default `[0.7, 0.85]`, fraksi dari
+  `max`) dihitung per instance komponen — **belum** dibaca dari `config.yaml` seperti rencana
+  awal (mis. `thresholds.cpu` vs `thresholds.temp` berbeda); untuk saat ini setiap pemanggil
+  gauge (CPU/RAM/Disk/Suhu di `DashboardView.vue`) memakai default yang sama. Threshold
+  per-metric via config adalah kandidat perbaikan fase berikutnya, bukan blocker Fase A.
+- Warna diambil dari token warna yang sama dengan `theme.ts`/`tokens.css` (`accent`,
+  `warning`, `danger`) — **bukan** lewat CSS custom property langsung di opsi ECharts,
+  karena canvas 2D (`fillStyle`/`strokeStyle`) tidak konsisten me-resolve `var(--x)` di semua
+  browser; komponen membaca nilai literal dari `theme.ts` berdasarkan preferensi dark/light
+  saat ini (`usePrefersDark()` composable), supaya tetap konsisten dengan tema Naive UI.
+- Aksesibilitas: nilai numerik tetap dirender sebagai teks di tengah gauge oleh ECharts
+  sendiri (`detail.formatter`), bukan cuma visual.
 
 ## 6.6 Desain Visual (Design Tokens)
 
@@ -149,9 +165,14 @@ Style guide ringkas — nilai final ditentukan saat implementasi, tapi prinsipny
   biru/teal) untuk elemen interaktif, + warna semantik (hijau=sehat/active, kuning=warning,
   merah=error/failed/critical) dipakai konsisten di badge status di semua halaman (Docker,
   Service, disk usage, suhu).
-- **Tipografi**: font sistem (`system-ui` stack) — tanpa font eksternal, mengurangi request
-  & load time, terasa native di tiap platform.
-- **Spacing & radius**: skala konsisten (4px base unit), border-radius sedang (rapi tapi
-  tidak terlalu "bulat") untuk card & tombol.
-- **Ikon**: SVG inline minimal (bukan icon-font/library besar) — hanya ikon yang dipakai
-  yang di-embed ke `web/static/`.
+- **Tipografi**: font sistem (`-apple-system, "Segoe UI", Roboto, ...` stack) untuk teks UI —
+  tanpa font eksternal, mengurangi request & load time, terasa native di tiap platform.
+  Monospace (`ui-monospace, ...`) dikhususkan untuk kode/log/editor, **tidak** dipakai lagi
+  untuk seluruh body text seperti versi htmx awal — memakai monospace di mana-mana adalah
+  alasan utama tampilan awal terasa "polos"/seperti spreadsheet, bukan dashboard.
+- **Spacing & radius**: skala konsisten (4px base unit di halaman lama; token `--space-1`
+  s.d. `--space-6` dan `--radius-sm/md/lg` di halaman Vue, lihat `web/frontend/src/style/tokens.css`),
+  border-radius sedang (rapi tapi tidak terlalu "bulat") untuk card & tombol.
+- **Ikon**: [Lucide](https://lucide.dev/) (MIT) di halaman Vue, via `@lucide/vue` (component
+  Vue asli, tree-shaken oleh Vite — cuma ikon yang benar-benar diimpor yang masuk bundle).
+  Halaman lama (belum dimigrasi) tetap tanpa ikon/emoji seperti sebelumnya.

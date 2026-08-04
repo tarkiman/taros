@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"time"
@@ -8,41 +9,48 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/auth"
 )
 
-func (s *Server) handleLoginPage(w http.ResponseWriter, r *http.Request) {
-	s.tmpl.render(w, http.StatusOK, "login.html", map[string]any{})
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
-func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
+// sessionResponse is what the Vue app hydrates its auth store from — both
+// on login and on GET /api/auth/session. CSRFToken travels here rather
+// than a readable cookie since it's only ever needed by JS that already
+// has an authenticated fetch call to attach it to.
+type sessionResponse struct {
+	Authenticated bool   `json:"authenticated"`
+	Username      string `json:"username,omitempty"`
+	CSRFToken     string `json:"csrfToken,omitempty"`
+}
+
+// handleAuthLogin is the JSON counterpart of the old form-post login —
+// the server-rendered login page is gone (see web/frontend LoginView.vue),
+// so this is the only login entry point now.
+func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 
 	if !s.deps.RateLimiter.Allow(ip) {
-		s.tmpl.render(w, http.StatusTooManyRequests, "login.html", map[string]any{
-			"Error": "Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.",
-		})
+		writeJSONError(w, http.StatusTooManyRequests, "Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.")
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		s.tmpl.render(w, http.StatusBadRequest, "login.html", map[string]any{"Error": "Form tidak valid."})
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "Permintaan tidak valid.")
 		return
 	}
-	username := r.FormValue("username")
-	password := r.FormValue("password")
 
-	if !s.deps.Creds.Verify(username, password) {
+	if !s.deps.Creds.Verify(req.Username, req.Password) {
 		s.deps.RateLimiter.RecordFailure(ip)
-		s.tmpl.render(w, http.StatusUnauthorized, "login.html", map[string]any{
-			"Error": "Username atau password salah.",
-		})
+		writeJSONError(w, http.StatusUnauthorized, "Username atau password salah.")
 		return
 	}
 	s.deps.RateLimiter.RecordSuccess(ip)
 
-	token, sess, err := s.deps.Sessions.Create(username)
+	token, sess, err := s.deps.Sessions.Create(req.Username)
 	if err != nil {
-		s.tmpl.render(w, http.StatusInternalServerError, "login.html", map[string]any{
-			"Error": "Gagal membuat sesi, coba lagi.",
-		})
+		writeJSONError(w, http.StatusInternalServerError, "Gagal membuat sesi, coba lagi.")
 		return
 	}
 
@@ -55,9 +63,32 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		Expires:  sess.ExpiresAt,
 	})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+
+	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken})
 }
 
+// handleAuthSession reports whether the request's session cookie (if any)
+// is still valid. Always 200 — "not authenticated" is an expected, normal
+// response here (the Vue router guard calls this on every fresh load,
+// including at /login before any session exists), not an error condition.
+func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie(auth.CookieName)
+	if err != nil {
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		return
+	}
+	sess := s.deps.Sessions.Validate(cookie.Value)
+	if sess == nil {
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		return
+	}
+	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken})
+}
+
+// handleLogout stays redirect-based (not JSON) because it's still reachable
+// two ways during the phased Vue migration: a plain <form method="post">
+// on every not-yet-migrated htmx page (layout.html), and a fetch() call
+// from the Vue app, which is happy to ignore a followed redirect's body.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(auth.CookieName); err == nil {
 		s.deps.Sessions.Delete(cookie.Value)
@@ -78,4 +109,10 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

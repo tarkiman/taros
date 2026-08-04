@@ -86,17 +86,37 @@ tarkiman-os/
 │       └── log.go                     # structured audit logging (slog)
 │
 ├── web/                                 # aset frontend, di-embed via embed.FS
-│   ├── templates/                       # html/template files
+│   ├── frontend/                        # Vue 3 SPA (halaman termigrasi) — lihat
+│   │   │                                # 03-tech-stack.md "Kenapa pivot ke Vue?"
+│   │   ├── src/
+│   │   │   ├── views/                   # LoginView.vue, DashboardView.vue — satu per route
+│   │   │   ├── layouts/AppShell.vue      # sidebar + topbar, dipakai halaman ber-auth
+│   │   │   ├── components/charts/        # GaugeChart.vue, LineChart.vue (wrapper ECharts)
+│   │   │   ├── composables/              # useMetricsStream.ts (SSE), usePrefersDark.ts
+│   │   │   ├── stores/auth.ts            # pinia — authenticated/username, set CSRF token
+│   │   │   ├── api/                      # client.ts (fetch wrapper), metrics.ts
+│   │   │   ├── router/index.ts           # vue-router — HANYA route yang sudah dimigrasi;
+│   │   │   │                             # link ke halaman lain masih <a href> biasa (full
+│   │   │   │                             # page load) sampai halaman itu dimigrasi juga
+│   │   │   ├── charts/register.ts        # registrasi ECharts tree-shaken (core + GaugeChart
+│   │   │   │                             # + LineChart + komponen grid/tooltip/dst saja)
+│   │   │   ├── theme.ts                  # Naive UI theme overrides, mirror tokens.css
+│   │   │   ├── style/tokens.css          # design tokens CSS custom properties
+│   │   │   └── types/metrics.ts          # mirror internal/store/snapshot.go json tags
+│   │   ├── dist/                        # HASIL BUILD (`npm run build`), di-commit, di-embed
+│   │   │                                # via web/embed.go `SPA` — device target tidak pernah
+│   │   │                                # menjalankan Vite/npm
+│   │   └── package.json / package-lock.json
+│   ├── templates/                       # html/template files — halaman yang BELUM dimigrasi
+│   │   │                                # ke Vue (lihat web/frontend/ di atas untuk yang sudah)
 │   │   ├── layout.html
-│   │   ├── dashboard.html
 │   │   ├── docker.html
 │   │   ├── services.html
 │   │   ├── files.html
 │   │   ├── editor.html                    # shell halaman; isi file di-fetch via JS, tidak
 │   │   │                                  # di-render server-side (hindari HTML-escaping
 │   │   │                                  # konten arbitrary besar langsung di template)
-│   │   ├── login.html
-│   │   ├── terminal.html                  # halaman full-screen xterm.js
+│   │   ├── terminal.html                  # [belum dibuat] halaman full-screen xterm.js
 │   │   └── fragments/                    # partial template untuk htmx swap — tanpa layout.html,
 │   │       │                              # di-parse & di-render standalone (lihat catatan di bawah)
 │   │       ├── docker_containers.html
@@ -116,7 +136,6 @@ tarkiman-os/
 │   │   │   ├── editor.css                 # layout halaman editor saja (dimuat khusus di sana)
 │   │   │   └── vendor/uPlot.min.css
 │   │   └── js/
-│   │       ├── dashboard.js               # SSE listener + chart + render tabel dashboard
 │   │       ├── files.js                    # mkdir/rename/delete/copy/cut/paste (fetch JSON),
 │   │       │                                # upload via XHR (butuh progress event, fetch tidak
 │   │       │                                # punya ini untuk request body), progress panel
@@ -124,8 +143,9 @@ tarkiman-os/
 │   │       ├── editor.js                   # glue vanilla JS di sekitar window.TkEditor: fetch
 │   │       │                                # isi file, dirty tracking, save/conflict/draft —
 │   │       │                                # file ini SENDIRI tidak di-bundle esbuild
-│   │       ├── gauge.js                    # komponen gauge/dial SVG (lihat 06-api-ui-ux.md §6.5)
-│   │       ├── terminal.js                 # inisialisasi xterm.js + koneksi WebSocket
+│   │       │                                # (gauge/dial: lihat web/frontend/src/components/
+│   │       │                                # charts/GaugeChart.vue — dashboard sudah Vue)
+│   │       ├── terminal.js                 # [belum dibuat] inisialisasi xterm.js + koneksi WebSocket
 │   │       └── vendor/                    # htmx.min.js, uPlot.iife.min.js (fetched pre-built),
 │   │                                       # editor.bundle.js (CodeMirror 6, di-build sendiri —
 │   │                                       # lihat scripts/codemirror-build/); xterm.js menyusul
@@ -164,14 +184,19 @@ tarkiman-os/
 - **Tiap domain (`collector`, `docker`, `systemd`, `fileexplorer`) punya interface kecil**
   yang di-consume oleh `web/` handlers — memudahkan testing dengan mock/fake tanpa perlu
   Docker/systemd sungguhan berjalan saat unit test.
-- **`web/embed.go`** memakai `//go:embed templates static` sehingga `go build` menghasilkan
-  satu binary yang membawa semua HTML/CSS/JS — tidak ada file eksternal yang harus ikut
-  di-deploy terpisah selain binary + `config.yaml`. Package-nya sengaja diberi nama `assets`
-  (bukan `web`) — direktori top-level `web/` dan `internal/web/` sama-sama bernama "web", jadi
-  kalau package top-level juga bernama `web`, `internal/web` yang meng-impornya akan bentrok
-  nama dengan package-nya sendiri. Diimpor sebagai `assets "github.com/tarkiman/tarkiman-os/web"`.
+- **`web/embed.go`** memakai `//go:embed templates static` + `//go:embed all:frontend/dist`
+  (var `SPA`) sehingga `go build` menghasilkan satu binary yang membawa semua HTML/CSS/JS —
+  baik untuk halaman `html/template` lama maupun untuk `dist/` hasil build Vue — tidak ada
+  file eksternal yang harus ikut di-deploy terpisah selain binary + `config.yaml`. Package-nya
+  sengaja diberi nama `assets` (bukan `web`) — direktori top-level `web/` dan `internal/web/`
+  sama-sama bernama "web", jadi kalau package top-level juga bernama `web`, `internal/web`
+  yang meng-impornya akan bentrok nama dengan package-nya sendiri. Diimpor sebagai
+  `assets "github.com/tarkiman/tarkiman-os/web"`. `internal/web/spa.go` mem-`fs.Sub` embed
+  `SPA` ke `frontend/dist` supaya path-nya cocok dengan yang direferensikan `index.html`
+  hasil build Vite (`/assets/...`).
 - **Satu `*template.Template` per halaman, bukan satu set gabungan.** `templates.go` mem-parse
-  `layout.html` + tiap file halaman (`login.html`, `dashboard.html`, dst) sebagai set terpisah
+  `layout.html` + tiap file halaman (`docker.html`, `services.html`, dst — halaman yang belum
+  dimigrasi ke Vue) sebagai set terpisah
   per halaman, bukan satu `template.ParseFS(fs, "templates/*.html")` untuk semuanya. Alasannya:
   tiap halaman mendefinisikan block `{{define "title"}}`/`{{define "content"}}` dengan nama yang
   sama — kalau semua file di-parse jadi satu set, definisi dari file yang di-parse belakangan

@@ -10,3 +10,7 @@
 # committed output in web/static/js/vendor/ ships, not node_modules.
 # package-lock.json IS committed (reproducible builds), node_modules isn't.
 scripts/codemirror-build/node_modules/
+
+# Vue frontend (web/frontend) — same rule: web/frontend/dist/ IS committed
+# (that's what go:embed ships), node_modules isn't. See docs/03-tech-stack.md.
+web/frontend/node_modules/
