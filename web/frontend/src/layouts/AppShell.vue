@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NIcon, NButton } from 'naive-ui'
-import { LayoutDashboard, Box, Server, FolderOpen, LogOut } from '@lucide/vue'
+import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
+import { useTerminalStore } from '../stores/terminal'
 
 const auth = useAuthStore()
+const terminal = useTerminalStore()
 const router = useRouter()
 const collapsed = ref(false)
+
+onMounted(() => {
+  terminal.ensureLoaded()
+})
 
 async function handleLogout() {
   await auth.logout()
@@ -35,6 +41,10 @@ async function handleLogout() {
         <RouterLink to="/files" class="side-nav-item" active-class="active">
           <NIcon :component="FolderOpen" size="18" />
           <span v-if="!collapsed">Files</span>
+        </RouterLink>
+        <RouterLink v-if="terminal.enabled" to="/terminal" class="side-nav-item" active-class="active">
+          <NIcon :component="SquareTerminal" size="18" />
+          <span v-if="!collapsed">Terminal</span>
         </RouterLink>
       </nav>
     </NLayoutSider>

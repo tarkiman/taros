@@ -19,6 +19,7 @@ type Config struct {
 	Docker       DockerConfig       `yaml:"docker"`
 	Systemd      SystemdConfig      `yaml:"systemd"`
 	FileExplorer FileExplorerConfig `yaml:"fileExplorer"`
+	Terminal     TerminalConfig     `yaml:"terminal"`
 }
 
 type ServerConfig struct {
@@ -74,6 +75,22 @@ type FileExplorerConfig struct {
 	CopySyncEveryMB  int `yaml:"copySyncEveryMB"`
 }
 
+// TerminalConfig — see docs/04-features.md §4.5 & docs/07-security.md §7.6.
+// Disabled by default: this is the highest-risk feature in the app (real
+// shell access), so it must be a deliberate opt-in, not an implicit
+// default. When Enabled is false, the WebSocket route isn't registered at
+// all (see internal/web/router.go) — not just hidden client-side.
+type TerminalConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Shell is explicit, not read from the service user's /etc/passwd
+	// entry — that account is typically created with shell=nologin for
+	// security (docs/09-deployment.md §9.2), which would otherwise make
+	// every session exit immediately.
+	Shell                 string `yaml:"shell"`
+	IdleTimeoutMin        int    `yaml:"idleTimeoutMin"`
+	MaxConcurrentSessions int    `yaml:"maxConcurrentSessions"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -112,6 +129,12 @@ func Default() Config {
 			MaxConcurrentOps: 2,
 			CopyThrottleMBps: 0,
 			CopySyncEveryMB:  32,
+		},
+		Terminal: TerminalConfig{
+			Enabled:               false,
+			Shell:                 "/bin/bash",
+			IdleTimeoutMin:        15,
+			MaxConcurrentSessions: 1,
 		},
 	}
 }

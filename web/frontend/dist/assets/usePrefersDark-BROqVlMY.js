@@ -1,1 +1,0 @@
-import{An as e,Gn as t,kn as n}from"./auth-CPbU0tuF.js";function r(){let r=t(window.matchMedia(`(prefers-color-scheme: dark)`).matches),i;function a(e){r.value=e.matches}return n(()=>{i=window.matchMedia(`(prefers-color-scheme: dark)`),i.addEventListener(`change`,a)}),e(()=>{i?.removeEventListener(`change`,a)}),r}export{r as t};

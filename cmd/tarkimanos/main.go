@@ -24,6 +24,7 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/docker"
 	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
 	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/tarkiman-os/internal/terminal"
 	"github.com/tarkiman/tarkiman-os/internal/web"
 )
 
@@ -114,6 +115,14 @@ func runServer(args []string) {
 		go dockerWatcher.Run(ctx, time.Duration(cfg.Docker.WatchIntervalSec)*time.Second)
 		deps.Docker = dockerClient
 		deps.DockerWatcher = dockerWatcher
+	}
+	if cfg.Terminal.Enabled {
+		deps.TerminalEnabled = true
+		deps.TerminalManager = terminal.NewManager(
+			cfg.Terminal.Shell,
+			cfg.Terminal.MaxConcurrentSessions,
+			time.Duration(cfg.Terminal.IdleTimeoutMin)*time.Minute,
+		)
 	}
 
 	srv := web.NewServer(deps)

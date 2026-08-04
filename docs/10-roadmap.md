@@ -385,22 +385,68 @@ fase sebelumnya di proyek ini (tidak ada akses hardware langsung).
 **Fase 4 (Web Terminal) dilanjutkan** — hold-nya khusus menunggu Fase UI/UX selesai, dan itu
 sudah tercapai di atas.
 
-## Fase 4 — Web Terminal
+## Fase 4 — Web Terminal (selesai-dev; validasi STB fisik tertunda)
 
-- `terminal/`: wrapper `creack/pty` untuk spawn shell sebagai user `tarkimanos`, lifecycle sesi
-  (idle timeout, limit konkuren, cleanup saat disconnect).
-- `web/ws_terminal.go`: endpoint WebSocket (`nhooyr.io/websocket`), validasi `Origin` +
-  session cookie sebelum upgrade (implementasi penuh sesuai
-  [07-security.md](07-security.md) §7.6 — **wajib** sebelum fitur ini dianggap selesai,
-  sama seperti perlakuan file explorer di Fase 3).
-- Integrasi xterm.js di frontend (halaman `/terminal`, resize handling, tema dark/light).
-- Toggle `terminal.enabled` + banner peringatan first-use di UI.
-- Uji manual kedua mode sudo opsional (lihat [09-deployment.md](09-deployment.md) §9.2 &
-  [07-security.md](07-security.md) §7.6): tanpa sudoers rule sama sekali (default), dengan
-  mode password, dan dengan mode NOPASSWD — pastikan dokumentasi instalasinya akurat.
-- **Checkpoint**: uji keamanan manual (buka WebSocket dari origin lain & pastikan ditolak,
-  pastikan sesi ke-kill saat tab ditutup, pastikan idle timeout & limit sesi konkuren
-  berfungsi) sebelum fitur ini dianggap "selesai" — sama seperti Fase 3.
+- `internal/terminal/`: `pty.go` (`spawnPTY`/`resizePTY` lewat `creack/pty`, shell diambil
+  eksplisit dari `terminal.shell` di config — **tidak** bergantung shell akun `tarkimanos` di
+  `/etc/passwd`, yang memang `nologin`), `session.go` (`Session` — baca/tulis PTY, tracking
+  `lastInput` buat idle timeout, `Close()` idempoten yang mematikan **seluruh process group**
+  lewat `syscall.Kill(-pid, SIGKILL)`, bukan cuma proses shell-nya — supaya command foreground
+  yang sedang jalan di dalam sesi ikut ke-cleanup, tidak jadi proses menggantung), `manager.go`
+  (`Manager` — batas sesi konkuren dengan counter+mutex, `ErrTooManySessions`, watcher idle
+  per-sesi tick 30 detik).
+- `internal/web/ws_terminal.go`: `GET /api/terminal/status` (selalu terdaftar, supaya frontend
+  bisa tampilkan status "tidak aktif" yang jelas alih-alih percobaan koneksi yang gagal
+  membingungkan) dan `GET /api/terminal/ws` (**hanya terdaftar kalau `terminal.enabled: true`**
+  — dicek di `internal/web/router.go`, bukan diberi flag runtime di dalam handler-nya sendiri,
+  supaya benar-benar hilang dari routing sesuai [07-security.md](07-security.md) §7.6, bukan
+  cuma disembunyikan). Proteksi CSWSH didapat gratis dari `websocket.Accept(w, r, nil)` milik
+  `nhooyr.io/websocket` — opsi default library ini sudah melakukan validasi same-origin ketat
+  tanpa perlu kode Origin-checking manual (dikonfirmasi lewat baca source library-nya langsung).
+  Protokol wire kustom: frame biner = byte mentah PTY (stdin/stdout), frame teks = JSON kontrol
+  `{"type":"resize","cols":N,"rows":N}` — dipisah supaya hot path (tiap keystroke/output) tidak
+  kena overhead marshal JSON.
+- Integrasi xterm.js (`@xterm/xterm` + `@xterm/addon-fit`) di `TerminalView.vue`: resize lewat
+  `ResizeObserver` + `FitAddon`, tema dark/light live-reassignable (pola sama seperti editor
+  CodeMirror di Fase 3c), status koneksi (menghubungkan/terhubung/berakhir/error) dengan
+  tombol "Sesi Baru" untuk reconnect manual.
+- Toggle `terminal.enabled` (default **false** — fitur berisiko tertinggi di aplikasi ini,
+  sengaja opt-in eksplisit bukan default aktif) + banner peringatan first-use di UI (dismiss
+  tersimpan di `localStorage`, muncul lagi kalau di-clear). Link sidebar "Terminal" cuma
+  muncul kalau `terminal.enabled === true` (dicek lewat store Pinia `stores/terminal.ts`
+  yang meng-cache hasil `/api/terminal/status`, karena `AppShell.vue` di-mount ulang tiap
+  pindah halaman, bukan layout persisten).
+- Mode sudo opsional (lihat [09-deployment.md](09-deployment.md) §9.2 &
+  [07-security.md](07-security.md) §7.6) sepenuhnya konfigurasi OS-level (`sudoers`), tidak
+  ada titik integrasi khusus di kode — shell yang di-spawn adalah shell login biasa, `sudo`
+  di dalamnya berperilaku identik dengan sesi SSH/TTY normal. Dicek ulang instruksi instalasi
+  di §9.2 (tiga mode: tanpa sudoers, password, NOPASSWD) masih akurat terhadap implementasi —
+  tidak ada perubahan dibutuhkan.
+- **Catatan sandbox development**: `Setpgid: true` (dibutuhkan supaya `Session.Close()` bisa
+  membunuh seluruh process group, bukan cuma shell-nya) sempat gagal di lingkungan sandbox
+  agent development ("operation not permitted") — dikonfirmasi lewat reproduksi terisolasi
+  bahwa ini pembatasan syscall spesifik sandbox tsb, bukan bug aplikasi (unit systemd
+  `deploy/systemd/tarkimanos.service` tidak punya `SystemCallFilter=` seccomp, dan `setpgid`
+  adalah syscall biasa yang dipakai shell sendiri untuk job control), jadi tidak diharapkan
+  memengaruhi target deployment nyata. Kode final tetap `Setpgid: true`.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer) untuk alur utama, dan
+  klien WebSocket mentah (Node.js, paket `ws`) untuk pengujian keamanan presisi**:
+  - Alur utama: login → klik nav Terminal → banner peringatan tampil → xterm mount → status
+    "Terhubung" → command sungguhan (`echo`, `ls`, `whoami`) jalan dan outputnya benar,
+    termasuk konfirmasi proses berjalan sebagai user unprivileged (`tarkiman`), bukan root.
+  - **Origin salah ditolak**: percobaan WS handshake dengan header `Origin` beda domain →
+    HTTP 403 (perilaku default `websocket.Accept`, bukan kode custom).
+  - **Limit sesi konkuren berfungsi**: dengan `maxConcurrentSessions: 1`, koneksi kedua saat
+    sesi pertama masih aktif → HTTP 503 (`ErrTooManySessions`); setelah sesi pertama ditutup,
+    slot terbuka lagi dan koneksi baru berhasil.
+  - **Cleanup proses saat disconnect terkonfirmasi**: jumlah proses `bash` yang match sebelum
+    vs sesudah `ws.close()` turun tepat 1 — tidak ada proses menggantung.
+  - **Idle timeout berfungsi**: dengan `idleTimeoutMin: 1` (dipercepat untuk testing), sesi
+    tanpa input ditutup otomatis persis ~60 detik kemudian.
+  - **Toggle disable terverifikasi di instance terpisah** (`terminal.enabled: false`):
+    `GET /api/terminal/status` mengembalikan `{"enabled":false}`, dan percobaan WS handshake
+    ke `/api/terminal/ws` mengembalikan **404** (bukan 403/lain) — mengonfirmasi route memang
+    tidak terdaftar sama sekali, bukan cuma ditolak di dalam handler.
 
 ## Fase 5 — Visualisasi & Optimasi & Polish
 

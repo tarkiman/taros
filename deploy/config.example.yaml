@@ -1,8 +1,6 @@
-# Contoh config.yaml untuk TarkimanOS — hanya berisi bagian yang sudah
-# diimplementasikan (Fase 0: server + auth; Fase 1: polling metrics;
-# Fase 2: docker + systemd; Fase 3a+3b: file explorer lengkap kecuali
-# editor). Section lain (terminal, thresholds, dst — lihat
-# docs/09-deployment.md §9.6) akan ditambahkan seiring fase
+# Contoh config.yaml untuk TarkimanOS — semua section fase inti (0-4)
+# sudah tercakup di sini. Section lain (mis. thresholds gauge per-metric —
+# lihat docs/09-deployment.md §9.6) akan ditambahkan seiring fase
 # implementasinya selesai.
 
 server:
@@ -45,3 +43,13 @@ fileExplorer:
   maxConcurrentOps: 2         # copy/move besar diantrekan, tidak dijalankan paralel tanpa batas
   copyThrottleMBps: 0         # 0 = tanpa batas; set (mis. 20) di storage lambat (eMMC/SD STB)
   copySyncEveryMB: 32         # panggil fsync tiap N MB agar writeback bertahap, bukan menumpuk
+
+terminal:
+  # Fitur berisiko tertinggi di aplikasi ini (akses shell sungguhan) —
+  # sengaja OFF secara default, harus diaktifkan sadar. Lihat
+  # docs/04-features.md §4.5 & docs/07-security.md §7.6 sebelum
+  # mengaktifkan, terutama soal sudo di dalam sesi terminal.
+  enabled: false
+  shell: "/bin/bash"          # eksplisit, TIDAK mengikuti shell akun tarkimanos di /etc/passwd
+  idleTimeoutMin: 15
+  maxConcurrentSessions: 1
