@@ -16,6 +16,9 @@ polling:
   cpuMemNetIntervalSec: 2
   diskUsageIntervalSec: 10
   tempIntervalSec: 5
+  procIntervalSec: 5   # daftar proses OS ("Pemakai Teratas" di Dashboard) — lebih jarang dari
+                        # cpuMemNetIntervalSec karena baca /proc per-PID lebih berat, dan cuma
+                        # perlu segar saat widget-nya benar-benar dibuka, bukan tiap detik
 
 docker:
   enabled: true

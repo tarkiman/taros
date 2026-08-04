@@ -64,3 +64,17 @@ type TempSensor struct {
 	Label   string  `json:"label"`
 	Celsius float64 `json:"celsius"`
 }
+
+// ProcInfo is one row of the OS-level process list — see
+// internal/collector/proc.go for how it's sampled (direct /proc reads,
+// same as everything else in this package) and internal/web/handlers_processes.go
+// for how it's served. Deliberately separate from Snapshot: it's a lot
+// more data than the other per-tick fields, and unlike them nothing needs
+// its history — only "right now, sorted" — so it doesn't ride along on
+// every SSE push, just its own on-demand endpoint.
+type ProcInfo struct {
+	PID        int     `json:"pid"`
+	Name       string  `json:"name"`
+	CPUPercent float64 `json:"cpuPercent"`
+	MemBytes   uint64  `json:"memBytes"`
+}

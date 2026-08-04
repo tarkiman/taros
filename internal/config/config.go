@@ -42,6 +42,13 @@ type PollingConfig struct {
 	CPUMemNetIntervalSec int `yaml:"cpuMemNetIntervalSec"`
 	DiskUsageIntervalSec int `yaml:"diskUsageIntervalSec"`
 	TempIntervalSec      int `yaml:"tempIntervalSec"`
+	// ProcIntervalSec is deliberately slower than cpuMemNetIntervalSec:
+	// listing /proc and reading two files per PID is real work on a
+	// hundred-plus-process system, and unlike CPU/RAM this doesn't feed
+	// the always-on SSE stream — it's only read when someone actually
+	// opens the process view, so there's no reason to pay for it every
+	// couple seconds regardless of whether anyone's looking.
+	ProcIntervalSec int `yaml:"procIntervalSec"`
 }
 
 // DockerConfig — see docs/04-features.md §4.2. WatchIntervalSec is a
@@ -106,6 +113,7 @@ func Default() Config {
 			CPUMemNetIntervalSec: 2,
 			DiskUsageIntervalSec: 10,
 			TempIntervalSec:      5,
+			ProcIntervalSec:      5,
 		},
 		Docker: DockerConfig{
 			Enabled:          true,
