@@ -4,26 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
 )
-
-func (s *Server) handleEditorPage(w http.ResponseWriter, r *http.Request) {
-	sess := sessionFromContext(r.Context())
-	path, err := s.deps.Jail.Resolve(r.URL.Query().Get("path"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
-		return
-	}
-	s.tmpl.render(w, http.StatusOK, "editor.html", map[string]any{
-		"Username":  sess.Username,
-		"CSRFToken": sess.CSRFToken,
-		"Path":      path,
-		"Filename":  filepath.Base(path),
-	})
-}
 
 type contentResponse struct {
 	Content string `json:"content"`

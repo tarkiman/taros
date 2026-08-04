@@ -43,7 +43,7 @@ dikorbankan kalau pakai Python untuk kasus pakai ini.
 | Styling | CSS custom minimal (design tokens sendiri) | Kontrol penuh ukuran & tampilan, hindari framework besar (Tailwind butuh build step) |
 | Chart/grafik time-series (halaman termigrasi) | ECharts (line chart, komponen sama dengan gauge di bawah) | Satu chart library untuk semua jenis chart di halaman Vue (line & gauge) — lebih ringan sebagai total bundle dibanding dua library terpisah. `uPlot` **tidak** dipakai lagi karena halaman dashboard sudah dimigrasi ke Vue; kalau ada halaman lama yang masih memakainya, itu peninggalan sementara sebelum migrasi halaman tsb selesai |
 | Gauge/dial (radial) | ECharts `GaugeChart` (custom build, lewat `echarts/core` + `use([...])` — bukan full `echarts` package) | Lihat [06-api-ui-ux.md](06-api-ui-ux.md) §6.5. Tree-shaken ke hanya `CanvasRenderer`, `GaugeChart`, `LineChart`, dan beberapa komponen (grid/tooltip/title/legend) — jauh di bawah ukuran full ECharts |
-| Editor teks | [CodeMirror 6](https://codemirror.net/) (pre-built, di-embed) + `@codemirror/lint` + `js-yaml` (parse-only, untuk validasi YAML) | Syntax highlighting rapi untuk md/conf/yaml/json + validasi error inline, jauh lebih ringan dari Monaco |
+| Editor teks | [CodeMirror 6](https://codemirror.net/) — dependency npm langsung di `web/frontend` (bukan pipeline esbuild terpisah, sejak migrasi Editor ke Vue) + `@codemirror/lint` + `js-yaml` (parse-only, untuk validasi YAML) | Syntax highlighting rapi untuk md/conf/yaml/json + validasi error inline, jauh lebih ringan dari Monaco |
 | Asset embedding | `embed.FS` stdlib | Semua HTML/CSS/JS ikut ter-compile ke satu binary |
 | System metrics | Baca langsung `/proc`, `/sys` (custom, tanpa `gopsutil`) | Lihat detail di bawah |
 | Docker client | Custom HTTP client tipis ke Unix socket (bukan SDK resmi `docker/docker`) | SDK resmi menyeret puluhan transitive dependency; kita cuma butuh 3–4 endpoint |
@@ -134,21 +134,32 @@ SPA (`serveSPA`, shell `index.html` + client-side `vue-router`) vs mana yang mas
 Go+template lama. Begitu sebuah halaman selesai dimigrasi, handler & template lamanya
 dihapus di PR yang sama — tidak ada kode/halaman ganda yang dibiarkan menggantung.
 
-### Kenapa CodeMirror 6 & xterm.js jadi "pengecualian" JS berat?
+**Status: migrasi selesai.** Editor (halaman terakhir) pindah ke Vue di fase yang juga
+menghapus seluruh subsistem `html/template`/htmx yang sudah tidak dipakai lagi —
+`internal/web/templates.go`, `internal/web/funcs.go`, `web/templates/`, `web/static/`
+(CSS/JS tangan + vendor htmx/uPlot), dan var `Templates`/`Static` di `web/embed.go` — semuanya
+dihapus total di PR yang sama, bukan dibiarkan sebagai dead code "jaga-jaga". `web.NewServer`
+juga disederhanakan (tidak lagi return error, karena satu-satunya sumber error-nya —
+`loadTemplates()` — sudah tidak ada). Satu-satunya aset yang di-embed sekarang adalah hasil
+build Vue (`web/frontend/dist/`, var `SPA`).
 
-Menulis text editor dengan syntax highlighting atau terminal emulator (parsing ANSI escape
-sequence, cursor handling, scrollback buffer, dst) dari nol tidak praktis — keduanya problem
-yang sudah dipecahkan dengan sangat baik oleh library yang sudah battle-tested. CodeMirror 6
-modular (hanya include bahasa yang dibutuhkan: markdown, yaml, json, ini/conf, plain text) dan
-xterm.js sama-sama di-*bundle* **sekali saat development** (pakai `esbuild` atau CDN build,
-bukan di perangkat target), hasil akhirnya berupa file JS statis yang di-embed ke binary Go —
-perangkat ARM tidak pernah menjalankan build step apa pun. Keduanya tetap jauh lebih ringan
-dari alternatif yang lebih "lengkap" (Monaco untuk editor, atau reimplementasi terminal dari
-nol) yang tidak sepadan untuk kebutuhan aplikasi ini. Angka nyata dari build CodeMirror 6
-Fase 3c (YAML+JSON+Markdown+shell/conf, lint, search, autocomplete, fold, sekaligus):
-**~677KB minified / ~225KB gzip** — lebih besar dari perkiraan sangat kasar di awal proyek
-karena mencakup beberapa bahasa & fitur sekaligus, tapi tetap jauh di bawah Monaco (umumnya
-2–5MB+) yang jadi pembanding utamanya.
+### Kenapa xterm.js (nanti) jadi "pengecualian" JS berat?
+
+Menulis terminal emulator dari nol (parsing ANSI escape sequence, cursor handling, scrollback
+buffer, dst) tidak praktis — ini problem yang sudah dipecahkan dengan sangat baik oleh
+xterm.js, library battle-tested yang dipakai VS Code, Hyper, dll. Ini akan jadi dependency npm
+langsung di `web/frontend` (pola yang sama seperti CodeMirror 6 sekarang, bukan pipeline
+esbuild terpisah seperti direncanakan sangat awal di proyek ini) begitu Fase 4 (Web Terminal)
+dikerjakan — lihat [10-roadmap.md](10-roadmap.md).
+
+CodeMirror 6 sendiri **bukan lagi pengecualian** — sejak migrasi Editor ke Vue, CodeMirror
+adalah dependency npm biasa di `web/frontend/package.json`, di-bundle Vite bersama kode Vue
+lainnya, tanpa pipeline `esbuild` terpisah (`scripts/codemirror-build/` sudah dihapus). Angka
+nyata chunk `EditorView` hasil build (Fase 3c pindahan, mencakup YAML+JSON+Markdown+shell/conf,
+lint, search, autocomplete, fold sekaligus): **~674KB minified / ~230KB gzip** — hampir identik
+dengan ukuran bundle esbuild sebelumnya (~677KB/~225KB gzip), jadi pivot ke Vue tidak menambah
+bobot CodeMirror itu sendiri; chunk ini juga di-*lazy-load* oleh `vue-router` hanya saat rute
+`/files/edit` dibuka, tidak memperberat halaman lain.
 
 Untuk validasi YAML/JSON inline (lihat [04-features.md](04-features.md) "Text Editor
 Terintegrasi"), dipakai `@codemirror/lint` (framework marker error bawaan CodeMirror 6) —
@@ -183,13 +194,12 @@ persisten lintas restart.
 ## Build Toolchain (development, bukan runtime)
 
 - Go 1.22+ (compiler & stdlib).
-- `esbuild` untuk sekali build CodeMirror 6 (`scripts/codemirror-build/`) jadi file JS statis
-  (dijalankan di mesin developer, hasilnya di-commit ke `web/static/js/vendor/`) — dipakai
-  oleh halaman Editor yang belum dimigrasi ke Vue.
-- **Vite** untuk build `web/frontend/` (Vue 3 SPA) — `npm install && npm run build` di
-  direktori itu, hasilnya (`web/frontend/dist/`) di-commit dan di-embed via `web/embed.go`.
-  Ini dijalankan manual di mesin dev setiap kali kode Vue berubah, sama seperti alur
-  CodeMirror di atas — bukan bagian dari `go build`, dan tidak butuh dijalankan lagi di
-  device target.
+- **Vite** untuk build `web/frontend/` (Vue 3 SPA, sekarang mencakup **semua** halaman
+  termasuk Editor/CodeMirror 6) — `npm install && npm run build` di direktori itu, hasilnya
+  (`web/frontend/dist/`) di-commit dan di-embed via `web/embed.go`. Dijalankan manual di
+  mesin dev setiap kali kode Vue berubah — bukan bagian dari `go build`, dan tidak butuh
+  dijalankan lagi di device target. `scripts/codemirror-build/` (pipeline `esbuild` terpisah
+  yang tadinya dipakai sebelum Editor pindah ke Vue) sudah dihapus — CodeMirror sekarang
+  cuma dependency npm biasa di `web/frontend/package.json`.
 - Tidak ada dependency runtime Node.js di perangkat target — semua build toolchain di atas
   hanya dipakai sekali saat menyiapkan aset, bukan bagian dari `go build`.

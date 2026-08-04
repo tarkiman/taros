@@ -116,11 +116,7 @@ func runServer(args []string) {
 		deps.DockerWatcher = dockerWatcher
 	}
 
-	srv, err := web.NewServer(deps)
-	if err != nil {
-		slog.Error("init web server", "err", err)
-		os.Exit(1)
-	}
+	srv := web.NewServer(deps)
 
 	httpServer := &http.Server{Addr: cfg.Server.Listen, Handler: srv.Handler()}
 	go func() {

@@ -2,10 +2,10 @@
 
 ## 6.1 Desain API
 
-Navigasi sekarang campuran dua model, tergantung apakah halamannya sudah dimigrasi ke Vue
-(lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"): **SPA** (Vue, client-side
-routing) untuk halaman yang sudah dimigrasi, dan **SSR** (`html/template`) + **htmx** untuk
-partial update pada halaman yang belum. Endpoint dikelompokkan:
+Semua halaman adalah **SPA Vue** (client-side routing) — migrasi dari SSR `html/template` +
+htmx selesai total (lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"); tidak
+ada lagi handler `html/template`, fragment htmx, atau aset statis tangan tersisa di backend.
+Endpoint dikelompokkan:
 
 ### Halaman (Vue SPA, `GET` → shell `index.html`, routing di client)
 
@@ -16,21 +16,14 @@ partial update pada halaman yang belum. Endpoint dikelompokkan:
 | `GET /docker` | Docker — tab Containers/Images/Volumes/Networks/Settings (`DockerView.vue`, tab sebagai state client, bukan lagi `?tab=` query) |
 | `GET /services` | Daftar & kontrol systemd unit (`ServiceView.vue`) |
 | `GET /files` | File explorer (`FilesView.vue`, path via query `?path=` — sinkron dengan URL agar bisa dibagikan/bookmark, sama seperti perilaku `hx-push-url` versi lama) |
+| `GET /files/edit` | Editor teks (`EditorView.vue`, path via query `?path=`) — CodeMirror 6 sebagai dependency npm langsung, bukan lagi pipeline `esbuild` terpisah |
 
-### Halaman (SSR, `GET` → HTML lengkap) — belum dimigrasi ke Vue
+### Halaman belum dibangun
 
 | Route | Deskripsi |
 |---|---|
-| `GET /files/edit` | Editor teks (`?path=`) |
-| `GET /terminal` | Halaman web terminal (xterm.js full-screen) — belum dibangun, lihat [10-roadmap.md](10-roadmap.md) |
-| `GET /settings` | Halaman pengaturan — belum dibangun |
-
-### Fragment (htmx, `GET`/`POST` → potongan HTML untuk swap)
-
-Docker, Service, dan Files tidak lagi di sini — lihat REST/JSON di bawah, dimigrasi bersamaan
-dengan `DockerView.vue`/`ServiceView.vue`/`FilesView.vue`. Tidak ada fragment htmx tersisa —
-satu-satunya halaman yang belum dimigrasi (`/files/edit`) tidak punya fragment sama sekali,
-seluruh isinya di-fetch via JS (lihat `/api/files/content` di bawah).
+| `GET /terminal` | Halaman web terminal (xterm.js full-screen) — Fase 4, di-hold, lihat [10-roadmap.md](10-roadmap.md) |
+| `GET /settings` | Halaman pengaturan |
 
 ### REST/JSON (dipakai oleh JS klien, misal chart)
 
@@ -59,15 +52,16 @@ seluruh isinya di-fetch via JS (lihat `/api/files/content` di bawah).
 | `PUT /api/files/content?path=` | Body `{content, expectedModTime?}` → `{modTime}` baru. 409 kalau `expectedModTime` tidak cocok dengan mtime file saat ini (berubah di luar editor) — `expectedModTime` kosong/diabaikan berarti timpa paksa |
 | `POST /api/auth/login` | Body JSON `{username, password}` → `{authenticated, username, csrfToken}`. Set cookie session. Login sekarang selalu JSON — halaman login form-post lama sudah dihapus bersamaan dengan migrasi ke Vue |
 | `GET /api/auth/session` | Hidrasi auth store Vue saat boot app (`authStore.hydrate()`) → `{authenticated}` atau `{authenticated, username, csrfToken}`. Selalu 200 — "belum login" bukan kondisi error di endpoint ini, karena endpoint ini justru satu-satunya tempat pemanggil tanpa login diharapkan |
-| `POST /api/auth/logout` | Hapus session. Tetap redirect (bukan JSON) karena masih dipanggil dua cara sekaligus selama migrasi bertahap: `<form method="post">` biasa di halaman lama, dan `fetch()` dari Vue (yang mengikuti redirect begitu saja) |
+| `POST /api/auth/logout` | Hapus session → `{ok: true}`. JSON sejak semua halaman jadi Vue — sebelumnya redirect karena masih dipanggil dua cara sekaligus (form-post halaman lama + `fetch()` dari Vue), tidak relevan lagi setelah migrasi selesai |
 | `POST /api/settings/password` | Ganti password |
 
 ### Konvensi
 
 - Semua endpoint state-changing (`POST/PUT/DELETE`) wajib **CSRF token** (lihat
   [07-security.md](07-security.md)) & login session valid.
-- Format error konsisten: HTML fragment berisi alert box untuk request htmx, JSON
-  `{error: "..."}` untuk request `Accept: application/json`.
+- Format error konsisten & selalu JSON: `{error: "..."}` (`writeJSONError`), ditampilkan Vue
+  lewat toast (`useMessage()`) atau dialog (`useDialog()`) sesuai konteks — bukan lagi HTML
+  fragment alert box seperti versi htmx.
 - Semua path file di-normalisasi & divalidasi di server sebelum dipakai (cegah `../` traversal).
 - `GET /api/terminal/ws` tetap wajib session login valid (cookie ikut terkirim otomatis saat
   WebSocket handshake same-origin) **plus** validasi header `Origin` di server — detail
@@ -82,12 +76,13 @@ seluruh isinya di-fetch via JS (lihat `/api/files/content` di bawah).
   dilihat malam hari) dan lebih hemat pada layar OLED perangkat mobile.
 - **Informasi penting terlihat tanpa scroll** di dashboard utama — summary cards di atas
   (CPU/RAM/disk/suhu), grafik & tabel detail di bawah.
-- **Feedback jelas untuk setiap aksi**: toast notification untuk sukses/gagal (start/stop
-  container, save file, dll), loading state (spinner kecil) saat htmx request berjalan
-  (`hx-indicator`), disabled state pada tombol saat sedang diproses (cegah double-click).
+- **Feedback jelas untuk setiap aksi**: toast notification (Naive UI `useMessage()`) untuk
+  sukses/gagal (start/stop container, save file, dll), state loading (`:loading` pada
+  `NButton`, atau `NSpin` untuk area lebih besar) saat request berjalan, disabled state pada
+  tombol saat sedang diproses (cegah double-click).
 - **Konfirmasi untuk aksi destruktif**: delete file/folder, stop/restart service kritikal,
-  stop container — pakai modal konfirmasi (Alpine.js), bukan `window.confirm()` browser
-  native (supaya konsisten stylingnya dengan tema aplikasi).
+  stop container — pakai `NPopconfirm`/`useDialog()` (Naive UI), bukan `window.confirm()`
+  browser native (supaya konsisten stylingnya dengan tema aplikasi).
 - **Progress bar nyata untuk operasi file besar** (copy/move/upload multi-file, lihat
   [04-features.md](04-features.md) "Keandalan Operasi File Besar/Banyak") — persentase,
   kecepatan transfer, ETA, dan tombol **Cancel** yang jelas, disuplai dari SSE progress job.

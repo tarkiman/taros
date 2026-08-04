@@ -327,12 +327,63 @@ contek ide UI/UX dari VueFinder (grid rapi, drag&drop, breadcrumb) tanpa depend 
   kecepatan transfer ~1.2GB/s lokal, nama file berjalan, tombol batal) — inti reliability yang
   jadi alasan fitur ini dibangun, terbukti tetap utuh setelah migrasi ke Vue.
 - **Belum**: context menu klik-kanan (row buttons + selection bar sudah cover semua aksi,
-  diputuskan cukup untuk saat ini — lihat diskusi scope sebelum implementasi), migrasi halaman
-  Editor (`/files/edit`, fase berikutnya).
+  diputuskan cukup untuk saat ini — lihat diskusi scope sebelum implementasi).
 
-**Fase 4 (Web Terminal) di-hold** atas permintaan eksplisit — dilanjutkan setelah migrasi
-UI/UX halaman-halaman lain selesai, atau lebih cepat kalau user memutuskan untuk
-memprioritaskannya lagi.
+### E — Migrasi Editor (selesai-dev; validasi STB fisik tertunda) — halaman terakhir
+
+- CodeMirror 6 pindah dari pipeline `esbuild` terpisah (`scripts/codemirror-build/`, sekarang
+  dihapus) jadi dependency npm biasa di `web/frontend/package.json` — `src/editor/codemirror.ts`
+  adalah port hampir verbatim dari `editor-entry.js` lama, bedanya: tanpa `window.TkEditor`
+  global (diimpor langsung sebagai ES module oleh `EditorView.vue`), dan `Compartment`
+  (word-wrap/tema) dipindah dari module-level jadi per-instance di dalam `createEditor()` —
+  lebih aman untuk konteks SPA di mana komponen bisa mount/unmount berkali-kali per page
+  lifetime, beda dari versi vanilla-JS lama yang selalu cuma satu instance per full page load.
+- Endpoint `/api/files/content` (GET/PUT) **sudah** JSON sejak awal — tidak ada perubahan
+  backend untuk isi file, cuma `GET /files/edit` yang pindah dari handler `html/template`
+  (`handleEditorPage`, dihapus) ke `serveSPA`.
+- `EditorView.vue`: fetch isi file, mount CodeMirror, dirty tracking + draft autosave ke
+  `localStorage` (debounce 3 detik, key `tk-draft:<path>` — persis format lama), prompt restore
+  draft & prompt konflik simpan (409) keduanya lewat `useDialog()` (Naive UI) — bukan lagi
+  `window.confirm()` browser native seperti versi vanilla JS. `beforeunload` guard native tetap
+  dipakai (tidak ada API Vue untuk ini). Tombol "Kembali" ke Files sekarang benar-benar
+  menghitung direktori induk dari path file (`filePath.split('/').slice(0,-1)`) — versi lama
+  mengirim path FILE itu sendiri sebagai query `path=` ke halaman Files, yang kemungkinan besar
+  sudah salah/tidak konsisten dengan cara Files me-resolve direktori.
+- **Pembersihan besar menyertai fase ini** — karena Editor adalah halaman `html/template`
+  terakhir, seluruh subsistem SSR/htmx yang sudah tidak dipakai dihapus total di PR yang sama,
+  bukan dibiarkan sebagai dead code "jaga-jaga": `internal/web/templates.go`, `internal/web/
+  funcs.go`, `web/templates/` (termasuk `layout.html`), `web/static/` (`app.css`, CSS/JS
+  vendor htmx & uPlot), var `Templates`/`Static` di `web/embed.go`, dan route `GET /static/`.
+  `web.NewServer` disederhanakan (tidak lagi return error). `handleLogout` disederhanakan jadi
+  JSON `{ok:true}` (sebelumnya redirect, perlu dipertahankan selama masih dipanggil dari
+  `<form>` di halaman htmx — sudah tidak relevan begitu semua halaman Vue).
+- **Bug nyata ditemukan & diperbaiki lewat testing browser** (`go build`/`npm run build`
+  sama-sama sukses tanpa keluhan): editor tidak pernah mount — `mountEl.value` (ref div
+  container) diakses tepat setelah `loading.value = false` dalam tick sinkron yang sama,
+  padahal render ulang Vue untuk cabang `v-else` (tempat elemen itu benar-benar ada di DOM)
+  belum flush. Diperbaiki dengan `await nextTick()` sebelum mengakses `mountEl.value` — pelajaran
+  umum untuk pola serupa di komponen Vue lain: ref ke elemen yang baru muncul lewat perubahan
+  kondisi render butuh `nextTick()`, tidak bisa diasumsikan langsung tersedia.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium)**: mount
+  editor + syntax highlighting sungguhan (diverifikasi lewat `getComputedStyle`, warna berbeda
+  per jenis token, bukan cuma keberadaan elemen), lint JSON (marker muncul setelah debounce
+  ~1 detik CodeMirror, awalnya sempat terlihat seperti bug sampai ditunggu lebih lama), simpan
+  via Ctrl+S & tombol, **konflik simpan (409) dengan dialog Timpa/Muat-ulang berfungsi penuh**,
+  **draft autosave + prompt restore setelah reload tanpa simpan berfungsi penuh** (dua alur
+  paling kritis untuk mencegah kehilangan data tidak sengaja). Ukuran chunk `EditorView` hasil
+  build: **~674KB minified / ~230KB gzip** — hampir identik dengan bundle esbuild lama
+  (~677KB/~225KB gzip), jadi pivot ke Vue tidak menambah bobot CodeMirror, dan chunk ini
+  di-*lazy-load* oleh `vue-router` hanya saat `/files/edit` dibuka.
+
+## Fase UI/UX — Selesai
+
+Semua halaman (Dashboard, Docker, Service, Files, Editor) sudah Vue. Tidak ada lagi kode
+`html/template`/htmx yang tersisa di backend — lihat riwayat penghapusannya di Fase E §E di
+atas. Validasi STB fisik B860H untuk seluruh Fase UI/UX ini (A–E) masih tertunda seperti setiap
+fase sebelumnya di proyek ini (tidak ada akses hardware langsung).
+
+**Fase 4 (Web Terminal) dilanjutkan** — hold-nya khusus menunggu Fase UI/UX selesai, dan itu
+sudah tercapai di atas.
 
 ## Fase 4 — Web Terminal
 
