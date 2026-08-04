@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/auth"
+	"github.com/tarkiman/taros/internal/auth"
 )
 
 type sessionCtxKey struct{}

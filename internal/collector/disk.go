@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 // excludedFSTypes are virtual/pseudo filesystems that don't represent real

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 type cpuStatSample struct {

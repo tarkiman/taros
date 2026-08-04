@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 // handleMetricsStream pushes the latest Snapshot over Server-Sent Events

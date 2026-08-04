@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 // sampleMem reads /proc/meminfo. "Used" is computed as Total-Available

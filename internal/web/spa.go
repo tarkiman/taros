@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	assets "github.com/tarkiman/tarkiman-os/web"
+	assets "github.com/tarkiman/taros/web"
 )
 
 // spaDist is web/frontend/dist rooted at its own top level (stripped of the

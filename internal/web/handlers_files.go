@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/fileexplorer"
 )
 
 type breadcrumbItem struct {
