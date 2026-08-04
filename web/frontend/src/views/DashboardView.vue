@@ -9,9 +9,11 @@ import { useMetricsStream } from '../composables/useMetricsStream'
 import { fetchHistory } from '../api/metrics'
 import { dockerApi } from '../api/docker'
 import { serviceApi } from '../api/service'
+import { processesApi } from '../api/processes'
 import { useTerminalStore } from '../stores/terminal'
 import type { Sample } from '../types/metrics'
 import type { Container } from '../types/docker'
+import type { ProcInfo } from '../types/processes'
 import { formatBytes } from '../utils/format'
 
 const terminal = useTerminalStore()
@@ -106,13 +108,54 @@ async function loadDockerSummary() {
 }
 
 const runningCount = computed(() => containers.value.filter((c) => c.state === 'running').length)
+
+// --- "Pemakai Teratas": which resource (clicking the CPU/RAM gauge below
+// sets this) and which source (container stats we already have, or real
+// OS processes — a separate fetch, see loadProcesses) are being shown. ---
+const metricSort = ref<'cpu' | 'mem'>('cpu')
+const resourceTab = ref<'container' | 'proses'>('container')
+
 const topContainers = computed(() =>
   containers.value
     .filter((c) => c.hasStats)
     .slice()
-    .sort((a, b) => b.stats.cpuPercent - a.stats.cpuPercent)
+    .sort((a, b) =>
+      metricSort.value === 'cpu' ? b.stats.cpuPercent - a.stats.cpuPercent : b.stats.memUsageBytes - a.stats.memUsageBytes,
+    )
     .slice(0, 5),
 )
+
+// --- OS processes: unlike container stats (piggybacked on the Docker
+// summary fetch above), this only matters when someone's actually looking
+// at the "Proses" tab, so it's fetched on demand and re-polled on a timer
+// only while that tab is active — no reason to hit /api/processes in the
+// background on every Dashboard visit. ---
+const processes = ref<ProcInfo[]>([])
+const processesLoading = ref(false)
+let processesTimer: ReturnType<typeof setInterval> | undefined
+
+async function loadProcesses() {
+  processesLoading.value = true
+  try {
+    const res = await processesApi.list(metricSort.value, 5)
+    processes.value = res.processes
+  } catch {
+    processes.value = []
+  } finally {
+    processesLoading.value = false
+  }
+}
+
+watch([resourceTab, metricSort], ([tab]) => {
+  if (processesTimer) {
+    clearInterval(processesTimer)
+    processesTimer = undefined
+  }
+  if (tab === 'proses') {
+    loadProcesses()
+    processesTimer = setInterval(loadProcesses, 5000)
+  }
+})
 
 // --- Service health: just the failed-unit count, cheap enough to ask for
 // directly rather than polling the full unit list like ServiceView does. ---
@@ -157,6 +200,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
+  if (processesTimer) clearInterval(processesTimer)
 })
 
 const quickLinks = computed(() => {
@@ -197,8 +241,28 @@ const quickLinks = computed(() => {
           <NCard class="status-card">
             <template #header>Ringkasan Sistem</template>
             <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
-              <NGi><GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" /></NGi>
-              <NGi><GaugeChart :value="snapshot.mem.usedPercent" label="RAM" /></NGi>
+              <NGi>
+                <button
+                  type="button"
+                  class="gauge-btn"
+                  :class="{ active: metricSort === 'cpu' }"
+                  title="Lihat pemakai CPU teratas"
+                  @click="metricSort = 'cpu'"
+                >
+                  <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
+                </button>
+              </NGi>
+              <NGi>
+                <button
+                  type="button"
+                  class="gauge-btn"
+                  :class="{ active: metricSort === 'mem' }"
+                  title="Lihat pemakai RAM teratas"
+                  @click="metricSort = 'mem'"
+                >
+                  <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" />
+                </button>
+              </NGi>
               <NGi>
                 <GaugeChart v-if="primaryDisk" :value="primaryDisk.usedPercent" :label="primaryDisk.mountPoint" />
                 <div v-else class="text-muted empty-gauge">Tidak ada data disk</div>
@@ -236,17 +300,43 @@ const quickLinks = computed(() => {
 
           <div class="side-col">
             <NCard class="proc-card">
-              <template #header>Container Teratas</template>
-              <ul v-if="topContainers.length > 0" class="proc-list">
-                <li v-for="c in topContainers" :key="c.id" class="proc-row">
-                  <span class="proc-dot"></span>
-                  <span class="proc-name">{{ c.name }}</span>
-                  <span class="proc-pct">{{ c.stats.cpuPercent.toFixed(1) }}%</span>
-                </li>
-              </ul>
-              <p v-else class="text-muted empty-note">
-                {{ dockerAvailable ? 'Belum ada container dengan statistik.' : 'Docker tidak tersedia.' }}
-              </p>
+              <template #header>
+                <div class="proc-head">
+                  <span>Pemakai Teratas</span>
+                  <div class="tabs">
+                    <button type="button" class="tab-btn" :class="{ active: resourceTab === 'container' }" @click="resourceTab = 'container'">
+                      Container
+                    </button>
+                    <button type="button" class="tab-btn" :class="{ active: resourceTab === 'proses' }" @click="resourceTab = 'proses'">
+                      Proses
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <span class="sort-note">diurutkan berdasarkan {{ metricSort === 'cpu' ? 'CPU' : 'RAM' }}</span>
+
+              <template v-if="resourceTab === 'container'">
+                <ul v-if="topContainers.length > 0" class="proc-list">
+                  <li v-for="c in topContainers" :key="c.id" class="proc-row">
+                    <span class="proc-dot"></span>
+                    <span class="proc-name">{{ c.name }}</span>
+                    <span class="proc-pct">{{ metricSort === 'cpu' ? c.stats.cpuPercent.toFixed(1) + '%' : formatBytes(c.stats.memUsageBytes) }}</span>
+                  </li>
+                </ul>
+                <p v-else class="text-muted empty-note">
+                  {{ dockerAvailable ? 'Belum ada container dengan statistik.' : 'Docker tidak tersedia.' }}
+                </p>
+              </template>
+              <template v-else>
+                <ul v-if="processes.length > 0" class="proc-list">
+                  <li v-for="p in processes" :key="p.pid" class="proc-row">
+                    <span class="proc-dot"></span>
+                    <span class="proc-name">{{ p.name }} <span class="text-muted">·{{ p.pid }}</span></span>
+                    <span class="proc-pct">{{ metricSort === 'cpu' ? p.cpuPercent.toFixed(1) + '%' : formatBytes(p.memBytes) }}</span>
+                  </li>
+                </ul>
+                <p v-else-if="!processesLoading" class="text-muted empty-note">Belum ada data proses.</p>
+              </template>
             </NCard>
 
             <NCard class="docker-card">
@@ -425,6 +515,28 @@ const quickLinks = computed(() => {
   text-align: center;
 }
 
+.gauge-btn {
+  display: block;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.gauge-btn:hover {
+  background: var(--track);
+}
+.gauge-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.gauge-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .io-strip {
   margin-top: 12px;
   display: grid;
@@ -455,6 +567,48 @@ const quickLinks = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.proc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--track);
+}
+.tab-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.tab-btn.active {
+  background: var(--glass-strong);
+  color: var(--text);
+}
+.tab-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sort-note {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin: 2px 0 12px;
 }
 
 .proc-list {

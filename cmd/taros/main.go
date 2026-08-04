@@ -73,6 +73,7 @@ func runServer(args []string) {
 		CPUMemNet: fastInterval,
 		DiskUsage: time.Duration(cfg.Polling.DiskUsageIntervalSec) * time.Second,
 		Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
+		Proc:      time.Duration(cfg.Polling.ProcIntervalSec) * time.Second,
 	})
 
 	protectedUnits := make(map[string]bool, len(cfg.Systemd.ProtectedUnits))
