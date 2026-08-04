@@ -1,10 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
-// Only routes migrated to Vue live here. Docker/Service/Files/Editor are
-// still server-rendered (htmx) during the phased migration — the sidebar
-// links to those with a plain <a href>, a full page load, not a
-// router-link, until each gets its own phase. See docs/10-roadmap.md.
+// Only routes migrated to Vue live here. All pages are now migrated (see
+// docs/10-roadmap.md Fase UI/UX) — this comment stays as the pattern to
+// follow for any future new page.
 const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -13,6 +12,7 @@ const router = createRouter({
     { path: '/docker', name: 'docker', component: () => import('../views/DockerView.vue') },
     { path: '/services', name: 'services', component: () => import('../views/ServiceView.vue') },
     { path: '/files', name: 'files', component: () => import('../views/FilesView.vue') },
+    { path: '/files/edit', name: 'files-edit', component: () => import('../views/EditorView.vue') },
   ],
 })
 

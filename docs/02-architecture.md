@@ -7,7 +7,8 @@ Single-node, single-binary, monolith modular. Tidak ada proses terpisah untuk
 
 1. Mengumpulkan data (collector) secara periodik/on-demand.
 2. Menyimpan data terbaru + histori pendek di memori (ring buffer).
-3. Menyajikan web UI (server-rendered HTML) + REST API + stream real-time (SSE).
+3. Menyajikan web UI (SPA Vue 3, di-embed sebagai binary tunggal — lihat
+   [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?") + REST API + stream real-time (SSE).
 4. Menangani operasi file explorer langsung ke filesystem lokal.
 5. Berkomunikasi dengan Docker daemon (via Unix socket) & systemd (via D-Bus) untuk data
    & aksi (start/stop/restart).
@@ -16,7 +17,7 @@ Single-node, single-binary, monolith modular. Tidak ada proses terpisah untuk
 ```
                         ┌─────────────────────────────────────────┐
                         │              Browser (klien)             │
-                        │  SSR HTML + htmx (AJAX) + Alpine (state) │
+                        │  Vue 3 SPA (Naive UI, ECharts)            │
                         │  + SSE (metrics) + WebSocket (terminal)  │
                         │  + xterm.js (emulator terminal)          │
                         └───────────────┬───────────────────────────┘

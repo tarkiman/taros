@@ -85,10 +85,6 @@ func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken})
 }
 
-// handleLogout stays redirect-based (not JSON) because it's still reachable
-// two ways during the phased Vue migration: a plain <form method="post">
-// on every not-yet-migrated htmx page (layout.html), and a fetch() call
-// from the Vue app, which is happy to ignore a followed redirect's body.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(auth.CookieName); err == nil {
 		s.deps.Sessions.Delete(cookie.Value)
@@ -100,7 +96,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Expires:  time.Unix(0, 0),
 	})
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func clientIP(r *http.Request) string {

@@ -17,15 +17,18 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 - `CGO_ENABLED=0` wajib karena kita menghindari dependency yang butuh CGO
   (lihat alasan pemilihan `modernc.org/sqlite` alih-alih `mattn/go-sqlite3` di
   [03-tech-stack.md](03-tech-stack.md) jika opsi persistensi diaktifkan nanti).
-- Sebelum `go build`, kalau ada perubahan di aset frontend yang butuh langkah build sendiri,
-  jalankan itu dulu — hasilnya di-commit ke repo, jadi langkah ini **tidak** perlu diulang
-  tiap kali build binary, hanya saat sumbernya berubah:
-  - `cd scripts/codemirror-build && npm install && npm run build` — kalau
-    `src/editor-entry.js`/dependency-nya berubah, hasil ke `web/static/js/vendor/editor.bundle.js`.
-  - `cd web/frontend && npm install && npm run build` — kalau ada perubahan di halaman Vue
-    (lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"), hasil ke
-    `web/frontend/dist/`, di-embed via `web/embed.go` (var `SPA`).
-  - htmx & uPlot **tidak** perlu langkah build — dipakai langsung sebagai file dist resmi.
+- Sebelum `go build`, kalau ada perubahan di kode Vue (`web/frontend/`, termasuk halaman
+  Editor/CodeMirror 6 — semua halaman sekarang satu proyek Vue yang sama, lihat
+  [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"), build dulu:
+  ```bash
+  cd web/frontend && npm install && npm run build
+  ```
+  Hasilnya (`web/frontend/dist/`) di-commit ke repo dan di-embed via `web/embed.go` (var
+  `SPA`) — langkah ini **tidak** perlu diulang tiap kali build binary Go, hanya saat kode Vue
+  berubah. Tidak ada langkah build terpisah lain lagi — riwayat: sebelum migrasi Editor,
+  CodeMirror 6 punya pipeline `esbuild` sendiri di `scripts/codemirror-build/` (sekarang
+  dihapus, sudah jadi dependency npm biasa di atas), dan sebelum migrasi Vue dimulai, htmx &
+  uPlot dipakai langsung sebagai file dist resmi tanpa build sama sekali.
 
 ## 9.2 Instalasi di Perangkat
 

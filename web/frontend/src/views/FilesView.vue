@@ -246,7 +246,19 @@ const columns: DataTableColumns<Entry> = [
           [icon, row.name],
         )
       }
-      return h('a', { href: `/files/edit?path=${encodeURIComponent(fullPath(row.name))}`, class: 'entry-link' }, [icon, row.name])
+      return h(
+        'a',
+        {
+          href: `/files/edit?path=${encodeURIComponent(fullPath(row.name))}`,
+          class: 'entry-link',
+          onClick: (ev: MouseEvent) => {
+            if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return // let ctrl/middle-click open in a new tab normally
+            ev.preventDefault()
+            router.push({ path: '/files/edit', query: { path: fullPath(row.name) } })
+          },
+        },
+        [icon, row.name],
+      )
     },
   },
   { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => (row.isDir ? '—' : formatBytes(row.sizeBytes)) },
