@@ -18,13 +18,13 @@ type rawNetwork struct {
 }
 
 type Network struct {
-	ID             string
-	Name           string
-	Driver         string
-	Created        time.Time
-	Subnet         string
-	ConnectedCount int
-	Builtin        bool // bridge/host/none — Docker refuses to remove these
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Driver         string    `json:"driver"`
+	Created        time.Time `json:"created"`
+	Subnet         string    `json:"subnet"`
+	ConnectedCount int       `json:"connectedCount"`
+	Builtin        bool      `json:"builtin"` // bridge/host/none — Docker refuses to remove these
 }
 
 var builtinNetworks = map[string]bool{"bridge": true, "host": true, "none": true}

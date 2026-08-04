@@ -15,12 +15,12 @@ type rawImage struct {
 }
 
 type Image struct {
-	ID         string
-	Tag        string // "repo:tag", or "<none>:<none>" for dangling
-	Dangling   bool
-	Created    time.Time
-	SizeBytes  int64
-	Containers int64 // -1 if the daemon didn't report it (list without ?size=)
+	ID         string    `json:"id"`
+	Tag        string    `json:"tag"` // "repo:tag", or "<none>:<none>" for dangling
+	Dangling   bool      `json:"dangling"`
+	Created    time.Time `json:"created"`
+	SizeBytes  int64     `json:"sizeBytes"`
+	Containers int64     `json:"containers"` // -1 if the daemon didn't report it (list without ?size=)
 }
 
 func (c *Client) ListImages(ctx context.Context) ([]Image, error) {

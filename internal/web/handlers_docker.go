@@ -2,115 +2,116 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/tarkiman/tarkiman-os/internal/docker"
 )
 
-var dockerTabs = map[string]bool{
-	"containers": true, "images": true, "volumes": true, "networks": true, "settings": true,
+// dockerUnavailableJSON is the JSON counterpart of the old error_panel.html
+// degradation path — see docs/04-features.md §4.2. `enabled` lets the Vue
+// DockerView distinguish "off in config" from "on but unreachable" without
+// parsing the message text.
+type dockerUnavailableJSON struct {
+	Error   string `json:"error"`
+	Enabled bool   `json:"enabled"`
 }
 
-func (s *Server) handleDockerPage(w http.ResponseWriter, r *http.Request) {
-	tab := r.URL.Query().Get("tab")
-	if !dockerTabs[tab] {
-		tab = "containers"
-	}
-	sess := sessionFromContext(r.Context())
-	s.tmpl.render(w, http.StatusOK, "docker.html", map[string]any{
-		"Username":      sess.Username,
-		"CSRFToken":     sess.CSRFToken,
-		"Tab":           tab,
-		"DockerEnabled": s.deps.DockerEnabled,
-	})
-}
-
-// dockerUnavailable renders the graceful-degradation message shared by
-// every fragment when Docker is disabled/unreachable — see
-// docs/04-features.md §4.2.
-func (s *Server) dockerUnavailable(w http.ResponseWriter, err error) {
+func (s *Server) writeDockerUnavailable(w http.ResponseWriter, err error) {
 	msg := "Docker tidak diaktifkan di konfigurasi."
 	if s.deps.DockerEnabled {
 		msg = "Docker tidak terdeteksi atau tidak bisa diakses."
+		if err != nil {
+			msg += " (" + err.Error() + ")"
+		}
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-		"Message": msg,
-		"Detail":  errString(err),
-	})
+	writeJSON(w, http.StatusServiceUnavailable, dockerUnavailableJSON{Error: msg, Enabled: s.deps.DockerEnabled})
 }
 
-func errString(err error) string {
-	if err == nil {
-		return ""
+// writeDockerActionError maps a docker.APIError's real HTTP status (e.g.
+// 409 "still in use") through to the client instead of flattening every
+// failure to 500 — the Vue action buttons show the daemon's own message.
+func writeDockerActionError(w http.ResponseWriter, fallbackMsg string, err error) {
+	var apiErr *docker.APIError
+	if errors.As(err, &apiErr) {
+		writeJSONError(w, apiErr.StatusCode, fallbackMsg+": "+apiErr.Message)
+		return
 	}
-	return err.Error()
+	writeJSONError(w, http.StatusInternalServerError, fallbackMsg+": "+err.Error())
 }
 
-func (s *Server) handleDockerContainersFragment(w http.ResponseWriter, r *http.Request) {
+type containersResponse struct {
+	Containers []docker.Container `json:"containers"`
+	UpdatedAt  time.Time          `json:"updatedAt"`
+}
+
+func (s *Server) handleAPIDockerContainers(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	containers, updatedAt, err := s.deps.DockerWatcher.Containers()
 	if err != nil && len(containers) == 0 {
-		s.dockerUnavailable(w, err)
+		s.writeDockerUnavailable(w, err)
 		return
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_containers.html", map[string]any{
-		"Containers": containers,
-		"UpdatedAt":  updatedAt,
-	})
+	writeJSON(w, http.StatusOK, containersResponse{Containers: containers, UpdatedAt: updatedAt})
 }
 
-func (s *Server) handleDockerImagesFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerImages(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	images, err := s.deps.Docker.ListImages(ctx)
 	if err != nil {
-		s.dockerUnavailable(w, err)
+		s.writeDockerUnavailable(w, err)
 		return
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_images.html", map[string]any{"Images": images})
+	writeJSON(w, http.StatusOK, map[string]any{"images": images})
 }
 
-func (s *Server) handleDockerVolumesFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerVolumes(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	volumes, err := s.deps.Docker.ListVolumes(ctx)
 	if err != nil {
-		s.dockerUnavailable(w, err)
+		s.writeDockerUnavailable(w, err)
 		return
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_volumes.html", map[string]any{"Volumes": volumes})
+	writeJSON(w, http.StatusOK, map[string]any{"volumes": volumes})
 }
 
-func (s *Server) handleDockerNetworksFragment(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerNetworks(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	networks, err := s.deps.Docker.ListNetworks(ctx)
 	if err != nil {
-		s.dockerUnavailable(w, err)
+		s.writeDockerUnavailable(w, err)
 		return
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_networks.html", map[string]any{"Networks": networks})
+	writeJSON(w, http.StatusOK, map[string]any{"networks": networks})
 }
 
-func (s *Server) handleDockerSettingsFragment(w http.ResponseWriter, r *http.Request) {
+type settingsResponse struct {
+	Info      docker.Info      `json:"info"`
+	DiskUsage docker.DiskUsage `json:"diskUsage"`
+}
+
+func (s *Server) handleAPIDockerSettings(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -119,21 +120,19 @@ func (s *Server) handleDockerSettingsFragment(w http.ResponseWriter, r *http.Req
 	info, infoErr := s.deps.Docker.Info(ctx)
 	du, duErr := s.deps.Docker.DiskUsage(ctx)
 	if infoErr != nil && duErr != nil {
-		s.dockerUnavailable(w, infoErr)
+		s.writeDockerUnavailable(w, infoErr)
 		return
 	}
-	s.tmpl.renderFragment(w, http.StatusOK, "docker_settings.html", map[string]any{
-		"Info":      info,
-		"DiskUsage": du,
-	})
+	writeJSON(w, http.StatusOK, settingsResponse{Info: info, DiskUsage: du})
 }
 
-// handleDockerContainerAction handles start/stop/restart/remove, then
-// re-renders the containers table so htmx can swap it in — see
-// docs/06-api-ui-ux.md §6.1.
-func (s *Server) handleDockerContainerAction(w http.ResponseWriter, r *http.Request) {
+// handleAPIDockerContainerAction handles start/stop/restart/remove, then
+// returns the refreshed container list so the Vue table can update from
+// the response directly (no second round-trip) — same "force a watcher
+// refresh so the result is immediate" behavior as before the JSON move.
+func (s *Server) handleAPIDockerContainerAction(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	id := r.PathValue("id")
@@ -157,68 +156,54 @@ func (s *Server) handleDockerContainerAction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Aksi gagal: " + action,
-			"Detail":  err.Error(),
-		})
+		writeDockerActionError(w, "Aksi "+action+" gagal", err)
 		return
 	}
 
-	// Force an immediate cache refresh so the swapped-in table reflects
-	// the action right away instead of waiting for the next watch tick.
 	s.deps.DockerWatcher.RefreshNow(ctx)
-	s.handleDockerContainersFragment(w, r)
+	s.handleAPIDockerContainers(w, r)
 }
 
-func (s *Server) handleDockerImageRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerImageRemove(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveImage(ctx, r.PathValue("id")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Hapus image gagal (mungkin masih dipakai container).",
-			"Detail":  err.Error(),
-		})
+		writeDockerActionError(w, "Hapus image gagal (mungkin masih dipakai container)", err)
 		return
 	}
-	s.handleDockerImagesFragment(w, r)
+	s.handleAPIDockerImages(w, r)
 }
 
-func (s *Server) handleDockerVolumeRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerVolumeRemove(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveVolume(ctx, r.PathValue("name")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Hapus volume gagal (mungkin masih dipakai container).",
-			"Detail":  err.Error(),
-		})
+		writeDockerActionError(w, "Hapus volume gagal (mungkin masih dipakai container)", err)
 		return
 	}
-	s.handleDockerVolumesFragment(w, r)
+	s.handleAPIDockerVolumes(w, r)
 }
 
-func (s *Server) handleDockerNetworkRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerNetworkRemove(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveNetwork(ctx, r.PathValue("id")); err != nil {
-		s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-			"Message": "Hapus network gagal (mungkin builtin atau masih ada container terhubung).",
-			"Detail":  err.Error(),
-		})
+		writeDockerActionError(w, "Hapus network gagal (mungkin builtin atau masih ada container terhubung)", err)
 		return
 	}
-	s.handleDockerNetworksFragment(w, r)
+	s.handleAPIDockerNetworks(w, r)
 }
 
 var validPruneKinds = map[string]docker.PruneKind{
@@ -228,9 +213,9 @@ var validPruneKinds = map[string]docker.PruneKind{
 	"networks":   docker.PruneNetworks,
 }
 
-func (s *Server) handleDockerPrune(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAPIDockerPrune(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.DockerEnabled {
-		s.dockerUnavailable(w, nil)
+		s.writeDockerUnavailable(w, nil)
 		return
 	}
 	kind := r.PathValue("kind")
@@ -250,12 +235,9 @@ func (s *Server) handleDockerPrune(w http.ResponseWriter, r *http.Request) {
 
 	for _, k := range kinds {
 		if _, err := s.deps.Docker.Prune(ctx, k); err != nil {
-			s.tmpl.renderFragment(w, http.StatusOK, "error_panel.html", map[string]any{
-				"Message": "Cleanup gagal: " + string(k),
-				"Detail":  err.Error(),
-			})
+			writeDockerActionError(w, "Cleanup gagal: "+string(k), err)
 			return
 		}
 	}
-	s.handleDockerSettingsFragment(w, r)
+	s.handleAPIDockerSettings(w, r)
 }

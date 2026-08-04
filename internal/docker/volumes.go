@@ -21,12 +21,12 @@ type rawVolumeList struct {
 }
 
 type Volume struct {
-	Name       string
-	Driver     string
-	Mountpoint string
-	Created    time.Time
-	SizeBytes  int64 // -1 if unknown (usage data needs ?size=1, which is expensive daemon-side)
-	InUse      bool
+	Name       string    `json:"name"`
+	Driver     string    `json:"driver"`
+	Mountpoint string    `json:"mountpoint"`
+	Created    time.Time `json:"created"`
+	SizeBytes  int64     `json:"sizeBytes"` // -1 if unknown (usage data needs ?size=1, which is expensive daemon-side)
+	InUse      bool      `json:"inUse"`
 }
 
 func (c *Client) ListVolumes(ctx context.Context) ([]Volume, error) {

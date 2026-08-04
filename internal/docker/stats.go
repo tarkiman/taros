@@ -42,14 +42,14 @@ type rawStats struct {
 // without a separate conversion function — Go templates can't convert
 // types on their own.
 type ContainerStats struct {
-	CPUPercent      float64
-	MemUsageBytes   int64
-	MemLimitBytes   int64
-	MemPercent      float64
-	NetRxBytes      int64
-	NetTxBytes      int64
-	BlockReadBytes  int64
-	BlockWriteBytes int64
+	CPUPercent      float64 `json:"cpuPercent"`
+	MemUsageBytes   int64   `json:"memUsageBytes"`
+	MemLimitBytes   int64   `json:"memLimitBytes"`
+	MemPercent      float64 `json:"memPercent"`
+	NetRxBytes      int64   `json:"netRxBytes"`
+	NetTxBytes      int64   `json:"netTxBytes"`
+	BlockReadBytes  int64   `json:"blockReadBytes"`
+	BlockWriteBytes int64   `json:"blockWriteBytes"`
 }
 
 // ContainerStatsOnce fetches a single-shot stats sample. Docker's
