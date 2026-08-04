@@ -8,6 +8,7 @@ import (
 	"github.com/tarkiman/tarkiman-os/internal/docker"
 	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
 	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/tarkiman-os/internal/terminal"
 )
 
 // Deps are every dependency Server's handlers need. Passed as a struct
@@ -36,6 +37,13 @@ type Deps struct {
 	// Jobs runs copy/move operations — see docs/04-features.md §4.4.
 	Jobs            *fileexplorer.JobQueue
 	MaxUploadSizeMB int
+
+	// TerminalManager is nil when TerminalEnabled is false — the WS route
+	// isn't registered at all in that case (see Handler below), matching
+	// docs/07-security.md §7.6 ("dihapus sepenuhnya dari routing, bukan
+	// cuma disembunyikan"), so handlers never need to nil-check this.
+	TerminalEnabled bool
+	TerminalManager *terminal.Manager
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -61,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /services", s.serveSPA)
 	mux.HandleFunc("GET /files", s.serveSPA)
 	mux.HandleFunc("GET /files/edit", s.serveSPA)
+	mux.HandleFunc("GET /terminal", s.serveSPA)
 	mux.Handle("GET /assets/", spaAssets)
 
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
@@ -93,6 +102,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/files/download", s.requireAuth(s.handleFilesDownload))
 	mux.HandleFunc("GET /api/files/content", s.requireAuth(s.handleFilesContentGet))
 	mux.HandleFunc("PUT /api/files/content", s.requireAuth(s.handleFilesContentPut))
+
+	// Always registered, regardless of terminal.enabled, so the Vue page
+	// can show a clear "not enabled" state instead of a failed connection.
+	mux.HandleFunc("GET /api/terminal/status", s.requireAuth(s.handleAPITerminalStatus))
+	// The actual WS endpoint is only registered when enabled — see
+	// docs/07-security.md §7.6 (highest risk-surface feature; removed from
+	// routing entirely when off, not just hidden client-side).
+	if s.deps.TerminalEnabled {
+		mux.HandleFunc("GET /api/terminal/ws", s.requireAuth(s.handleTerminalWS))
+	}
 
 	return recoverMiddleware(loggingMiddleware(mux))
 }
