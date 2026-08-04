@@ -28,12 +28,12 @@ async function handleLogout() {
           <NIcon :component="Box" size="18" />
           <span v-if="!collapsed">Docker</span>
         </RouterLink>
-        <!-- Service/Files are still server-rendered (htmx), not yet
-             migrated to Vue — plain full-page links, not RouterLink. -->
-        <a href="/services" class="side-nav-item">
+        <RouterLink to="/services" class="side-nav-item" active-class="active">
           <NIcon :component="Server" size="18" />
           <span v-if="!collapsed">Service</span>
-        </a>
+        </RouterLink>
+        <!-- Files is still server-rendered (htmx), not yet migrated to
+             Vue — plain full-page link, not RouterLink. -->
         <a href="/files" class="side-nav-item">
           <NIcon :component="FolderOpen" size="18" />
           <span v-if="!collapsed">Files</span>

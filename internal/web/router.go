@@ -65,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.serveSPA)
 	mux.HandleFunc("GET /login", s.serveSPA)
 	mux.HandleFunc("GET /docker", s.serveSPA)
+	mux.HandleFunc("GET /services", s.serveSPA)
 	mux.Handle("GET /assets/", spaAssets)
 
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
@@ -85,10 +86,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/docker/networks/{id}/remove", s.requireAuth(s.handleAPIDockerNetworkRemove))
 	mux.HandleFunc("POST /api/docker/prune/{kind}", s.requireAuth(s.handleAPIDockerPrune))
 
-	mux.HandleFunc("GET /services", s.requireAuth(s.handleServicesPage))
-	mux.HandleFunc("GET /fragments/services/list", s.requireAuth(s.handleServicesListFragment))
-	mux.HandleFunc("POST /fragments/services/{name}/{action}", s.requireAuth(s.handleServiceAction))
-	mux.HandleFunc("GET /fragments/services/{name}/logs", s.requireAuth(s.handleServiceLogsFragment))
+	mux.HandleFunc("GET /api/services/list", s.requireAuth(s.handleAPIServicesList))
+	mux.HandleFunc("POST /api/services/{name}/{action}", s.requireAuth(s.handleAPIServiceAction))
+	mux.HandleFunc("GET /api/services/{name}/logs", s.requireAuth(s.handleAPIServiceLogs))
 
 	mux.HandleFunc("GET /files", s.requireAuth(s.handleFilesPage))
 	mux.HandleFunc("GET /fragments/files/list", s.requireAuth(s.handleFilesListFragment))

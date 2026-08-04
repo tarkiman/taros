@@ -89,7 +89,8 @@ tarkiman-os/
 │   ├── frontend/                        # Vue 3 SPA (halaman termigrasi) — lihat
 │   │   │                                # 03-tech-stack.md "Kenapa pivot ke Vue?"
 │   │   ├── src/
-│   │   │   ├── views/                   # LoginView.vue, DashboardView.vue, DockerView.vue — satu per route
+│   │   │   ├── views/                   # LoginView.vue, DashboardView.vue, DockerView.vue,
+│   │   │   │                           # ServiceView.vue — satu per route
 │   │   │   ├── layouts/AppShell.vue      # sidebar + topbar, dipakai halaman ber-auth
 │   │   │   ├── components/charts/        # GaugeChart.vue, LineChart.vue (wrapper ECharts)
 │   │   │   ├── composables/              # useMetricsStream.ts (SSE), usePrefersDark.ts
@@ -110,7 +111,6 @@ tarkiman-os/
 │   ├── templates/                       # html/template files — halaman yang BELUM dimigrasi
 │   │   │                                # ke Vue (lihat web/frontend/ di atas untuk yang sudah)
 │   │   ├── layout.html
-│   │   ├── services.html
 │   │   ├── files.html
 │   │   ├── editor.html                    # shell halaman; isi file di-fetch via JS, tidak
 │   │   │                                  # di-render server-side (hindari HTML-escaping
@@ -118,14 +118,13 @@ tarkiman-os/
 │   │   ├── terminal.html                  # [belum dibuat] halaman full-screen xterm.js
 │   │   └── fragments/                    # partial template untuk htmx swap — tanpa layout.html,
 │   │       │                              # di-parse & di-render standalone (lihat catatan di bawah).
-│   │       │                              # Docker (docker_*.html) dihapus — dimigrasi ke Vue,
-│   │       │                              # lihat web/frontend/src/views/DockerView.vue di atas
-│   │       ├── services_list.html
-│   │       ├── services_logs.html
+│   │       │                              # Docker & Service dihapus — dimigrasi ke Vue, lihat
+│   │       │                              # web/frontend/src/views/{Docker,Service}View.vue di atas
 │   │       ├── files_list.html            # listing + breadcrumb; entry yang match blocklist
 │   │       │                              # difilter di sini, bukan cuma ditolak saat diklik
-│   │       └── error_panel.html           # dipakai semua fragment (Docker & Service) untuk
-│   │                                       # degradasi/error — nama generik sejak dipakai lintas domain
+│   │       └── error_panel.html           # dipakai fragment Files untuk degradasi/error — nama
+│   │                                       # generik dari saat masih dipakai lintas domain
+│   │                                       # (Docker/Service), sekarang cuma Files
 │   ├── static/
 │   │   ├── css/
 │   │   │   ├── app.css                   # design tokens + styling custom
@@ -191,7 +190,7 @@ tarkiman-os/
   `SPA` ke `frontend/dist` supaya path-nya cocok dengan yang direferensikan `index.html`
   hasil build Vite (`/assets/...`).
 - **Satu `*template.Template` per halaman, bukan satu set gabungan.** `templates.go` mem-parse
-  `layout.html` + tiap file halaman (`services.html`, `files.html`, dst — halaman yang belum
+  `layout.html` + tiap file halaman (`files.html`, `editor.html`, dst — halaman yang belum
   dimigrasi ke Vue) sebagai set terpisah
   per halaman, bukan satu `template.ParseFS(fs, "templates/*.html")` untuk semuanya. Alasannya:
   tiap halaman mendefinisikan block `{{define "title"}}`/`{{define "content"}}` dengan nama yang
