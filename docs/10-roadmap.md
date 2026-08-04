@@ -172,6 +172,48 @@ Dipecah jadi tiga PR (pola yang sama seperti Fase 2 — lihat memori proyek/`REA
   standar checklist untuk fitur JS-berat ke depannya, dicatat di
   [08-project-structure.md](08-project-structure.md).
 
+## Fase UI/UX — Pivot ke Vue (sedang berjalan; Fase 4 di-hold sementara)
+
+Konteks: setelah Fase 0–3c selesai, user eksplisit minta hold Fase 4 (Web Terminal) untuk
+lebih dulu memoles tampilan — dashboard htmx terasa polos dibanding pembanding semacam
+CasaOS. Setelah diskusi (lihat [03-tech-stack.md](03-tech-stack.md) "Kenapa pivot ke Vue?"),
+keputusan: pivot frontend ke Vue 3 SPA, dimigrasi **bertahap per-halaman** (bukan rewrite
+sekaligus), dengan model deployment satu-binary tetap dipertahankan penuh.
+
+### A — Fondasi Vue + Login + Dashboard (selesai-dev; validasi STB fisik tertunda)
+
+- `web/frontend/`: proyek Vue 3 + Vite + TypeScript baru — Naive UI (component library),
+  ECharts custom build (gauge + line chart, tree-shaken lewat `echarts/core`), `@lucide/vue`
+  (ikon), pinia, vue-router.
+- Endpoint JSON auth baru: `POST /api/auth/login` (JSON, gantikan form-post lama),
+  `GET /api/auth/session` (hidrasi auth store Vue saat boot app, selalu 200).
+- `internal/web/spa.go`: serve shell Vue (`serveSPA`) untuk route yang sudah dimigrasi
+  (`/`, `/login`) + serve `/assets/*` dari `web/frontend/dist` via embed.FS — halaman yang
+  belum dimigrasi (Docker/Service/Files/Editor) tetap dilayani handler `html/template` lama,
+  diputuskan per-path di `router.go`.
+- Halaman lama `login.html`/`dashboard.html` + handler-nya (`handleLoginPage`,
+  `handleLoginSubmit`, `handleDashboard`) + `dashboard.js` dihapus di PR yang sama (bukan
+  dibiarkan jadi dead code) — digantikan `LoginView.vue`/`DashboardView.vue`.
+- Dashboard: 4 gauge (CPU/RAM/Disk/Suhu, ECharts) + 2 grafik garis (CPU & Disk I/O, 15 menit
+  terakhir) + panel detail penyimpanan & jaringan — semua data lewat SSE
+  (`/api/stream/metrics`) dan `/api/metrics/history` yang **sudah ada sejak Fase 1**, tidak
+  ada endpoint metrics baru yang perlu dibuat untuk fase ini.
+- Sidebar `AppShell.vue`: link ke Docker/Service/Files masih `<a href>` biasa (full page load
+  ke halaman lama), bukan `router-link` — sampai giliran masing-masing dimigrasi.
+- **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium)**: login →
+  redirect ke dashboard, gauge/chart ter-render (6 elemen `<canvas>` ECharts), data live dari
+  SSE, logout (POST ber-CSRF, dipanggil dari Vue via `fetch`) berhasil & `GET
+  /api/auth/session` balik `{authenticated:false}`, navigasi ke halaman lama (`/docker`) lewat
+  sidebar tetap berfungsi seperti sebelum pivot.
+- **Belum**: migrasi Docker/Service/Files/Editor ke Vue (fase berikutnya, satu per PR sesuai
+  pola kerja proyek ini), threshold warna gauge per-metric via `config.yaml` (saat ini default
+  `[0.7, 0.85]` tetap di komponen, bukan dibaca dari config seperti rencana awal — lihat
+  [06-api-ui-ux.md](06-api-ui-ux.md) §6.5).
+
+**Fase 4 (Web Terminal) di-hold** atas permintaan eksplisit — dilanjutkan setelah migrasi
+UI/UX halaman-halaman lain selesai, atau lebih cepat kalau user memutuskan untuk
+memprioritaskannya lagi.
+
 ## Fase 4 — Web Terminal
 
 - `terminal/`: wrapper `creack/pty` untuk spawn shell sebagai user `tarkimanos`, lifecycle sesi
@@ -191,8 +233,11 @@ Dipecah jadi tiga PR (pola yang sama seperti Fase 2 — lihat memori proyek/`REA
 
 ## Fase 5 — Visualisasi & Optimasi & Polish
 
-- Komponen gauge/dial SVG untuk CPU/RAM/Disk/Suhu (lihat [06-api-ui-ux.md](06-api-ui-ux.md) §6.5),
-  menggantikan summary card polos dari Fase 1.
+- ~~Komponen gauge/dial untuk CPU/RAM/Disk/Suhu~~ — sudah dikerjakan lebih awal di
+  "Fase UI/UX — Pivot ke Vue" di atas (bentuk akhirnya ECharts, bukan SVG hand-rolled seperti
+  rencana awal dokumen ini).
+- Migrasi halaman Docker/Service/Files/Editor yang tersisa ke Vue (lanjutan "Fase UI/UX" di
+  atas), kalau belum semua selesai sebelum masuk fase ini.
 - Migrasi `systemd/` dari exec `systemctl` ke D-Bus (`go-systemd/dbus`) untuk efisiensi.
 - Polkit rules untuk kontrol systemd tanpa root penuh.
 - Audit logging lengkap (semua aksi state-changing, termasuk sesi terminal).

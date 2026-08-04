@@ -477,7 +477,7 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
 | Metric | Jenis visual | Kenapa |
 |---|---|---|
 | CPU% (total), RAM%, Disk% (per mount), Suhu | **Gauge/dial radial** dengan color-zone (hijau/kuning/merah) | Pertanyaan utamanya "seberapa penuh/panas *sekarang*, dan apakah sudah masuk zona bahaya" — gauge menjawab itu sekilas tanpa perlu membaca angka |
-| CPU per-core, throughput network (rx/tx), disk I/O | **Line/area chart (uPlot)**, time-series beberapa menit terakhir | Yang relevan adalah **tren & pola** (lonjakan, spike periodik), bukan cuma nilai instan |
+| CPU per-core, throughput network (rx/tx), disk I/O | **Line/area chart** (ECharts di halaman termigrasi Vue; uPlot di halaman lama yang belum dimigrasi — lihat [03-tech-stack.md](03-tech-stack.md)), time-series beberapa menit terakhir | Yang relevan adalah **tren & pola** (lonjakan, spike periodik), bukan cuma nilai instan |
 | RAM breakdown (used/cached/buffers/free), Disk breakdown per mount | **Bar chart horizontal / stacked** | Baik untuk membandingkan proporsi antar kategori |
 | Ranking container by CPU/RAM, ranking mount by usage | **Bar chart terurut (top-N)** | Memudahkan lihat "siapa yang paling boros" sekilas |
 

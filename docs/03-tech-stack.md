@@ -33,15 +33,16 @@ dikorbankan kalau pakai Python untuk kasus pakai ini.
 |---|---|---|
 | Bahasa | Go 1.22+ | Single binary, cross-compile native, GC efisien, konkurensi ringan (goroutine) |
 | HTTP routing | `net/http` stdlib (Go 1.22+ pattern matching) | Go 1.22 sudah punya method+path routing di stdlib — tidak perlu router eksternal (chi/gin/echo) |
-| Template SSR | `html/template` stdlib | Auto-escaping aman, tanpa dependency |
-| Frontend interaktif | [htmx](https://htmx.org) (~14KB gzip) + [Alpine.js](https://alpinejs.dev) (~8KB gzip) | AJAX partial-update & state kecil tanpa build step Node/React/Vue |
+| Template SSR | `html/template` stdlib | Halaman yang **belum** dimigrasi ke Vue (lihat baris "Frontend SPA" di bawah) — auto-escaping aman, tanpa dependency |
+| Frontend interaktif (halaman lama) | [htmx](https://htmx.org) (~14KB gzip) + vanilla JS | AJAX partial-update & state kecil tanpa build step Node — dipakai di halaman yang belum dimigrasi ke Vue |
+| Frontend SPA (halaman termigrasi) | **Vue 3** + Vite + TypeScript, [Naive UI](https://www.naiveui.com/), [ECharts](https://echarts.apache.org/) (custom tree-shaken build), [`@lucide/vue`](https://lucide.dev/) | Lihat "Kenapa pivot ke Vue?" di bawah — dibangun sekali di mesin dev, hasil `vite build` (static HTML/JS/CSS) di-embed ke binary yang sama, tidak mengubah model deployment satu-executable |
 | Realtime push (metrics) | Server-Sent Events (stdlib `http.Flusher`) | Satu-arah, auto-reconnect browser, tanpa library WebSocket |
 | Realtime dua-arah (terminal) | [`nhooyr.io/websocket`](https://github.com/coder/websocket) (a.k.a. `coder/websocket`) | Library WebSocket minimalis, idiomatic dengan `context`, jauh lebih ringan & lebih sedikit dependency dibanding `gorilla/websocket` |
 | PTY (pseudo-terminal) | [`github.com/creack/pty`](https://github.com/creack/pty) | Satu-satunya cara wajar untuk spawn shell interaktif (butuh raw PTY, bukan sekadar `os/exec` pipe) — library tipis, dependency minimal, standar de-facto di ekosistem Go |
 | Terminal emulator (frontend) | [xterm.js](https://xtermjs.org/) (pre-built, di-embed, ~250KB) | Standar de-facto untuk terminal di browser (dipakai VS Code, Hyper, dll), rendering & handling ANSI escape code sudah teruji — menulis ulang ini dari nol tidak masuk akal |
 | Styling | CSS custom minimal (design tokens sendiri) | Kontrol penuh ukuran & tampilan, hindari framework besar (Tailwind butuh build step) |
-| Chart/grafik time-series | [uPlot](https://github.com/leeoniya/uPlot) (~45KB min) | Chart real-time paling ringan & cepat di kelasnya, jauh lebih kecil dari Chart.js |
-| Gauge/dial (radial) | SVG hand-rolled + vanilla JS kecil (bukan library) | Gauge radial cukup dibentuk dari satu elemen `<svg><circle stroke-dasharray=...>` yang di-update atribut-nya via JS saat data SSE masuk — tidak butuh library chart tambahan untuk ini, lihat detail di [06-api-ui-ux.md](06-api-ui-ux.md) §6.5 |
+| Chart/grafik time-series (halaman termigrasi) | ECharts (line chart, komponen sama dengan gauge di bawah) | Satu chart library untuk semua jenis chart di halaman Vue (line & gauge) — lebih ringan sebagai total bundle dibanding dua library terpisah. `uPlot` **tidak** dipakai lagi karena halaman dashboard sudah dimigrasi ke Vue; kalau ada halaman lama yang masih memakainya, itu peninggalan sementara sebelum migrasi halaman tsb selesai |
+| Gauge/dial (radial) | ECharts `GaugeChart` (custom build, lewat `echarts/core` + `use([...])` — bukan full `echarts` package) | Lihat [06-api-ui-ux.md](06-api-ui-ux.md) §6.5. Tree-shaken ke hanya `CanvasRenderer`, `GaugeChart`, `LineChart`, dan beberapa komponen (grid/tooltip/title/legend) — jauh di bawah ukuran full ECharts |
 | Editor teks | [CodeMirror 6](https://codemirror.net/) (pre-built, di-embed) + `@codemirror/lint` + `js-yaml` (parse-only, untuk validasi YAML) | Syntax highlighting rapi untuk md/conf/yaml/json + validasi error inline, jauh lebih ringan dari Monaco |
 | Asset embedding | `embed.FS` stdlib | Semua HTML/CSS/JS ikut ter-compile ke satu binary |
 | System metrics | Baca langsung `/proc`, `/sys` (custom, tanpa `gopsutil`) | Lihat detail di bawah |
@@ -100,18 +101,38 @@ ini overhead yang bisa dihindari. `go-systemd/dbus` bicara langsung ke systemd l
 terus-menerus. **Catatan implementasi**: MVP boleh mulai dari exec `systemctl` (lebih cepat
 dibuat), lalu dioptimasi ke D-Bus di iterasi berikutnya — lihat [10-roadmap.md](10-roadmap.md).
 
-### Kenapa htmx + Alpine, bukan SPA (React/Vue/Svelte)?
+### Kenapa awalnya htmx, lalu pivot ke Vue?
 
-- User secara eksplisit minta frontend berbasis Go juga — pendekatan SSR (Go render HTML)
-  paling konsisten dengan itu; JS hanya "progressive enhancement" tipis di atasnya.
-- Tidak butuh build toolchain Node.js/npm/webpack/vite sama sekali — `go build` saja sudah
-  menghasilkan binary final siap pakai.
-- Bundle JS total (htmx + Alpine + uPlot + CodeMirror) tetap jauh lebih kecil dari runtime
-  framework SPA modern, dan tidak ada virtual-DOM overhead di sisi klien (device yang akses
-  dashboard belum tentu kencang juga — sering diakses dari HP).
-- Trade-off: interaksi sangat kaya (drag-drop kompleks dsb) lebih verbose ditulis dengan
-  htmx/Alpine dibanding React. Untuk fitur yang ditargetkan (dashboard, file explorer, editor),
-  ini masih sangat memadai.
+Pendekatan awal (Fase 0–3) adalah SSR murni: `html/template` + htmx + vanilla JS, tanpa
+build toolchain Node sama sekali — `go build` saja sudah cukup. Ini valid untuk fungsionalitas
+dasar, tapi setelah semua fase inti (dashboard, Docker, Service, File Explorer, Editor) selesai,
+tampilannya terasa "polos" dibanding dashboard modern (mis. CasaOS) — wajar, karena htmx +
+CSS tokens custom pada dasarnya cuma menghasilkan apa yang ditulis tangan, tidak ada
+component library/animation system siap pakai di baliknya.
+
+Keputusan: pivot ke **Vue 3 SPA** untuk tampilan yang lebih kaya, dengan syarat mutlak yang
+sudah dikonfirmasi sebelum pivot dimulai — **model deployment satu binary/satu executable
+tidak boleh berubah**. Ini tetap terjaga karena:
+
+- Hasil `npm run build` (Vite) adalah file HTML/JS/CSS statis biasa — persis seperti bundle
+  CodeMirror 6 yang sudah lebih dulu ada di proyek ini. Dibangun sekali di mesin dev,
+  hasilnya (`web/frontend/dist/`) di-embed via `embed.FS` yang sama, ikut ter-compile ke
+  binary Go saat `go build`. Device target (RPi5/STB) tidak pernah menjalankan Node/npm/Vite.
+- **Rendering SPA terjadi di browser klien** (laptop/HP yang mengakses dashboard), **bukan**
+  di device target — jadi tidak menambah RAM runtime di STB 2GB sama sekali. Beban "lebih
+  berat" Vue dibanding htmx murni cuma dirasakan sisi klien yang mengakses, yang jauh lebih
+  berdaya dibanding STB itu sendiri.
+- Naive UI (component library) & ECharts (chart/gauge) menggantikan kebutuhan menulis ulang
+  modal/table/drawer/gauge dari nol dengan CSS/SVG tangan — trade-off yang tadinya "lebih
+  verbose ditulis dengan htmx" untuk interaksi kaya, sekarang didapat langsung dari library.
+
+**Strategi migrasi bertahap** (bukan rewrite sekaligus, konsisten dengan pola kerja per-fase
+proyek ini — lihat [10-roadmap.md](10-roadmap.md)): halaman dimigrasi satu per satu ke Vue;
+selama transisi, halaman yang belum dimigrasi tetap dilayani versi htmx/`html/template` apa
+adanya, dan Go router (`internal/web/router.go`) memutuskan per-path mana yang diserve sebagai
+SPA (`serveSPA`, shell `index.html` + client-side `vue-router`) vs mana yang masih handler
+Go+template lama. Begitu sebuah halaman selesai dimigrasi, handler & template lamanya
+dihapus di PR yang sama — tidak ada kode/halaman ganda yang dibiarkan menggantung.
 
 ### Kenapa CodeMirror 6 & xterm.js jadi "pengecualian" JS berat?
 
@@ -162,7 +183,13 @@ persisten lintas restart.
 ## Build Toolchain (development, bukan runtime)
 
 - Go 1.22+ (compiler & stdlib).
-- `esbuild` atau `Makefile` sederhana untuk sekali build CodeMirror 6 + uPlot jadi file JS
-  statis (dijalankan di mesin developer, hasilnya di-commit ke `web/static/js/vendor/`).
-- Tidak ada dependency runtime Node.js di perangkat target — build toolchain di atas hanya
-  dipakai sekali saat menyiapkan aset, bukan bagian dari `go build`.
+- `esbuild` untuk sekali build CodeMirror 6 (`scripts/codemirror-build/`) jadi file JS statis
+  (dijalankan di mesin developer, hasilnya di-commit ke `web/static/js/vendor/`) — dipakai
+  oleh halaman Editor yang belum dimigrasi ke Vue.
+- **Vite** untuk build `web/frontend/` (Vue 3 SPA) — `npm install && npm run build` di
+  direktori itu, hasilnya (`web/frontend/dist/`) di-commit dan di-embed via `web/embed.go`.
+  Ini dijalankan manual di mesin dev setiap kali kode Vue berubah, sama seperti alur
+  CodeMirror di atas — bukan bagian dari `go build`, dan tidak butuh dijalankan lagi di
+  device target.
+- Tidak ada dependency runtime Node.js di perangkat target — semua build toolchain di atas
+  hanya dipakai sekali saat menyiapkan aset, bukan bagian dari `go build`.
