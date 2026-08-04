@@ -573,6 +573,43 @@ sudah tercapai di atas.
   `setpgid` sandbox development dari Fase 4, sudah didokumentasikan di sana, tidak terkait
   fase ini).
 
+### Installer non-interaktif (`scripts/install.sh`)
+
+Mengisi placeholder yang sejak Fase 0 disebut di [09-deployment.md](09-deployment.md) §9.2
+("dituangkan jadi `scripts/install.sh` saat implementasi") tapi belum pernah benar-benar
+ditulis — semua instalasi sejauh ini dilakukan manual mengikuti langkah di dokumen itu.
+
+- Mengotomatisasi langkah 1–4, 6, 9 di §9.2: deteksi/pasang binary (`--binary`, atau auto-
+  cari `./taros` di sebelah script lalu `dist/taros-<arch>` sesuai `uname -m`), buat user
+  servis (Opsi A) **atau** pakai user existing lewat `--no-create-user --service-user <nama>`
+  (Opsi B — device pribadi), generate `/etc/taros/config.yaml` dari
+  `deploy/config.example.yaml` dengan `--listen`/`--root-dir`, pasang systemd unit dengan
+  `User=`/`Group=` disesuaikan otomatis, lalu jalankan `taros setup` untuk kredensial admin
+  pertama.
+- **Langkah 5, 7, 8 sengaja tetap manual** (butuh keputusan sadar per device — akses lintas-
+  pemilik untuk file explorer, trade-off keamanan mode sudo) — dicetak sebagai pengingat
+  eksplisit di akhir output script, bukan didiamkan begitu saja.
+- **Idempoten**: aman dijalankan ulang — user/config/kredensial yang sudah ada tidak ditimpa
+  diam-diam. Reset kredensial admin butuh `--force-setup` eksplisit, bukan default.
+- `deploy/systemd/taros.service` disinkronkan dengan contoh di §9.3 saat proses ini (sempat
+  drift — file yang sebenarnya di-copy installer belum punya `After=docker.service`/
+  `Wants=docker.service` yang sudah ada di contoh dokumentasi).
+- **Checkpoint tercapai — diuji end-to-end di container Docker dengan systemd sungguhan
+  sebagai PID 1** (`--privileged --cgroupns=host`, bukan mock/stub systemctl), binary
+  di-cross-compile untuk arch container (dikoreksi setelah percobaan pertama gagal "Exec
+  format error" — mesin dev ternyata aarch64, bukan x86_64 seperti asumsi awal):
+  - Instalasi bersih (Opsi A) dikonfirmasi end-to-end: servis `active (running)`, proses
+    berjalan sebagai user `taros` non-root (dicek lewat `/proc/<pid>/status`, bukan cuma
+    baca unit file), dashboard merespons `HTTP 200` di port yang dikonfigurasi.
+  - Re-run kedua (idempotency) dikonfirmasi tidak membuat ulang user/config, dan **tidak**
+    meminta prompt `taros setup` lagi karena kredensial sudah ada.
+  - `--force-setup` dikonfirmasi mengganti kredensial admin (username baru benar-benar
+    tersimpan).
+  - Opsi B (`--no-create-user --service-user <existing>`) dikonfirmasi: systemd unit yang
+    dipasang benar-benar memuat `User=`/`Group=` sesuai user yang dipilih, bukan default.
+  - Dua jalur error dikonfirmasi berhenti dengan pesan jelas + exit code 1: `--no-create-user`
+    dengan user yang tidak ada, dan menjalankan script bukan sebagai root.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
