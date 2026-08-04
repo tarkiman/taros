@@ -84,6 +84,12 @@ func runServer(args []string) {
 		slog.Error("init file explorer jail", "err", err)
 		os.Exit(1)
 	}
+	// Warning, not fatal — read-only rootDir is a valid choice, and the
+	// alternative (discovering this only when a user's paste/upload fails)
+	// is a worse first experience. See docs/09-deployment.md §9.2.
+	if err := jail.CheckWritable(); err != nil {
+		slog.Warn("file explorer root mungkin tidak writable oleh user servis ini — upload/paste/rename/delete akan gagal saat dipakai; lihat docs/09-deployment.md §9.2", "err", err)
+	}
 	jobQueue := fileexplorer.NewJobQueue(cfg.FileExplorer.MaxConcurrentOps, fileexplorer.CopyOptions{
 		BufferBytes:         256 * 1024,
 		ThrottleBytesPerSec: int64(cfg.FileExplorer.CopyThrottleMBps) * 1024 * 1024,

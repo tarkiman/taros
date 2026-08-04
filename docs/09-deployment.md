@@ -29,36 +29,87 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 
 ## 9.2 Instalasi di Perangkat
 
-Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi):
+Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi). Proyek ini bisa
+dipakai siapa saja (repo publik) dengan setup rumah yang berbeda-beda, jadi langkah di bawah
+ditulis dengan `SERVICE_USER` sebagai variabel — bukan asumsi harus selalu user dedicated baru
+bernama `tarkimanos`. Set sekali di awal, lalu salin-tempel apa adanya:
+
+```bash
+SERVICE_USER=tarkimanos   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
+```
 
 1. Copy binary ke `/usr/local/bin/tarkimanos`.
-2. Buat user sistem dedicated: `useradd --system --no-create-home --shell /usr/sbin/nologin tarkimanos`.
-3. Tambahkan user `tarkimanos` ke group `docker` (jika monitoring Docker dipakai) — dengan
-   peringatan eksplisit ke user soal implikasi keamanannya (lihat [07-security.md](07-security.md) §7.4).
-4. Copy `deploy/config.example.yaml` → `/etc/tarkimanos/config.yaml`, sesuaikan (root dir file
-   explorer, port, dll).
-5. Jalankan `tarkimanos setup` (interaktif) untuk membuat admin user pertama (username + password
+2. Tentukan user yang akan menjalankan servis — dua opsi valid, pilih salah satu:
+   - **Opsi A (direkomendasikan untuk server bersama banyak orang/publik)**: user sistem
+     dedicated baru, tanpa login interaktif — paling sesuai prinsip least-privilege:
+     ```bash
+     sudo useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+     ```
+   - **Opsi B (praktis untuk device pribadi)**: pakai user yang sudah ada dan biasa kamu
+     pakai (mis. user login utama di Raspberry Pi/STB kamu) — set `SERVICE_USER` ke user itu
+     dan **lewati** perintah `useradd` di atas. Trade-off-nya: proses servis punya hak akses
+     yang sama seperti akun kamu sehari-hari (bukan devices terisolasi sepenuhnya), tapi jauh
+     lebih sederhana untuk setup rumahan single-user.
+
+   Siapa pun `$SERVICE_USER`-nya, edit `User=`/`Group=` di `deploy/systemd/tarkimanos.service`
+   (default `tarkimanos`) supaya cocok **sebelum** meng-copy-nya di step 8.
+3. Tambahkan `$SERVICE_USER` ke group `docker` (jika monitoring Docker dipakai) — dengan
+   peringatan eksplisit ke user soal implikasi keamanannya (lihat [07-security.md](07-security.md) §7.4):
+   ```bash
+   sudo usermod -aG docker "$SERVICE_USER"
+   ```
+4. Copy `deploy/config.example.yaml` → `/etc/tarkimanos/config.yaml`, sesuaikan (`fileExplorer.
+   rootDir`, port, dll).
+5. **Akses baca/tulis untuk File Explorer** — `$SERVICE_USER` **tidak otomatis** punya akses ke
+   direktori manapun di luar apa yang secara eksplisit diberikan. Kalau `fileExplorer.rootDir`
+   (step 4) berisi data yang dimiliki user/proses lain (pola umum: media/dokumen yang
+   sebelumnya dikelola root atau servis lain), beri akses lewat grup bersama — jangan jalankan
+   servis sebagai root untuk ini:
+   ```bash
+   ROOT_DIR=/path/ke/fileExplorer.rootDir   # samakan dengan config.yaml step 4
+
+   sudo groupadd -f mediashare
+   sudo usermod -aG mediashare "$SERVICE_USER"
+   sudo chgrp -R mediashare "$ROOT_DIR"
+   sudo chmod -R g+rwX "$ROOT_DIR"
+   sudo find "$ROOT_DIR" -type d -exec chmod g+s {} \;   # folder baru otomatis ikut grup
+   sudo setfacl -R -d -m g:mediashare:rwX "$ROOT_DIR"    # file baru dari proses LAIN pun tetap group-writable
+   ```
+   **Catatan mount FUSE** (NTFS/exFAT eksternal lewat ntfs-3g dkk, biasa dipakai untuk HDD
+   eksternal): kalau mount-nya pakai opsi `user_id=0,group_id=0`, `chown`/`chgrp` di atas
+   **tidak berpengaruh** — kepemilikan file di situ dipaksa oleh layer FUSE-nya sendiri, bukan
+   metadata per-file biasa. Perbaikannya beda: remount dengan opsi `uid=`/`gid=` yang sesuai
+   `$SERVICE_USER`, bukan `chown`. Cek `mount | grep <titik-mount>` untuk tahu apakah ini kasusmu.
+
+   Servis mencoba menulis+menghapus file probe di `fileExplorer.rootDir` sekali saat startup
+   dan mencatat **peringatan** (bukan gagal start) di log kalau tidak bisa — cek
+   `journalctl -u tarkimanos` setelah start pertama kali untuk konfirmasi langkah ini sudah benar,
+   daripada baru ketahuan saat user mencoba upload/pindah file (kejadian nyata yang jadi alasan
+   catatan ini ditambahkan — root cause aslinya persis skenario di atas: direktori data dimiliki
+   root, servis jalan unprivileged, tidak ada langkah instalasi yang mengurus ini).
+6. Jalankan `tarkimanos setup` (interaktif) untuk membuat admin user pertama (username + password
    → disimpan ter-hash di `/etc/tarkimanos/config.yaml` atau file kredensial terpisah `/etc/tarkimanos/credentials`).
-6. (Opsional, untuk kontrol systemd granular tanpa root penuh) copy
-   `deploy/polkit/10-tarkimanos-systemd.rules` ke `/etc/polkit-1/rules.d/`.
-7. **(Opsional, dibutuhkan untuk: sudo di web terminal, DAN/ATAU tombol aksi
+7. (Opsional, untuk kontrol systemd granular tanpa root penuh) copy
+   `deploy/polkit/10-tarkimanos-systemd.rules` ke `/etc/polkit-1/rules.d/` (sesuaikan nama user
+   di file rule itu kalau `$SERVICE_USER` bukan `tarkimanos`).
+8. **(Opsional, dibutuhkan untuk: sudo di web terminal, DAN/ATAU tombol aksi
    start/stop/restart/reload di halaman Service** — lihat [04-features.md](04-features.md)
    §4.3 & §4.5, [07-security.md](07-security.md) §7.6 untuk trade-off-nya sebelum
    memilih**)**: pilih salah satu mode, **tidak dijalankan otomatis oleh installer**:
    ```bash
    # Mode "sudo dengan password" (paling lengkap — sudo di terminal + aksi service):
-   sudo passwd tarkimanos                # set password sistem (terpisah dari password dashboard)
-   echo 'tarkimanos ALL=(ALL) ALL' | sudo tee /etc/sudoers.d/tarkimanos
+   sudo passwd "$SERVICE_USER"                # set password sistem (terpisah dari password dashboard)
+   echo "$SERVICE_USER ALL=(ALL) ALL" | sudo tee /etc/sudoers.d/tarkimanos
    sudo chmod 440 /etc/sudoers.d/tarkimanos
 
    # ATAU mode "NOPASSWD" (hanya untuk device yang sudah terisolasi jaringan kuat):
-   echo 'tarkimanos ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/tarkimanos
+   echo "$SERVICE_USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/tarkimanos
    sudo chmod 440 /etc/sudoers.d/tarkimanos
 
    # ATAU mode "hanya aksi service" (tidak buka sudo di terminal sama sekali — cocok kalau
    # web terminal sengaja tidak dipakai untuk sudo, tapi tetap mau tombol start/stop/restart
    # service berfungsi dari dashboard):
-   echo 'tarkimanos ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *' | sudo tee /etc/sudoers.d/tarkimanos-systemctl
+   echo "$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *" | sudo tee /etc/sudoers.d/tarkimanos-systemctl
    sudo chmod 440 /etc/sudoers.d/tarkimanos-systemctl
    ```
    Selalu `visudo -c` (atau setara) setelah menulis file ini untuk validasi syntax sebelum
@@ -66,13 +117,17 @@ Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi):
    Tanpa salah satu mode ini, halaman Service tetap bisa **memonitor** (list unit, status,
    log) sepenuhnya — hanya tombol aksi yang akan gagal dengan pesan "Interactive
    authentication required" sampai salah satu sudoers rule di atas disiapkan.
-8. Copy `deploy/systemd/tarkimanos.service` ke `/etc/systemd/system/`, lalu:
+9. Copy `deploy/systemd/tarkimanos.service` (dengan `User=`/`Group=` sudah disesuaikan di
+   step 2) ke `/etc/systemd/system/`, lalu:
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl enable --now tarkimanos
    ```
 
 ## 9.3 Contoh Unit File Systemd
+
+`User=`/`Group=` di bawah adalah default `tarkimanos` — ganti keduanya kalau kamu pilih
+`$SERVICE_USER` lain di §9.2 step 2 (mis. user login existing-mu sendiri untuk device pribadi).
 
 ```ini
 [Unit]
