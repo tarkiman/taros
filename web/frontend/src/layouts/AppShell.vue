@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NIcon, NButton } from 'naive-ui'
+import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton } from 'naive-ui'
 import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
@@ -10,7 +10,6 @@ import { useThemeMode, type ThemeMode } from '../composables/useTheme'
 const auth = useAuthStore()
 const terminal = useTerminalStore()
 const router = useRouter()
-const collapsed = ref(false)
 const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
 
 const THEME_CYCLE: ThemeMode[] = ['system', 'light', 'dark']
@@ -24,14 +23,19 @@ function cycleTheme() {
   setThemeMode(next)
 }
 
-const NARROW_BREAKPOINT = 768
+const navLinks = computed(() => {
+  const links = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/docker', label: 'Docker', icon: Box },
+    { to: '/services', label: 'Service', icon: Server },
+    { to: '/files', label: 'Files', icon: FolderOpen },
+  ]
+  if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
+  return links
+})
 
 onMounted(() => {
   terminal.ensureLoaded()
-  // Sidebar defaults open on desktop but eats too much of a phone-width
-  // viewport — start collapsed there. Still user-toggleable afterward via
-  // NLayoutSider's own collapse trigger.
-  if (window.innerWidth < NARROW_BREAKPOINT) collapsed.value = true
 })
 
 async function handleLogout() {
@@ -46,97 +50,88 @@ async function handleLogout() {
     <div class="app-blob b"></div>
     <div class="app-blob c"></div>
   </div>
-  <NLayout has-sider style="height: 100vh; position: relative; z-index: 1">
-    <NLayoutSider bordered :width="220" :collapsed-width="64" collapsible v-model:collapsed="collapsed">
-      <div class="brand">{{ collapsed ? 'T' : 'TarOS' }}</div>
-      <nav class="side-nav" aria-label="Navigasi utama">
-        <RouterLink to="/" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Dashboard' : undefined">
-          <NIcon :component="LayoutDashboard" size="18" />
-          <span v-if="!collapsed">Dashboard</span>
-        </RouterLink>
-        <RouterLink to="/docker" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Docker' : undefined">
-          <NIcon :component="Box" size="18" />
-          <span v-if="!collapsed">Docker</span>
-        </RouterLink>
-        <RouterLink to="/services" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Service' : undefined">
-          <NIcon :component="Server" size="18" />
-          <span v-if="!collapsed">Service</span>
-        </RouterLink>
-        <RouterLink to="/files" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Files' : undefined">
-          <NIcon :component="FolderOpen" size="18" />
-          <span v-if="!collapsed">Files</span>
-        </RouterLink>
-        <RouterLink v-if="terminal.enabled" to="/terminal" class="side-nav-item" active-class="active" :aria-label="collapsed ? 'Terminal' : undefined">
-          <NIcon :component="SquareTerminal" size="18" />
-          <span v-if="!collapsed">Terminal</span>
+  <NLayout style="height: 100vh; position: relative; z-index: 1">
+    <NLayoutHeader bordered class="topbar">
+      <RouterLink to="/" class="brand">TarOS</RouterLink>
+      <nav class="top-nav" aria-label="Navigasi utama">
+        <RouterLink
+          v-for="link in navLinks"
+          :key="link.to"
+          :to="link.to"
+          class="top-nav-item"
+          active-class="active"
+        >
+          <NIcon :component="link.icon" size="16" />
+          <span class="nav-label">{{ link.label }}</span>
         </RouterLink>
       </nav>
-    </NLayoutSider>
-    <NLayout>
-      <NLayoutHeader bordered class="topbar">
-        <span class="spacer" />
-        <NButton quaternary circle size="small" :title="themeLabel" :aria-label="themeLabel" @click="cycleTheme">
-          <template #icon><NIcon :component="themeIcon" /></template>
-        </NButton>
-        <span class="user">{{ auth.username }}</span>
-        <NButton quaternary size="small" @click="handleLogout">
-          <template #icon><NIcon :component="LogOut" /></template>
-          <span class="hide-narrow">Keluar</span>
-        </NButton>
-      </NLayoutHeader>
-      <NLayoutContent class="content">
-        <slot />
-      </NLayoutContent>
-    </NLayout>
+      <span class="spacer" />
+      <NButton quaternary circle size="small" :title="themeLabel" :aria-label="themeLabel" @click="cycleTheme">
+        <template #icon><NIcon :component="themeIcon" /></template>
+      </NButton>
+      <span class="user hide-narrow">{{ auth.username }}</span>
+      <NButton quaternary size="small" @click="handleLogout">
+        <template #icon><NIcon :component="LogOut" /></template>
+        <span class="hide-narrow">Keluar</span>
+      </NButton>
+    </NLayoutHeader>
+    <NLayoutContent class="content">
+      <slot />
+      <footer class="app-foot">TarOS — dibuat oleh Tarkiman</footer>
+    </NLayoutContent>
   </NLayout>
 </template>
 
 <style scoped>
-.brand {
-  font-weight: 700;
-  padding: var(--space-4);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.side-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: 0 var(--space-2);
-}
-
-.side-nav-item {
+.topbar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  padding: 0 var(--space-5);
+  height: 56px;
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.top-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.top-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   color: var(--text-muted);
   text-decoration: none;
-  font-size: 0.9rem;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  font-size: 0.86rem;
   white-space: nowrap;
-  overflow: hidden;
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.side-nav-item:hover {
+.top-nav-item:hover {
   background: var(--accent-soft);
   color: var(--text);
 }
 
-.side-nav-item.active {
+.top-nav-item.active {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-4);
-  height: 56px;
 }
 
 .spacer {
@@ -145,7 +140,6 @@ async function handleLogout() {
 
 .user {
   color: var(--text-muted);
-  margin-right: var(--space-1);
   font-size: 0.9rem;
 }
 
@@ -155,13 +149,30 @@ async function handleLogout() {
   overflow: auto;
 }
 
+.app-foot {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
 @media (max-width: 768px) {
+  .topbar {
+    padding: 0 var(--space-3);
+    gap: var(--space-2);
+  }
+
   .content {
     padding: var(--space-3);
   }
 
-  .user {
+  .nav-label {
     display: none;
+  }
+
+  .top-nav-item {
+    padding: var(--space-2);
   }
 
   .hide-narrow {

@@ -405,11 +405,15 @@ const quickLinks = computed(() => {
   color: var(--warning);
 }
 
+/* No align-items: start here on purpose — the side column (two stacked
+   cards) is usually taller than the status card, and "start" alignment
+   left a visible dead gap below the shorter card instead of letting it
+   fill the row. Default stretch means the status card's own background
+   just extends to match instead. */
 .main-grid {
   display: grid;
   grid-template-columns: 1.7fr 1fr;
   gap: 16px;
-  align-items: start;
 }
 
 .empty-gauge {
