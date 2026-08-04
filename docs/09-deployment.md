@@ -6,10 +6,10 @@ Go native cross-compile, tanpa CGO (menghindari kebutuhan toolchain C untuk ARM 
 
 ```bash
 # Raspberry Pi 5 & sebagian besar revisi STB B860H (ARM 64-bit)
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/tarkimanos-arm64 ./cmd/tarkimanos
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-arm64 ./cmd/taros
 
 # Fallback untuk revisi STB yang ternyata 32-bit (jaga-jaga, verifikasi dulu dengan `uname -m`)
-GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/tarkimanos-armv7 ./cmd/tarkimanos
+GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/taros-armv7 ./cmd/taros
 ```
 
 - `-ldflags="-s -w"`: strip debug symbols & DWARF info → mengecilkan ukuran binary
@@ -35,13 +35,13 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 Langkah instalasi (dituangkan jadi `scripts/install.sh` saat implementasi). Proyek ini bisa
 dipakai siapa saja (repo publik) dengan setup rumah yang berbeda-beda, jadi langkah di bawah
 ditulis dengan `SERVICE_USER` sebagai variabel — bukan asumsi harus selalu user dedicated baru
-bernama `tarkimanos`. Set sekali di awal, lalu salin-tempel apa adanya:
+bernama `taros`. Set sekali di awal, lalu salin-tempel apa adanya:
 
 ```bash
-SERVICE_USER=tarkimanos   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
+SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
 ```
 
-1. Copy binary ke `/usr/local/bin/tarkimanos`.
+1. Copy binary ke `/usr/local/bin/taros`.
 2. Tentukan user yang akan menjalankan servis — dua opsi valid, pilih salah satu:
    - **Opsi A (direkomendasikan untuk server bersama banyak orang/publik)**: user sistem
      dedicated baru, tanpa login interaktif — paling sesuai prinsip least-privilege:
@@ -54,14 +54,14 @@ SERVICE_USER=tarkimanos   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
      yang sama seperti akun kamu sehari-hari (bukan devices terisolasi sepenuhnya), tapi jauh
      lebih sederhana untuk setup rumahan single-user.
 
-   Siapa pun `$SERVICE_USER`-nya, edit `User=`/`Group=` di `deploy/systemd/tarkimanos.service`
-   (default `tarkimanos`) supaya cocok **sebelum** meng-copy-nya di step 8.
+   Siapa pun `$SERVICE_USER`-nya, edit `User=`/`Group=` di `deploy/systemd/taros.service`
+   (default `taros`) supaya cocok **sebelum** meng-copy-nya di step 8.
 3. Tambahkan `$SERVICE_USER` ke group `docker` (jika monitoring Docker dipakai) — dengan
    peringatan eksplisit ke user soal implikasi keamanannya (lihat [07-security.md](07-security.md) §7.4):
    ```bash
    sudo usermod -aG docker "$SERVICE_USER"
    ```
-4. Copy `deploy/config.example.yaml` → `/etc/tarkimanos/config.yaml`, sesuaikan (`fileExplorer.
+4. Copy `deploy/config.example.yaml` → `/etc/taros/config.yaml`, sesuaikan (`fileExplorer.
    rootDir`, port, dll).
 5. **Akses baca/tulis untuk File Explorer** — `$SERVICE_USER` **tidak otomatis** punya akses ke
    direktori manapun di luar apa yang secara eksplisit diberikan. Kalau `fileExplorer.rootDir`
@@ -86,15 +86,15 @@ SERVICE_USER=tarkimanos   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
 
    Servis mencoba menulis+menghapus file probe di `fileExplorer.rootDir` sekali saat startup
    dan mencatat **peringatan** (bukan gagal start) di log kalau tidak bisa — cek
-   `journalctl -u tarkimanos` setelah start pertama kali untuk konfirmasi langkah ini sudah benar,
+   `journalctl -u taros` setelah start pertama kali untuk konfirmasi langkah ini sudah benar,
    daripada baru ketahuan saat user mencoba upload/pindah file (kejadian nyata yang jadi alasan
    catatan ini ditambahkan — root cause aslinya persis skenario di atas: direktori data dimiliki
    root, servis jalan unprivileged, tidak ada langkah instalasi yang mengurus ini).
-6. Jalankan `tarkimanos setup` (interaktif) untuk membuat admin user pertama (username + password
-   → disimpan ter-hash di `/etc/tarkimanos/config.yaml` atau file kredensial terpisah `/etc/tarkimanos/credentials`).
+6. Jalankan `taros setup` (interaktif) untuk membuat admin user pertama (username + password
+   → disimpan ter-hash di `/etc/taros/config.yaml` atau file kredensial terpisah `/etc/taros/credentials`).
 7. (Opsional, untuk kontrol systemd granular tanpa root penuh) copy
-   `deploy/polkit/10-tarkimanos-systemd.rules` ke `/etc/polkit-1/rules.d/` (sesuaikan nama user
-   di file rule itu kalau `$SERVICE_USER` bukan `tarkimanos`).
+   `deploy/polkit/10-taros-systemd.rules` ke `/etc/polkit-1/rules.d/` (sesuaikan nama user
+   di file rule itu kalau `$SERVICE_USER` bukan `taros`).
 8. **(Opsional, dibutuhkan untuk: sudo di web terminal, DAN/ATAU tombol aksi
    start/stop/restart/reload di halaman Service** — lihat [04-features.md](04-features.md)
    §4.3 & §4.5, [07-security.md](07-security.md) §7.6 untuk trade-off-nya sebelum
@@ -102,47 +102,47 @@ SERVICE_USER=tarkimanos   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
    ```bash
    # Mode "sudo dengan password" (paling lengkap — sudo di terminal + aksi service):
    sudo passwd "$SERVICE_USER"                # set password sistem (terpisah dari password dashboard)
-   echo "$SERVICE_USER ALL=(ALL) ALL" | sudo tee /etc/sudoers.d/tarkimanos
-   sudo chmod 440 /etc/sudoers.d/tarkimanos
+   echo "$SERVICE_USER ALL=(ALL) ALL" | sudo tee /etc/sudoers.d/taros
+   sudo chmod 440 /etc/sudoers.d/taros
 
    # ATAU mode "NOPASSWD" (hanya untuk device yang sudah terisolasi jaringan kuat):
-   echo "$SERVICE_USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/tarkimanos
-   sudo chmod 440 /etc/sudoers.d/tarkimanos
+   echo "$SERVICE_USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/taros
+   sudo chmod 440 /etc/sudoers.d/taros
 
    # ATAU mode "hanya aksi service" (tidak buka sudo di terminal sama sekali — cocok kalau
    # web terminal sengaja tidak dipakai untuk sudo, tapi tetap mau tombol start/stop/restart
    # service berfungsi dari dashboard):
-   echo "$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *" | sudo tee /etc/sudoers.d/tarkimanos-systemctl
-   sudo chmod 440 /etc/sudoers.d/tarkimanos-systemctl
+   echo "$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *" | sudo tee /etc/sudoers.d/taros-systemctl
+   sudo chmod 440 /etc/sudoers.d/taros-systemctl
    ```
    Selalu `visudo -c` (atau setara) setelah menulis file ini untuk validasi syntax sebelum
    dipakai — sudoers rule yang salah syntax bisa mengunci akses sudo sistem secara keseluruhan.
    Tanpa salah satu mode ini, halaman Service tetap bisa **memonitor** (list unit, status,
    log) sepenuhnya — hanya tombol aksi yang akan gagal dengan pesan "Interactive
    authentication required" sampai salah satu sudoers rule di atas disiapkan.
-9. Copy `deploy/systemd/tarkimanos.service` (dengan `User=`/`Group=` sudah disesuaikan di
+9. Copy `deploy/systemd/taros.service` (dengan `User=`/`Group=` sudah disesuaikan di
    step 2) ke `/etc/systemd/system/`, lalu:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable --now tarkimanos
+   sudo systemctl enable --now taros
    ```
 
 ## 9.3 Contoh Unit File Systemd
 
-`User=`/`Group=` di bawah adalah default `tarkimanos` — ganti keduanya kalau kamu pilih
+`User=`/`Group=` di bawah adalah default `taros` — ganti keduanya kalau kamu pilih
 `$SERVICE_USER` lain di §9.2 step 2 (mis. user login existing-mu sendiri untuk device pribadi).
 
 ```ini
 [Unit]
-Description=TarkimanOS - Lightweight Linux system monitor
+Description=TarOS - Lightweight Linux system monitor
 After=network.target docker.service
 Wants=docker.service
 
 [Service]
 Type=simple
-User=tarkimanos
-Group=tarkimanos
-ExecStart=/usr/local/bin/tarkimanos --config /etc/tarkimanos/config.yaml
+User=taros
+Group=taros
+ExecStart=/usr/local/bin/taros --config /etc/taros/config.yaml
 Restart=on-failure
 RestartSec=5
 
@@ -169,17 +169,17 @@ explorer memang butuh akses baca/tulis luas ke filesystem sesuai konfigurasi
 | Binary size | < 15MB (setelah strip) | — |
 
 Target ini diverifikasi manual saat MVP selesai (lihat [10-roadmap.md](10-roadmap.md)) dengan
-`systemctl status tarkimanos` (memory) dan `top`/`htop` saat idle vs saat dashboard dibuka beberapa klien.
+`systemctl status taros` (memory) dan `top`/`htop` saat idle vs saat dashboard dibuka beberapa klien.
 
 **Catatan pasca pivot ke Vue** (lihat [03-tech-stack.md](03-tech-stack.md)): target di atas
-tidak berubah, karena semuanya mengukur RSS proses `tarkimanos` di device target — Vue
+tidak berubah, karena semuanya mengukur RSS proses `taros` di device target — Vue
 dirender di browser klien yang mengakses dashboard (laptop/HP), bukan di proses Go/di device
 target itu sendiri. Ukuran bundle JS (lihat rincian per-chunk di komit yang menambahkan
 `web/frontend/`) memengaruhi waktu-muat/RAM browser klien, bukan resource budget STB.
 
 ### Benchmark Pembanding: CasaOS
 
-TarkimanOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM
+TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM
 2GB (lihat [01-overview.md](01-overview.md) "Kenapa proyek ini dibuat"). Supaya klaim "lebih
 ringan dari CasaOS" bisa dibuktikan, bukan cuma diasumsikan, sebelum mulai Fase 1
 ([10-roadmap.md](10-roadmap.md)) catat baseline nyata:
@@ -191,13 +191,13 @@ ringan dari CasaOS" bisa dibuktikan, bukan cuma diasumsikan, sebelum mulai Fase 
 2. Catat angka ini sebagai baseline pembanding di dokumen ini (isi tabel di bawah setelah
    pengukuran dilakukan — jangan menebak angkanya sebelum benar-benar diukur).
 3. Setelah tiap fase besar (terutama selesai Fase 1 MVP monitoring, dan Fase 2 setelah Docker
-   monitoring lengkap), bandingkan RSS TarkimanOS terhadap baseline CasaOS itu.
+   monitoring lengkap), bandingkan RSS TarOS terhadap baseline CasaOS itu.
 
 | Komponen | RAM terukur | Catatan |
 |---|---|---|
 | CasaOS (seluruh stack) | *(isi setelah diukur)* | Baseline pembanding |
-| TarkimanOS — idle | *(isi setelah diukur)* | Target: signifikan lebih rendah dari baseline di atas |
-| TarkimanOS — dashboard aktif | *(isi setelah diukur)* | — |
+| TarOS — idle | *(isi setelah diukur)* | Target: signifikan lebih rendah dari baseline di atas |
+| TarOS — dashboard aktif | *(isi setelah diukur)* | — |
 
 ## 9.5 Upgrade
 
@@ -229,7 +229,7 @@ systemd:
   protectedUnits:
     - "sshd.service"
     - "docker.service"
-    - "tarkimanos.service"
+    - "taros.service"
 
 docker:
   enabled: true
@@ -242,7 +242,7 @@ polling:
 
 terminal:
   enabled: true
-  shell: "/bin/bash"        # wajib eksplisit — jangan andalkan shell akun tarkimanos (nologin)
+  shell: "/bin/bash"        # wajib eksplisit — jangan andalkan shell akun taros (nologin)
   idleTimeoutMin: 15
   maxConcurrentSessions: 1
 

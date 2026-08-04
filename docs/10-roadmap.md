@@ -24,7 +24,7 @@ Dipecah jadi fase supaya ada checkpoint yang bisa dites di perangkat asli (khusu
 - `store/`: ring buffer in-memory.
 - `web/sse.go`: endpoint SSE metrics.
 - Dashboard utama: summary cards + grafik sparkline (uPlot) real-time.
-- **Checkpoint**: dashboard menampilkan data akurat di RPi 5 & STB, resource usage TarkimanOS
+- **Checkpoint**: dashboard menampilkan data akurat di RPi 5 & STB, resource usage TarOS
   sendiri terukur sesuai target di [09-deployment.md](09-deployment.md) §9.4.
 
 ## Fase 2 — Docker & Service Monitoring
@@ -269,7 +269,7 @@ sekaligus), dengan model deployment satu-binary tetap dipertahankan penuh.
   (panel slide-in) alih-alih panel inline di bawah halaman seperti sebelumnya.
 - **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer + Chromium) terhadap
   systemd sungguhan** (175 unit nyata di dev machine, termasuk unit CasaOS yang masih
-  terpasang — proyek yang justru digantikan TarkimanOS): navigasi via sidebar `RouterLink`,
+  terpasang — proyek yang justru digantikan TarOS): navigasi via sidebar `RouterLink`,
   pencarian filter bekerja benar (termasuk badge "terproteksi" muncul untuk `ssh.service`),
   checkbox showAll benar memperluas hasil (5→175 unit), dan drawer log berhasil menampilkan
   isi `journalctl` sungguhan (~4.8KB teks) untuk sebuah unit nyata. Aksi mutasi
@@ -388,7 +388,7 @@ sudah tercapai di atas.
 ## Fase 4 — Web Terminal (selesai-dev; validasi STB fisik tertunda)
 
 - `internal/terminal/`: `pty.go` (`spawnPTY`/`resizePTY` lewat `creack/pty`, shell diambil
-  eksplisit dari `terminal.shell` di config — **tidak** bergantung shell akun `tarkimanos` di
+  eksplisit dari `terminal.shell` di config — **tidak** bergantung shell akun `taros` di
   `/etc/passwd`, yang memang `nologin`), `session.go` (`Session` — baca/tulis PTY, tracking
   `lastInput` buat idle timeout, `Close()` idempoten yang mematikan **seluruh process group**
   lewat `syscall.Kill(-pid, SIGKILL)`, bukan cuma proses shell-nya — supaya command foreground
@@ -426,7 +426,7 @@ sudah tercapai di atas.
   membunuh seluruh process group, bukan cuma shell-nya) sempat gagal di lingkungan sandbox
   agent development ("operation not permitted") — dikonfirmasi lewat reproduksi terisolasi
   bahwa ini pembatasan syscall spesifik sandbox tsb, bukan bug aplikasi (unit systemd
-  `deploy/systemd/tarkimanos.service` tidak punya `SystemCallFilter=` seccomp, dan `setpgid`
+  `deploy/systemd/taros.service` tidak punya `SystemCallFilter=` seccomp, dan `setpgid`
   adalah syscall biasa yang dipakai shell sendiri untuk job control), jadi tidak diharapkan
   memengaruhi target deployment nyata. Kode final tetap `Setpgid: true`.
 - **Checkpoint tercapai — divalidasi dengan headless browser (Puppeteer) untuk alur utama, dan
@@ -511,6 +511,68 @@ sudah tercapai di atas.
   pilihan tema eksplisit bertahan setelah reload penuh tanpa flash; tema CodeMirror (Editor)
   ikut berganti sinkron dengan toggle global, bukan cuma komponen Naive UI/ECharts.
 
+### Rebrand ke TarOS + tema "Malam Jaga" (selesai-dev; validasi STB fisik tertunda)
+
+- **Rename TarkimanOS → TarOS**, teknis penuh, bukan cuma kosmetik UI: binary/CLI (`cmd/
+  tarkimanos/` → `cmd/taros/`), unit systemd (`tarkimanos.service` → `taros.service`, default
+  `User=`/`Group=` ikut jadi `taros`), path config (`/etc/tarkimanos/` → `/etc/taros/`),
+  nama cookie sesi (`tarkimanos_session` → `taros_session` — sesi lama otomatis tidak valid,
+  cukup login ulang, bukan kehilangan data), file probe write-check filesystem, entri
+  `ProtectedUnits` default (supaya proteksi self-service tetap cocok dengan nama unit baru).
+  **Sengaja tidak diubah**: module path Go (`github.com/tarkiman/tarkiman-os`) dan nama repo
+  GitHub — mengubah itu berarti rename repo GitHub itu sendiri, tindakan terpisah yang lebih
+  berisiko dan tidak diminta. Lihat [[project-taros-motivation]] (memori) untuk konteks
+  keputusan nama.
+- **Tema visual baru "Malam Jaga"**: kanvas gelap dengan tiga "blob" cahaya (biru/ungu/teal)
+  yang blur besar dan bergerak pelan di belakang seluruh app (`AppShell.vue` dan `LoginView.vue`
+  masing-masing me-mount `.app-backdrop` sendiri, karena keduanya bukan child dari layout yang
+  sama), lalu kartu-kartu di atasnya jadi kaca buram (`backdrop-filter: blur`). Diterapkan
+  **app-wide lewat satu titik**, bukan halaman per halaman: `theme.ts` mengarahkan token warna
+  `Card`/`Layout` Naive UI ke token `glass`/`glassBorder` (mekanisme theming resmi Naive UI),
+  dan `tokens.css` menambahkan `backdrop-filter` lewat rule global `.n-card`/`.n-layout-sider`/
+  dst (properti yang tidak dikontrol Naive UI sendiri, jadi tidak ada konflik cascade). Efeknya:
+  Docker/Service/Files halaman ikut jadi glass **otomatis tanpa disentuh sama sekali** — cuma
+  Dashboard & Login yang butuh perubahan langsung (backdrop blob-nya, karena itu elemen baru,
+  bukan styling ulang yang sudah ada). `prefers-reduced-motion` mematikan animasi drift blob.
+- **Dashboard dirombak jadi widget lux**, terinspirasi tampilan dashboard CasaOS tapi
+  benar-benar dari data TarOS sendiri, bukan tiruan tampilannya: jam+tanggal live, banner
+  kesehatan (gabungan status Docker + jumlah unit systemd gagal, keduanya real, masing-masing
+  disembunyikan dengan tenang kalau subsistemnya nonaktif/tidak tersedia — tidak ada
+  peringatan palsu), kartu "Ringkasan Sistem" (4 gauge CPU/RAM/Disk/Suhu yang sudah ada,
+  dikumpulkan jadi satu kartu + strip I/O ringkas), **"Container Teratas"** (5 container
+  dengan CPU tertinggi, dari `dockerApi.containers()` yang sudah ada — pengganti "top
+  processes" ala CasaOS yang jujur: TarOS tidak mengumpulkan data proses OS per-proses, jadi
+  dipakai data yang benar-benar ada dan malah lebih relevan untuk STB yang isinya container),
+  kartu ringkasan Docker (running/total), dan baris "Akses Cepat" ke 5 halaman asli (Dashboard/
+  Docker/Service/Files/Terminal-kalau-aktif) — bukan app-launcher generik seperti CasaOS,
+  karena TarOS sudah punya sidebar navigasi sendiri. Grafik riwayat CPU/Disk I/O dan tabel
+  detail Penyimpanan/Jaringan yang sudah ada **dipertahankan penuh**, cuma dipindah ke bawah
+  widget baru — tidak ada kapabilitas lama yang dibuang untuk redesign ini.
+- **Bug nyata ditemukan & diperbaiki lewat review screenshot** (bukan lewat kode yang diubah
+  langsung — bug ini sudah ada sebelum fase ini, baru kelihatan setelah dashboard dirombak
+  dan datanya diperiksa visual): grafik "Disk I/O — 15 menit terakhir" menampilkan skala Y
+  rusak (`25000000 MB/s`) karena riwayat awal (`fetchHistory`) memuat nilai mentah bytes/detik
+  langsung tanpa konversi, sementara data live susulan (`pushPoint` dari SSE) membaginya
+  dengan 1024×1024 dulu — dua sumber data yang sama-sama masuk satu chart dengan skala
+  berbeda jauh. Diperbaiki dengan menambah parameter `scale` di `toPoints()` dan memakainya
+  konsisten untuk kedua sumber.
+- **Catatan proses development berulang di fase ini**: beberapa kali pengujian sempat
+  menampilkan hasil basi (perubahan kode sudah di-build tapi browser masih menunjukkan
+  versi lama) karena `pkill -f "<path>/taros"` tidak match proses yang dijalankan lewat path
+  relatif (`./taros`, argv-nya cuma berisi `./taros`, bukan path lengkap) — proses lama tidak
+  benar-benar mati, proses baru gagal bind port, dan yang lama tetap melayani. Diperbaiki
+  dengan mematikan proses via PID eksak dan **selalu verifikasi hash asset yang di-serve
+  cocok dengan file di `dist/` sebelum mempercayai hasil screenshot** — pelajaran untuk sesi
+  testing berikutnya yang pakai pola serupa (build ulang → restart proses lokal → screenshot).
+- **Checkpoint tercapai — divalidasi dengan headless browser di seluruh halaman (Dashboard,
+  Docker, Service, Files, Terminal, Login), viewport desktop & mobile, tema gelap & terang**:
+  data Dashboard sepenuhnya nyata (container/unit systemd sungguhan dari mesin dev, bukan
+  contoh), backdrop blob tampil konsisten di semua halaman termasuk Login (sempat luput di
+  percobaan pertama karena `LoginView.vue` tidak memakai `AppShell`, jadi butuh `.app-backdrop`
+  sendiri), tidak ada console error baru (satu-satunya error yang muncul adalah keterbatasan
+  `setpgid` sandbox development dari Fase 4, sudah didokumentasikan di sana, tidak terkait
+  fase ini).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
@@ -521,7 +583,7 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
 - Alerting (threshold-based, notifikasi Telegram/webhook).
 - Perekaman sesi terminal (opt-in, dengan peringatan eksplisit) — lihat
   [07-security.md](07-security.md) §7.6 kenapa ini tidak jadi default.
-- Login terminal berbasis PAM/user sistem asli (bukan lagi user service `tarkimanos` tunggal) —
+- Login terminal berbasis PAM/user sistem asli (bukan lagi user service `taros` tunggal) —
   dipertimbangkan lagi kalau kebutuhannya berkembang jadi multi-user administrasi penuh.
 - Log viewer streaming (bukan tail on-demand) untuk container & systemd unit.
 - Multi-user dengan role-based access.

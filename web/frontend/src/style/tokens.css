@@ -24,9 +24,23 @@
   --danger: #ef5a5a;
   --danger-soft: rgba(239, 90, 90, 0.14);
 
+  /* "Malam Jaga" glass theme — ambient blobs behind a blurred glass UI, see
+     the Dashboard concept in docs/10-roadmap.md Fase 5. text-faint sits one
+     step quieter than text-muted (timestamps, uptime-style captions);
+     track is the unfilled ring of a gauge/progress element. */
+  --text-faint: #5e6878;
+  --glow-a: #3b6fd6;
+  --glow-b: #6a4fd1;
+  --glow-c: #1fb8a3;
+  --glass: rgba(23, 27, 34, 0.55);
+  --glass-strong: rgba(23, 27, 34, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --track: rgba(255, 255, 255, 0.08);
+
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --radius-xl: 22px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -57,8 +71,17 @@
   --border: #e2e5ea;
   --text: #14161a;
   --text-muted: #5b6270;
+  --text-faint: #8991a0;
   --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.08);
+
+  --glow-a: #a9c8ff;
+  --glow-b: #cfc2fb;
+  --glow-c: #a6e8dd;
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(20, 22, 26, 0.08);
+  --track: rgba(20, 22, 26, 0.08);
 }
 
 * {
@@ -83,4 +106,71 @@ code,
 pre,
 .mono {
   font-family: var(--font-mono);
+}
+
+/* Glass surfaces: theme.ts sets Naive UI's Card/Layout *colors* to the glass
+   rgba tokens (the supported theming mechanism), but backdrop-filter isn't a
+   Naive UI theme token, so it's applied here as a plain global rule instead
+   — additive, doesn't fight anything Naive UI itself sets. */
+.n-card,
+.n-layout-sider,
+.n-layout-header,
+.n-drawer-content,
+.n-modal {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Ambient backdrop — fixed behind the whole app (mounted once in
+   AppShell.vue), three slow-drifting blurred blobs over a near-black/pearl
+   canvas. Static (no blobs) satisfies prefers-reduced-motion. */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.app-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: app-blob-drift 34s ease-in-out infinite alternate;
+}
+.app-blob.a {
+  width: 620px;
+  height: 620px;
+  left: -160px;
+  top: -180px;
+  background: var(--glow-a);
+}
+.app-blob.b {
+  width: 560px;
+  height: 560px;
+  right: -180px;
+  top: 6%;
+  background: var(--glow-b);
+  animation-duration: 40s;
+  animation-delay: -6s;
+}
+.app-blob.c {
+  width: 500px;
+  height: 500px;
+  left: 28%;
+  bottom: -240px;
+  background: var(--glow-c);
+  opacity: 0.32;
+  animation-duration: 46s;
+  animation-delay: -14s;
+}
+
+@keyframes app-blob-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(4%, 6%) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-blob { animation: none; }
 }

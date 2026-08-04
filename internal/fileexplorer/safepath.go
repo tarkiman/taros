@@ -56,7 +56,7 @@ func NewJail(root string, blocklist []string) (*Jail, error) {
 // exact gap (service user has no write access to the configured root) was
 // found via real use, not anticipated in advance.
 func (j *Jail) CheckWritable() error {
-	probe := filepath.Join(j.Root, ".tarkimanos-write-check")
+	probe := filepath.Join(j.Root, ".taros-write-check")
 	f, err := os.Create(probe)
 	if err != nil {
 		return fmt.Errorf("root %q tidak bisa ditulis oleh user servis ini: %w", j.Root, err)

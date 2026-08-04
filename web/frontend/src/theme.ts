@@ -11,6 +11,9 @@ interface ColorTokens {
   success: string
   warning: string
   danger: string
+  glass: string
+  glassStrong: string
+  glassBorder: string
 }
 
 // Mirrors src/style/tokens.css so Naive UI components (buttons, cards,
@@ -28,6 +31,9 @@ export const tokens: { dark: ColorTokens; light: ColorTokens } = {
     success: '#3ecf6e',
     warning: '#e0a83e',
     danger: '#ef5a5a',
+    glass: 'rgba(23, 27, 34, 0.55)',
+    glassStrong: 'rgba(23, 27, 34, 0.72)',
+    glassBorder: 'rgba(255, 255, 255, 0.09)',
   },
   light: {
     bg: '#f4f5f7',
@@ -40,6 +46,9 @@ export const tokens: { dark: ColorTokens; light: ColorTokens } = {
     success: '#3ecf6e',
     warning: '#e0a83e',
     danger: '#ef5a5a',
+    glass: 'rgba(255, 255, 255, 0.62)',
+    glassStrong: 'rgba(255, 255, 255, 0.82)',
+    glassBorder: 'rgba(20, 22, 26, 0.08)',
   },
 }
 
@@ -64,9 +73,14 @@ function overridesFor(t: ColorTokens): GlobalThemeOverrides {
       fontFamilyMono:
         'ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace',
     },
-    Card: { color: t.surface, borderColor: t.border },
-    Layout: { color: t.bg, siderColor: t.surface },
-    Menu: { color: t.surface },
+    // Glass tokens here, not t.surface — cards/sidebar/topbar stay
+    // translucent so the ambient blob backdrop (AppShell.vue, mounted once
+    // behind everything) reads through them. Layout's own `color` is
+    // transparent for the same reason: an opaque main-content background
+    // would hide the backdrop entirely behind every page's content area.
+    Card: { color: t.glass, borderColor: t.glassBorder },
+    Layout: { color: 'transparent', siderColor: t.glass, headerColor: t.glass },
+    Menu: { color: 'transparent' },
   }
 }
 

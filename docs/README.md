@@ -1,6 +1,6 @@
-# TarkimanOS — Dokumentasi Desain
+# TarOS — Dokumentasi Desain
 
-**TarkimanOS** adalah service monitoring sistem Linux berbasis Go,
+**TarOS** adalah service monitoring sistem Linux berbasis Go,
 ditujukan untuk perangkat ARM dengan resource terbatas: **Raspberry Pi 5** dan **STB B860H**
 (RAM 2GB). Satu binary tunggal berisi backend + frontend (server-rendered), tanpa runtime
 tambahan (tidak butuh Node.js/Python di perangkat target).

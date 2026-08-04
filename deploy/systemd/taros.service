@@ -1,12 +1,12 @@
 [Unit]
-Description=TarkimanOS - Lightweight Linux system monitor
+Description=TarOS - Lightweight Linux system monitor
 After=network.target
 
 [Service]
 Type=simple
-User=tarkimanos
-Group=tarkimanos
-ExecStart=/usr/local/bin/tarkimanos --config /etc/tarkimanos/config.yaml
+User=taros
+Group=taros
+ExecStart=/usr/local/bin/taros --config /etc/taros/config.yaml
 Restart=on-failure
 RestartSec=5
 
