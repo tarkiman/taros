@@ -128,11 +128,25 @@ if [[ "$DOCKER_GROUP" -eq 1 ]]; then
 fi
 
 # --- 4. Install binary ---
+# Lives in its own directory, not directly in the shared /usr/local/bin —
+# the in-app self-update feature (internal/selfupdate) needs to create a
+# temp file and rename it over the running binary, and *that* needs write
+# access to the containing directory itself, not just the binary file
+# (file ownership alone doesn't grant it — verified directly, not assumed).
+# Granting the service user write access to the whole shared bin directory
+# would be a much bigger privilege grant than intended, so instead it gets
+# a small dedicated directory it fully owns, with a symlink from
+# /usr/local/bin for normal CLI use (`taros setup`, etc.) to keep working
+# unchanged. See docs/09-deployment.md §9.5 and docs/07-security.md.
+BIN_DIR=/opt/taros
 OLD_VERSION=""
-[[ -x /usr/local/bin/taros ]] && OLD_VERSION="$(/usr/local/bin/taros version 2>/dev/null | awk '{print $2}')"
-log "Copy binary ke /usr/local/bin/taros"
-install -m 0755 "$BINARY_PATH" /usr/local/bin/taros
-NEW_VERSION="$(/usr/local/bin/taros version 2>/dev/null | awk '{print $2}')"
+[[ -x "$BIN_DIR/taros" ]] && OLD_VERSION="$("$BIN_DIR/taros" version 2>/dev/null | awk '{print $2}')"
+log "Copy binary ke $BIN_DIR/taros"
+mkdir -p "$BIN_DIR"
+install -m 0755 "$BINARY_PATH" "$BIN_DIR/taros"
+chown -R "$SERVICE_USER" "$BIN_DIR"
+ln -sf "$BIN_DIR/taros" /usr/local/bin/taros
+NEW_VERSION="$("$BIN_DIR/taros" version 2>/dev/null | awk '{print $2}')"
 
 # --- 5. Config ---
 mkdir -p /etc/taros

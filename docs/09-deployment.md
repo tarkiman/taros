@@ -252,7 +252,49 @@ ringan dari CasaOS" bisa dibuktikan, bukan cuma diasumsikan, sebelum mulai Fase 
 
 ## 9.5 Upgrade
 
-- **Cara termudah: jalankan ulang perintah instalasi satu baris** (§9.2 "Jalur tercepat") —
+### Lewat dashboard (paling mudah — tidak perlu akses terminal/SSH sama sekali)
+
+Tombol versi di topbar (lihat [04-features.md](04-features.md) §4.8) → "Update Sekarang" kalau
+ada rilis lebih baru. Mekanisme di baliknya (`internal/selfupdate`):
+
+1. `GET /api/update/check` menanyakan `api.github.com/repos/tarkiman/taros/releases/latest`
+   (URL hardcoded, bukan configurable — lihat [07-security.md](07-security.md) §7.9) dan
+   membandingkan `tag_name`-nya dengan `main.version` build ini sendiri.
+2. `POST /api/update/apply` mengunduh tarball rilis yang cocok dengan `runtime.GOARCH`,
+   mengekstrak binary `taros` dari dalamnya (langsung di memori/stream, `archive/tar` +
+   `compress/gzip` stdlib, tidak ada dependency tambahan), lalu `os.Rename` menimpa binary yang
+   sedang berjalan — aman di Linux karena proses yang sedang jalan tetap memegang inode lamanya
+   lewat file descriptor sendiri, rename cuma mengarahkan ulang entry direktori.
+3. Proses **keluar bersih** (`os.Exit(0)`) sekitar 700ms setelah mengirim respons sukses ke
+   client (jeda ini supaya respons-nya benar-benar terkirim dulu, tidak race dengan proses mati).
+   systemd (`Restart=always`, lihat catatan di §9.3/unit file) yang menghidupkannya lagi,
+   menjalankan binary baru. **Tidak ada panggilan `systemctl` sama sekali** dari dalam aplikasi
+   — tidak butuh sudo/polkit, beda dari tombol aksi Docker/Service yang memang butuh privilege
+   tambahan.
+4. Kenapa ini bisa jalan tanpa root: `scripts/install.sh` memasang binary di `/opt/taros/taros`
+   (**bukan** langsung di `/usr/local/bin/`) dan men-chown seluruh direktori itu ke user servis
+   — `/usr/local/bin/taros` jadi symlink saja untuk pemakaian CLI. Ini ketahuan lewat pengujian
+   langsung, bukan asumsi: percobaan pertama menaruh binary langsung di `/usr/local/bin` dan
+   cuma meng-chown *file*-nya gagal dengan `permission denied`, baik untuk membuat file
+   sementara maupun untuk rename akhir — ternyata membuat/mengganti entry di suatu direktori
+   butuh izin tulis ke *direktori* itu sendiri, kepemilikan atas file di dalamnya tidak cukup
+   (diverifikasi manual: bahkan `mv` sebagai user servis atas file yang di-chown ke dirinya
+   sendiri, ke dalam direktori root-owned, tetap ditolak).
+5. **Semua sesi login hilang setelah update** — session store TarOS murni in-memory (tidak ada
+   database), jadi restart proses apa pun otomatis membersihkannya. UI mengingatkan ini
+   sebelum konfirmasi. Config (`/etc/taros/config.yaml`) dan kredensial admin tidak tersentuh
+   sama sekali — hanya file binary yang diganti.
+6. Instalasi lama (dari sebelum `/opt/taros/` ada) tidak otomatis kompatibel dengan tombol ini
+   — direktori binary-nya masih root-owned. Jalankan ulang `scripts/quick-install.sh` atau
+   `install.sh` sekali (lihat opsi CLI di bawah) untuk pindah ke layout baru; setelah itu tombol
+   update di dashboard berfungsi normal untuk seterusnya.
+7. Toggle `update.enabled` di config (default **true**) mematikan fitur ini total kalau tidak
+   diinginkan — endpoint `check` tetap merespons (menunjukkan status nonaktif), `apply` menolak
+   dengan HTTP 403.
+
+### Lewat CLI (`scripts/install.sh` / `quick-install.sh`)
+
+- **Cara termudah tanpa dashboard: jalankan ulang perintah instalasi satu baris** (§9.2 "Jalur tercepat") —
   `quick-install.sh` selalu mengambil rilis terbaru, dan `install.sh` sekarang secara eksplisit
   **me-restart** servisnya setiap dijalankan (bukan cuma `enable --now`, yang ternyata *no-op*
   kalau servisnya sudah aktif — lihat catatan bug di bawah), jadi binary baru benar-benar

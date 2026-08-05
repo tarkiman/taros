@@ -20,6 +20,7 @@ type Config struct {
 	Systemd      SystemdConfig      `yaml:"systemd"`
 	FileExplorer FileExplorerConfig `yaml:"fileExplorer"`
 	Terminal     TerminalConfig     `yaml:"terminal"`
+	Update       UpdateConfig       `yaml:"update"`
 }
 
 type ServerConfig struct {
@@ -98,6 +99,17 @@ type TerminalConfig struct {
 	MaxConcurrentSessions int    `yaml:"maxConcurrentSessions"`
 }
 
+// UpdateConfig — see docs/09-deployment.md §9.5 & docs/07-security.md.
+// Enabled by default: unlike Terminal, this doesn't grant shell/command
+// execution — it only ever replaces the running binary with the official
+// GitHub release asset for this exact repo (hardcoded, not configurable
+// here), triggered by an already-authenticated dashboard user. Still
+// toggleable for anyone who'd rather update purely via re-running
+// scripts/quick-install.sh instead.
+type UpdateConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -143,6 +155,9 @@ func Default() Config {
 			Shell:                 "/bin/bash",
 			IdleTimeoutMin:        15,
 			MaxConcurrentSessions: 1,
+		},
+		Update: UpdateConfig{
+			Enabled: true,
 		},
 	}
 }
