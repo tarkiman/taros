@@ -67,10 +67,11 @@ func (s *Session) Close() error {
 	s.mu.Unlock()
 
 	if s.cmd.Process != nil {
-		// Negative pid = signal the whole process group (requires the
-		// Setpgid set at spawn time in pty.go) — catches children the
-		// shell spawned (e.g. a foreground command still running), not
-		// just the shell itself.
+		// Negative pid = signal the whole process group — the shell is its
+		// own process group leader as a side effect of Setsid at spawn
+		// time (pty.go, via creack/pty), not an explicit Setpgid. Catches
+		// children the shell spawned (e.g. a foreground command still
+		// running), not just the shell itself.
 		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
 	}
 	err := s.ptmx.Close()

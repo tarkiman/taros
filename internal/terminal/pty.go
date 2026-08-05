@@ -9,20 +9,31 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 
 	"github.com/creack/pty"
 )
 
-// spawnPTY starts shell in its own process group (Setpgid) so Session.Close
-// can kill the whole group, not just the shell itself — a foreground child
-// process (e.g. a long-running command the user typed) would otherwise be
-// orphaned instead of cleaned up. TERM is set explicitly since the PTY
-// process doesn't inherit one from a real terminal.
+// spawnPTY starts shell. TERM is set explicitly since the PTY process
+// doesn't inherit one from a real terminal.
+//
+// No explicit Setpgid here — pty.Start (creack/pty) already forces
+// Setsid: true on the child's SysProcAttr, and setsid() makes the child a
+// new session leader that's *also* the process group leader of that new
+// session as a side effect (POSIX). An explicit Setpgid alongside that is
+// not just redundant, it's actively broken: once setsid() has run, the
+// child is a session leader, and POSIX forbids a session leader from
+// calling setpgid() on itself — the exact "operation not permitted" this
+// combination produced 100% of the time on real hardware (verified
+// directly: reproduced with a minimal repro binary on a physical STB,
+// confirmed fixed by dropping Setpgid, isolated from every other
+// candidate — systemd unit hardening, running user, cgroup/rlimit
+// process caps — which were all ruled out first, each testing clean).
+// Session.Close's `kill(-pid, ...)` (session.go) still works exactly the
+// same afterward: killing the process group Setsid already put the child
+// in charge of.
 func spawnPTY(shell string) (*os.File, *exec.Cmd, error) {
 	cmd := exec.Command(shell)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {

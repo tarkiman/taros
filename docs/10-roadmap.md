@@ -385,7 +385,7 @@ fase sebelumnya di proyek ini (tidak ada akses hardware langsung).
 **Fase 4 (Web Terminal) dilanjutkan** — hold-nya khusus menunggu Fase UI/UX selesai, dan itu
 sudah tercapai di atas.
 
-## Fase 4 — Web Terminal (selesai-dev; validasi STB fisik tertunda)
+## Fase 4 — Web Terminal (selesai-rilis — tervalidasi di STB fisik, lihat catatan bug/fix di bagian bawah roadmap ini)
 
 - `internal/terminal/`: `pty.go` (`spawnPTY`/`resizePTY` lewat `creack/pty`, shell diambil
   eksplisit dari `terminal.shell` di config — **tidak** bergantung shell akun `taros` di
@@ -965,12 +965,12 @@ Ditemukan saat mencoba mengaktifkan & menguji fitur Web Terminal (Fase 4) yang s
 sudah dibangun tapi belum tervalidasi di STB fisik: mengklik menu Terminal di instance
 development menghasilkan "Gagal terhubung" tanpa detail apa pun.
 
-- **Root cause di instance development**: bukan bug TarOS — spawn PTY (`fork/exec /bin/bash`)
-  ditolak dengan `operation not permitted`, gara-gara instance itu dijalankan di dalam sandbox
-  Claude Code sendiri, yang sengaja mencegah agent men-spawn shell PTY interaktif (bahkan
-  dengan sandbox dinonaktifkan untuk command start-nya sekalipun) — batasan level environment
-  development, tidak relevan sama sekali untuk instalasi sungguhan (systemd di STB/RPi biasa,
-  di luar sandbox apa pun).
+- **Dugaan awal soal root cause di instance development ternyata salah** (dikoreksi di entri
+  di bawah, "Bug nyata: konflik `Setpgid`/`Setsid`") — sempat disimpulkan ini batasan sandbox
+  Claude Code, tapi setelah user melaporkan error identik di STB fisik sungguhan (bukan
+  instance development), investigasi lanjutan menemukan ini bug nyata di kode TarOS sendiri,
+  bukan batasan environment apa pun. Dicatat di sini apa adanya (termasuk kesimpulan awal yang
+  salah) karena itu bagian nyata dari proses debugging-nya.
 - **Gap nyata yang tetap ditemukan & diperbaiki** selama investigasi ini:
   `internal/web/ws_terminal.go` sebelumnya **tidak pernah mencatat error apa pun** ke log
   server saat `TerminalManager.NewSession()` gagal (shell tidak ada, `exec` diblokir
@@ -986,10 +986,52 @@ development menghasilkan "Gagal terhubung" tanpa detail apa pun.
   upgrade WebSocket, supaya body JSON error-nya kebaca) sebelum dan sesudah fix — sebelumnya
   nihil di log, sesudahnya baris `ERROR terminal session start failed ... err="..."` muncul
   persis seperti errornya.
-- **Validasi STB fisik untuk fitur Terminal secara keseluruhan masih tertunda** — perlu
-  dicoba langsung di STB (bukan instance development) karena batasan sandbox di atas membuat
-  ini satu-satunya fitur yang strukturalnya tidak bisa divalidasi end-to-end dari lingkungan
-  development ini.
+### Web Terminal: bug nyata — konflik `Setpgid`/`Setsid` bikin spawn PTY selalu gagal
+
+User mencoba fitur Terminal di STB fisik sungguhan (B860H) setelah fix logging di atas —
+hasilnya persis error yang sama, `fork/exec /bin/bash: operation not permitted`, di **STB
+sungguhan**, bukan instance development. Ini membatalkan kesimpulan sebelumnya ("batasan
+sandbox Claude Code") dan memicu investigasi ulang dari nol — proses debugging-nya jadi
+contoh baik kenapa "menguji di device sungguhan" (§ Definisi Selesai) memang penting, bukan
+formalitas.
+
+- **Metodologi eliminasi, dilakukan langsung di STB user** (bukan tebak-tebakan): dicek satu
+  per satu — plain `fork/exec` biasa via `systemd-run` (berhasil), PTY manual di sesi
+  interaktif user sendiri (berhasil), PTY sebagai user `taros` via `systemd-run` (berhasil),
+  PTY sebagai `root` pakai **file unit systemd asli** `taros.service` cuma `ExecStart`-nya
+  diganti jadi `script` (berhasil) — jadi bukan soal user/group/`NoNewPrivileges`/hardening
+  unit/limit resource (`TasksMax`/`ulimit -u` dicek juga, jauh dari batas). Yang tersisa:
+  binary Go `taros` itu sendiri.
+- **Dikonfirmasi lewat program Go minimal** yang meniru persis `internal/terminal/pty.go`
+  (di-build untuk arm64, dikirim ke STB via HTTP server sementara di jaringan lokal yang
+  sama — STB & mesin development ada di LAN yang sama, dikonfirmasi sebelumnya lewat
+  instance preview) — program itu **gagal identik** bahkan dijalankan langsung interaktif
+  di STB, di luar systemd sama sekali. Jadi murni soal kode Go + `creack/pty`, bukan
+  systemd/OS/environment apa pun.
+- **Root cause**: `pty.Start()` (`creack/pty`) **selalu** memaksa `Setsid: true` ke
+  `SysProcAttr` proses yang di-spawn (lihat source `creack/pty` — `StartWithSize` set itu
+  eksplisit sebelum `cmd.Start()`, terlepas dari `SysProcAttr` apa yang caller sudah isi).
+  Kode kita di `internal/terminal/pty.go` **juga** set `Setpgid: true` secara terpisah
+  (untuk keperluan `Session.Close()` bisa `kill(-pid, ...)` ke seluruh process group). Kombinasi
+  `Setsid: true` + `Setpgid: true` itu melanggar POSIX: `setsid()` membuat proses jadi
+  session leader (efek sampingnya, otomatis juga jadi process group leader dari session
+  baru itu) — dan POSIX **melarang** session leader memanggil `setpgid()` pada dirinya
+  sendiri sesudahnya, apa pun target pgid-nya, sekalipun ke nilai yang secara efektif sama.
+  Itu persis `EPERM` yang muncul, 100% reproducible, di **semua** environment yang dicoba
+  (STB fisik, container Docker `--privileged`, environment development) — bukan kebetulan
+  environment-spesifik seperti dugaan awal, karena memang bug logika, bukan masalah privilege.
+- **Fix**: hapus `Setpgid: true` dari `spawnPTY` (`internal/terminal/pty.go`) — tidak
+  dibutuhkan lagi karena `Setsid: true` dari `creack/pty` **sudah** membuat shell jadi
+  process group leader dari group barunya sebagai efek samping, jadi `kill(-pid, ...)` di
+  `Session.Close()` (`session.go`) tetap berfungsi identik tanpa perubahan lain.
+- **Diverifikasi dengan disiplin sebelum dan sesudah fix**, di STB fisik sungguhan: program
+  repro minimal dengan `Setpgid` (gagal) vs tanpa `Setpgid` (berhasil) dikonfirmasi dulu
+  sebelum fix diterapkan ke kode sungguhan — bukan cuma teori. Sesudah fix, binary `taros`
+  penuh dites lagi lewat automasi browser sungguhan: buka `/terminal` → status "Terhubung" →
+  ketik `echo hello-from-terminal` → output-nya benar-benar muncul di layar — validasi
+  end-to-end pertama untuk fitur ini sejak dibangun di Fase 4, tidak ada console error.
+- **Fase 4 (Web Terminal) sekarang resmi tervalidasi di STB fisik** — kriteria "selesai-rilis"
+  di § Definisi Selesai terpenuhi untuk fitur ini.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
