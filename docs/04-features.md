@@ -531,15 +531,22 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
 
 ## 4.7 Pengaturan (Settings)
 
-- Ganti password admin.
-- Konfigurasi interval polling (opsional, advanced).
-- Konfigurasi root direktori file explorer.
-- Konfigurasi daftar unit systemd "terproteksi" (butuh extra-confirm sebelum stop/restart).
-- Konfigurasi terminal: enable/disable, shell default, idle timeout, max concurrent session.
 - ~~Lihat versi aplikasi, uptime service TarOS sendiri~~ — bagian versi sudah ada duluan
   lewat §4.8 di bawah (tombol versi/update di topbar), tanpa menunggu halaman Settings penuh
-  ini selesai dibangun. Sisanya (ganti password, konfigurasi lain-lain) masih di [10-roadmap.md](10-roadmap.md)
-  Fase 6, belum ada halaman Settings sungguhan.
+  ini selesai dibangun.
+- **Aktifkan/nonaktifkan Web Terminal langsung dari browser** (halaman `/settings`, menu
+  "Pengaturan" di topbar) — sebelumnya cuma bisa lewat edit manual `config.yaml` + restart
+  servis lewat SSH. Toggle-nya **selalu** minta konfirmasi ulang password dashboard sebelum
+  diterapkan (bukan cuma sesi aktif yang sudah login) — ini mengubah fitur dengan akses
+  paling luas di aplikasi, jadi butuh persetujuan sadar tiap kali, sama seperti prompt
+  grup-docker/mode-root saat instalasi. Setelah dikonfirmasi: servis restart otomatis
+  (downtime singkat, perlu login ulang — sama seperti update aplikasi §4.8) supaya config
+  baru benar-benar terpakai. Mengedit `config.yaml` di sisi server dengan **line-level
+  targeted edit**, bukan parse-ulang-lalu-tulis-ulang seluruh file — supaya komentar &
+  format yang sudah ada di file (mis. dari `deploy/config.example.yaml`) tidak ikut hilang.
+- Ganti password admin, konfigurasi interval polling, root direktori file explorer, daftar
+  unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
+  [10-roadmap.md](10-roadmap.md) Fase 6.
 
 ## 4.8 Update Aplikasi
 

@@ -262,6 +262,13 @@ else
   sed -i "s|^  rootDir:.*|  rootDir: \"$ROOT_DIR\"|" /etc/taros/config.yaml
 fi
 chmod 0644 /etc/taros/config.yaml
+# Owned by the service user (not just world-readable) — the Settings
+# page's "aktifkan terminal dari browser" toggle (internal/config.
+# SetTerminalEnabled) needs the running process to write this file
+# itself, same reasoning as /opt/taros/ for self-update. No secrets live
+# here (those are in credentials.yaml, 0600), so world-readable stays
+# fine — only ownership changes.
+chown "$SERVICE_USER" /etc/taros/config.yaml
 
 # --- 6. Systemd unit ---
 log "Memasang systemd unit (/etc/systemd/system/taros.service)"

@@ -52,6 +52,15 @@ type Deps struct {
 	// status. See internal/selfupdate.
 	Version       string
 	UpdateEnabled bool
+
+	// ConfigPath is the config.yaml this process was started with — used
+	// by the Settings page's "toggle terminal from the browser" action
+	// (internal/config.SetTerminalEnabled) to edit the file a running,
+	// unprivileged service process can otherwise only ever read. See
+	// docs/09-deployment.md for why config.yaml is writable by the
+	// service user in the first place (same reasoning as /opt/taros/ for
+	// self-update — see internal/selfupdate).
+	ConfigPath string
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -75,9 +84,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /login", s.serveSPA)
 	mux.HandleFunc("GET /docker", s.serveSPA)
 	mux.HandleFunc("GET /services", s.serveSPA)
+	mux.HandleFunc("GET /processes", s.serveSPA)
 	mux.HandleFunc("GET /files", s.serveSPA)
 	mux.HandleFunc("GET /files/edit", s.serveSPA)
 	mux.HandleFunc("GET /terminal", s.serveSPA)
+	mux.HandleFunc("GET /settings", s.serveSPA)
 	mux.Handle("GET /assets/", spaAssets)
 
 	mux.HandleFunc("POST /api/auth/login", s.handleAuthLogin)
@@ -121,6 +132,13 @@ func (s *Server) Handler() http.Handler {
 	if s.deps.TerminalEnabled {
 		mux.HandleFunc("GET /api/terminal/ws", s.requireAuth(s.handleTerminalWS))
 	}
+	// Always registered (like /api/terminal/status above) — turning it ON
+	// this way is exactly how someone with it off would get to it.
+	// Password-gated inside the handler itself (docs/07-security.md §7.6):
+	// this flips the app's highest-risk feature, so an active dashboard
+	// session alone isn't enough, same as the docker-group/root-mode
+	// install-time prompts require a conscious "yes", not a default.
+	mux.HandleFunc("POST /api/settings/terminal", s.requireAuth(s.handleSettingsTerminal))
 
 	// /api/update/check always registered (same "show a clear disabled
 	// state" reasoning as terminal/status above); /apply checks

@@ -1033,6 +1033,53 @@ formalitas.
 - **Fase 4 (Web Terminal) sekarang resmi tervalidasi di STB fisik** — kriteria "selesai-rilis"
   di § Definisi Selesai terpenuhi untuk fitur ini.
 
+### Halaman Pengaturan (awal): aktifkan Web Terminal dari browser
+
+Permintaan langsung setelah Terminal akhirnya berfungsi: user harus SSH manual buat edit
+`config.yaml` + restart servis tiap mau aktifkan Terminal — mau bisa lewat dashboard saja.
+Didiskusikan dulu trade-off-nya sebelum dikerjakan (matching pola diskusi docker-group/
+mode-root sebelumnya): user setuju dengan syarat **konfirmasi password ulang** untuk aksi
+sekrusial ini, dan menyebut TOTP sebagai item keamanan yang mau ditambah lagi nanti (dicatat
+terpisah di bawah, belum dikerjakan).
+
+- **Halaman `/settings` baru** (menu topbar "Pengaturan", awal dari halaman Settings yang
+  disebut di [04-features.md](04-features.md) §4.7 sejak lama tapi belum pernah dibangun) —
+  untuk sekarang cuma berisi toggle Terminal, item lain (ganti password, dst) masih Fase 6.
+- **Backend**: `internal/config.SetTerminalEnabled` — edit `terminal.enabled` di
+  `config.yaml` dengan **targeted line edit** (scan baris demi baris, cari section
+  `terminal:` level-atas lalu baris `enabled:` di dalamnya, ganti cuma nilai itu), bukan
+  `yaml.Unmarshal` + `yaml.Marshal` ulang — dicoba langsung dan dikonfirmasi `yaml.v3`
+  **menghapus semua komentar** kalau lewat jalur itu, padahal `config.example.yaml` sengaja
+  ditulis penuh komentar penjelasan tiap section. Endpoint `POST /api/settings/terminal`
+  minta ulang password dashboard (`Creds.Verify`, sama mekanisme dengan login) — status
+  **403**, bukan 401, khusus untuk password salah, supaya `api/client.ts` (yang auto-redirect
+  ke `/login` untuk 401 apa pun, treat sebagai "sesi habis") tidak keliru mengira sesi yang
+  masih valid itu sendiri sudah invalid. Setelah berhasil ditulis: proses keluar bersih,
+  systemd (`Restart=always`) menghidupkannya lagi membaca config baru — mekanisme yang
+  identik dengan self-update (§9.5), termasuk peringatan downtime+login-ulang yang sama.
+- **`scripts/install.sh` disesuaikan**: `config.yaml` sekarang di-`chown` ke `$SERVICE_USER`
+  (sebelumnya cuma `chmod 0644`, dimiliki root) — servis butuh bisa menulis file konfigurasi
+  dirinya sendiri untuk toggle ini berfungsi, trade-off yang sama seperti `/opt/taros/` untuk
+  self-update.
+- **Bug nyata kedua yang ditemukan sekalian saat investigasi**: route `/processes` (dari
+  fitur halaman Proses sebelumnya) ternyata **tidak pernah didaftarkan** di server-side
+  routing (`internal/web/router.go`) — cuma bisa diakses lewat klik link dari SPA yang sudah
+  ke-load (client-side routing Vue Router menangkapnya), tapi refresh halaman atau buka link
+  langsung ke `/processes` akan 404. Ketahuan karena `/settings` yang baru kena masalah
+  persis sama saat pertama dites. Diperbaiki sekalian untuk keduanya.
+- **Diuji end-to-end lewat browser sungguhan**, termasuk kasus yang gampang terlewat:
+  password salah (harus tetap di `/settings` dengan pesan error, **bukan** ke-redirect ke
+  `/login` — awalnya sempat tidak sengaja terjadi karena salah pilih status code 401, baru
+  dikoreksi ke 403 setelah diuji), retry setelah gagal (ditemukan bug UI kecil sendiri:
+  field password tidak ke-reset saat klik "Coba lagi", jadi password baru ketambahan ke
+  yang lama alih-alih menggantikannya — diperbaiki), toggle ON lalu OFF berturut-turut
+  (konfirmasi file config balik persis seperti semula, byte-per-byte, setelah dua kali
+  toggle), dan nav Terminal muncul/hilang sesuai state setelah tiap restart.
+
+**Dicatat untuk nanti (belum dikerjakan)**: user secara eksplisit menyebut mau menambah
+**TOTP/2FA** untuk login dashboard supaya lebih aman — dicatat di sini sebagai permintaan
+nyata, bukan cuma ide dari [Fase 6](10-roadmap.md) yang generik.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
@@ -1047,6 +1094,11 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
   dipertimbangkan lagi kalau kebutuhannya berkembang jadi multi-user administrasi penuh.
 - Log viewer streaming (bukan tail on-demand) untuk container & systemd unit.
 - Multi-user dengan role-based access.
+- **TOTP/2FA untuk login dashboard** — diminta langsung oleh user (lihat entri "Halaman
+  Pengaturan (awal)" di atas) sebagai lapisan keamanan tambahan di luar password tunggal.
+- Halaman Pengaturan lengkap — ganti password admin, interval polling, root direktori file
+  explorer, daftar unit systemd "terproteksi". Toggle Terminal saja yang sudah ada (lihat
+  entri "Halaman Pengaturan (awal)" di atas).
 
 ## Definisi "Selesai" per Fase
 

@@ -119,6 +119,7 @@ func runServer(args []string) {
 		MaxUploadSizeMB: cfg.FileExplorer.MaxUploadSizeMB,
 		Version:         version,
 		UpdateEnabled:   cfg.Update.Enabled,
+		ConfigPath:      *configPath,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

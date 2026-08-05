@@ -183,6 +183,20 @@ bagian ini fokus ke kontrol keamanannya.
   sepenuhnya dari routing (bukan cuma disembunyikan di UI) — direkomendasikan untuk instalasi
   yang perangkatnya ter-expose lebih luas dari LAN rumah (lihat juga §7.5 di atas soal
   rekomendasi network isolation, yang jadi makin penting kalau fitur ini aktif).
+- **Bisa diaktifkan/dinonaktifkan dari halaman Pengaturan** (`POST /api/settings/terminal`,
+  [04-features.md](04-features.md) §4.7) — tanpa perlu SSH edit `config.yaml` manual.
+  Sengaja **selalu** minta password dashboard dikonfirmasi ulang di request ini, terlepas
+  dari sesi yang sedang login — status **403** (bukan 401) dipakai khusus untuk kasus
+  password-salah supaya klien tidak keliru menganggap sesi itu sendiri sudah invalid dan
+  auto-redirect ke `/login` (lihat `api/client.ts`, yang treat 401 apa pun sebagai "sesi
+  habis"). Konsekuensinya: `config.yaml` harus writable oleh user servis (`scripts/
+  install.sh` `chown` filenya, bukan cuma `chmod 0644` seperti sebelumnya) — trade-off yang
+  sama seperti `/opt/taros/` untuk self-update (§7.9): proses bisa menulis file konfigurasinya
+  sendiri, bukan lagi murni read-only dari sudut pandang proses yang berjalan. Perubahan
+  ditulis dengan **line-level targeted edit** (`internal/config.SetTerminalEnabled`), bukan
+  parse+re-marshal YAML penuh — `yaml.v3` tidak mempertahankan komentar saat round-trip, dan
+  file konfigurasi di proyek ini sengaja ditulis dengan banyak komentar penjelasan
+  (`deploy/config.example.yaml`) yang akan hilang kalau ditulis ulang dari struct Go.
 - **Peringatan first-use di UI.** Saat pertama kali membuka halaman `/terminal`, tampilkan
   banner singkat yang menjelaskan bahwa ini adalah akses shell sungguhan ke perangkat — bukan
   demo/sandbox — supaya user sadar konsekuensinya (khususnya kalau berencana share akses
