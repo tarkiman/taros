@@ -85,25 +85,35 @@ const statusTagType = (u: Unit): 'success' | 'warning' | 'error' | 'default' => 
   return 'default'
 }
 
+// Lower = "more active"/more relevant first — matches how someone actually
+// wants to scan this table (running units first), not alphabetical on the
+// raw systemd state string.
+const activeStateRank: Record<string, number> = { active: 0, activating: 1, reloading: 2, deactivating: 3, inactive: 4, failed: 5 }
+function activeSortValue(u: Unit) {
+  return activeStateRank[u.active] ?? 6
+}
+
 const columns: DataTableColumns<Unit> = [
   {
     title: 'Nama',
     key: 'name',
     width: 220,
     ellipsis: { tooltip: true },
+    sorter: (a, b) => a.name.localeCompare(b.name),
     render: (row) =>
       row.protected
         ? h(NSpace, { size: 'small', align: 'center', wrap: false }, () => [row.name, h(NTag, { size: 'small', type: 'warning' }, () => 'terproteksi')])
         : row.name,
   },
-  { title: 'Deskripsi', key: 'description', minWidth: 200, ellipsis: { tooltip: true } },
+  { title: 'Deskripsi', key: 'description', minWidth: 200, ellipsis: { tooltip: true }, sorter: (a, b) => a.description.localeCompare(b.description) },
   {
     title: 'Status',
     key: 'active',
     width: 150,
+    sorter: (a, b) => activeSortValue(a) - activeSortValue(b) || a.sub.localeCompare(b.sub),
     render: (row) => h(NTag, { size: 'small', type: statusTagType(row) }, () => `${row.active} (${row.sub})`),
   },
-  { title: 'Aktif Saat Boot', key: 'enabled', width: 130, render: (row) => row.enabled || '—' },
+  { title: 'Aktif Saat Boot', key: 'enabled', width: 130, sorter: (a, b) => (a.enabled || '').localeCompare(b.enabled || ''), render: (row) => row.enabled || '—' },
   {
     title: 'Aksi',
     key: 'actions',
