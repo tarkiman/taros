@@ -61,6 +61,15 @@ const primaryDisk = computed(() => {
   return disks.find((d) => d.mountPoint === '/') ?? disks[0] ?? null
 })
 
+// Same 70%/90% warn/danger split as GaugeChart's default thresholds — kept
+// separate rather than imported since GaugeChart's version is baked into
+// its ECharts color option, not exposed as a standalone util.
+function storageBarClass(usedPercent: number): string {
+  if (usedPercent >= 90) return 'danger'
+  if (usedPercent >= 70) return 'warn'
+  return ''
+}
+
 const maxTemp = computed(() => {
   const temps = snapshot.value?.temps ?? []
   if (temps.length === 0) return null
@@ -374,15 +383,26 @@ const quickLinks = computed(() => {
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>
             <NCard title="Penyimpanan">
-              <table class="detail-table">
-                <tbody>
-                  <tr v-for="d in snapshot.disks" :key="d.mountPoint">
-                    <td>{{ d.mountPoint }}</td>
-                    <td class="text-muted">{{ formatBytes(d.usedBytes) }} / {{ formatBytes(d.totalBytes) }}</td>
-                    <td class="text-muted">{{ d.usedPercent.toFixed(1) }}%</td>
-                  </tr>
-                </tbody>
-              </table>
+              <div v-if="snapshot.disks.length > 0" class="storage-list">
+                <div v-for="d in snapshot.disks" :key="d.mountPoint" class="storage-row">
+                  <div class="storage-head">
+                    <span class="storage-mount">{{ d.mountPoint }}</span>
+                    <span class="storage-pct">{{ d.usedPercent.toFixed(1) }}%</span>
+                  </div>
+                  <div class="storage-bar-track">
+                    <div
+                      class="storage-bar-fill"
+                      :class="storageBarClass(d.usedPercent)"
+                      :style="{ width: Math.min(d.usedPercent, 100) + '%' }"
+                    ></div>
+                  </div>
+                  <div class="storage-meta">
+                    <span>{{ formatBytes(d.usedBytes) }} terpakai</span>
+                    <span>{{ formatBytes(d.freeBytes) }} tersisa · {{ formatBytes(d.totalBytes) }} total</span>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-muted empty-note">Tidak ada data disk.</p>
             </NCard>
           </NGi>
           <NGi>
@@ -698,6 +718,56 @@ const quickLinks = computed(() => {
 .quick-name {
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+.storage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.storage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.86rem;
+}
+.storage-mount {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.storage-pct {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--track);
+  overflow: hidden;
+}
+.storage-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+.storage-bar-fill.warn {
+  background: var(--warning);
+}
+.storage-bar-fill.danger {
+  background: var(--danger);
+}
+
+.storage-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
 }
 
 .detail-table {
