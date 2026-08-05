@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { h, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   NCard,
   NInput,
@@ -21,10 +22,14 @@ import { ApiError } from '../api/client'
 import type { Unit } from '../types/service'
 
 const message = useMessage()
+const route = useRoute()
 
 const query = ref('')
 const showAll = ref(false)
-const failedOnly = ref(false)
+// Deep-linked from the dashboard's "N unit systemd gagal" banner
+// (?failed=1) so clicking it lands directly on the failed units instead
+// of just repeating the count with no way to see which ones.
+const failedOnly = ref(route.query.failed === '1')
 
 const units = ref<Unit[]>([])
 const loading = ref(true)

@@ -195,6 +195,11 @@ const healthLine = computed(() => {
   return parts.join(' · ')
 })
 const hasWarning = computed(() => serviceAvailable.value && failedCount.value > 0)
+// The banner only ever warns about failed systemd units (container counts
+// are informational, not a health signal here — see healthLine above), so
+// it always makes sense to point at Services; the failed filter is only
+// pre-applied when there's actually something to show for it.
+const bannerLink = computed(() => (hasWarning.value ? { path: '/services', query: { failed: '1' } } : { path: '/services' }))
 
 onMounted(async () => {
   tickClock()
@@ -234,7 +239,7 @@ const quickLinks = computed(() => {
             <div class="clock-time">{{ clockTime }}</div>
             <div class="clock-date">{{ clockDate }}</div>
           </div>
-          <div class="glass-card banner-card">
+          <RouterLink :to="bannerLink" class="glass-card banner-card banner-card--clickable">
             <div class="banner-copy">
               <h2>{{ !healthReady ? 'Memeriksa status layanan…' : hasWarning ? 'Ada yang perlu diperiksa' : 'Semua layanan berjalan normal' }}</h2>
               <p>{{ healthLine }}</p>
@@ -243,7 +248,7 @@ const quickLinks = computed(() => {
               <NIcon :component="hasWarning ? TriangleAlert : ShieldCheck" size="15" />
               {{ hasWarning ? 'Perlu perhatian' : 'Sehat' }}
             </div>
-          </div>
+          </RouterLink>
         </div>
 
         <div class="main-grid">
@@ -486,6 +491,20 @@ const quickLinks = computed(() => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+.banner-card--clickable {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.banner-card--clickable:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+.banner-card--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .banner-copy h2 {
   margin: 0 0 4px;
