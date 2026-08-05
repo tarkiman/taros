@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { NGrid, NGi, NCard, NSpin, NIcon } from 'naive-ui'
-import { ShieldCheck, TriangleAlert, HardDrive, Wifi, Box, LayoutDashboard, Server, FolderOpen, SquareTerminal } from '@lucide/vue'
+import { ShieldCheck, TriangleAlert, HardDrive, Wifi, Box, LayoutDashboard, Server, FolderOpen, SquareTerminal, Cpu } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
@@ -222,6 +222,7 @@ const quickLinks = computed(() => {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/docker', label: 'Docker', icon: Box },
     { to: '/services', label: 'Service', icon: Server },
+    { to: '/processes', label: 'Proses', icon: Cpu },
     { to: '/files', label: 'Files', icon: FolderOpen },
   ]
   if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
@@ -350,6 +351,7 @@ const quickLinks = computed(() => {
                   </li>
                 </ul>
                 <p v-else-if="!processesLoading" class="text-muted empty-note">Belum ada data proses.</p>
+                <RouterLink to="/processes" class="see-all-link">Lihat semua proses →</RouterLink>
               </template>
             </NCard>
 
@@ -648,6 +650,17 @@ const quickLinks = computed(() => {
   font-size: 0.72rem;
   color: var(--text-faint);
   margin: 2px 0 12px;
+}
+
+.see-all-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+.see-all-link:hover {
+  text-decoration: underline;
 }
 
 .proc-list {
