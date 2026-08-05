@@ -252,8 +252,24 @@ ringan dari CasaOS" bisa dibuktikan, bukan cuma diasumsikan, sebelum mulai Fase 
 
 ## 9.5 Upgrade
 
-- Strategi sederhana: stop service → replace binary → start service (downtime singkat,
-  dapat diterima untuk service monitoring single-node).
+- **Cara termudah: jalankan ulang perintah instalasi satu baris** (§9.2 "Jalur tercepat") —
+  `quick-install.sh` selalu mengambil rilis terbaru, dan `install.sh` sekarang secara eksplisit
+  **me-restart** servisnya setiap dijalankan (bukan cuma `enable --now`, yang ternyata *no-op*
+  kalau servisnya sudah aktif — lihat catatan bug di bawah), jadi binary baru benar-benar
+  langsung terpakai, bukan cuma tersalin ke disk sementara proses lama tetap jalan. Config &
+  kredensial admin yang sudah ada tidak disentuh. Script mencetak versi lama → baru supaya
+  jelas apakah upgrade benar-benar terjadi.
+- Downtime singkat saat restart, dapat diterima untuk service monitoring single-node.
+- **Bug nyata yang mendasari catatan di atas**: versi awal `install.sh` memanggil
+  `systemctl enable --now taros` di langkah terakhir — `--now` di situ artinya "start kalau
+  belum jalan", **bukan** "restart". Diuji langsung: instalasi awal jalan normal, tapi
+  menjalankan ulang installer dengan binary baru sementara servis lama masih aktif meninggalkan
+  proses lama tetap berjalan tanpa perubahan (PID sama persis sebelum & sesudah, dikonfirmasi
+  lewat `systemctl show taros -p MainPID`) walau binary di `/usr/local/bin/taros` sudah
+  ter-update — artinya re-run installer terlihat berhasil tapi diam-diam tidak melakukan apa-apa
+  ke instance yang sedang berjalan. Diperbaiki dengan `systemctl enable` (set enabled saja) +
+  `systemctl restart` (selalu reload, aman juga untuk instalasi baru karena `restart` pada unit
+  yang belum pernah jalan berperilaku sama seperti `start`).
 - Tidak ada migrasi data yang rumit di versi awal karena tidak ada database persisten
   (lihat [05-data-storage.md](05-data-storage.md)) — kalau nanti opsi SQLite persistence
   diaktifkan, perlu strategi migrasi skema (`golang-migrate` atau migrasi manual sederhana).

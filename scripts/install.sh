@@ -30,7 +30,11 @@
 #   -h, --help             Tampilkan ini.
 #
 # Idempoten: aman dijalankan ulang — user/config/kredensial yang sudah ada
-# tidak ditimpa diam-diam (kecuali --force-setup untuk kredensial).
+# tidak ditimpa diam-diam (kecuali --force-setup untuk kredensial). Ini juga
+# jalur update: menjalankan ulang (mis. lewat quick-install.sh) dengan
+# binary lebih baru akan menggantikan /usr/local/bin/taros dan me-restart
+# servisnya supaya benar-benar jalan di versi baru — bukan cuma mengganti
+# file di disk sementara proses lama tetap jalan.
 
 set -euo pipefail
 
@@ -124,8 +128,11 @@ if [[ "$DOCKER_GROUP" -eq 1 ]]; then
 fi
 
 # --- 4. Install binary ---
+OLD_VERSION=""
+[[ -x /usr/local/bin/taros ]] && OLD_VERSION="$(/usr/local/bin/taros version 2>/dev/null | awk '{print $2}')"
 log "Copy binary ke /usr/local/bin/taros"
 install -m 0755 "$BINARY_PATH" /usr/local/bin/taros
+NEW_VERSION="$(/usr/local/bin/taros version 2>/dev/null | awk '{print $2}')"
 
 # --- 5. Config ---
 mkdir -p /etc/taros
@@ -162,8 +169,22 @@ if [[ -f "$CREDS_FILE" ]]; then
 fi
 
 # --- 8. Aktifkan servis ---
-log "Mengaktifkan & menjalankan servis taros"
-systemctl enable --now taros
+# `enable --now` only *starts* the unit — a no-op if it's already active,
+# which means a re-run of this script (e.g. via quick-install.sh to pick
+# up a newer release) would copy the new binary to disk but leave the
+# already-running old process untouched indefinitely. `restart` actually
+# reloads the new binary either way: on a fresh install there's nothing
+# running yet, so it behaves exactly like start.
+log "Mengaktifkan servis taros"
+systemctl enable --quiet taros
+log "Merestart servis taros (memuat binary baru kalau ini update)"
+systemctl restart taros
+
+if [[ -n "$OLD_VERSION" && "$OLD_VERSION" != "$NEW_VERSION" ]]; then
+  log "Diupdate: $OLD_VERSION -> $NEW_VERSION"
+elif [[ -n "$OLD_VERSION" ]]; then
+  log "Sudah di versi $NEW_VERSION, tidak ada perubahan versi"
+fi
 
 log ""
 log "Selesai. Cek status: systemctl status taros"

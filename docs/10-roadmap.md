@@ -738,6 +738,32 @@ end-user**, bukan mengubah cara kerja aplikasi.
   §9.2 diperbarui: jalur satu-perintah ini sekarang jadi cara instalasi **utama** yang
   ditonjolkan, build-dari-source didemosikan jadi opsi untuk arsitektur di luar arm64/armv7
   atau yang memang mau build sendiri.
+- **Blocker eksternal ditemukan setelah rilis pertama (`v0.1.0`) benar-benar di-push**: repo
+  GitHub ternyata masih **Private** — `raw.githubusercontent.com` dan `api.github.com`
+  sama-sama mengembalikan 404 untuk akses tanpa autentikasi (perilaku standar GitHub untuk repo
+  private, supaya tidak membocorkan keberadaannya) — jadi seluruh alur satu-perintah di atas
+  gagal total untuk siapa pun di luar kolaborator repo, walau kodenya sendiri sudah benar. Baru
+  ketahuan karena diuji ulang dengan `curl` polos (bukan lewat `gh` yang sudah terautentikasi)
+  setelah rilis pertama benar-benar dicoba — bukan cuma dibaca ulang. Diperbaiki dengan
+  menjadikan repo Public (`gh repo edit --visibility public`, dikonfirmasi dulu ke user karena
+  ini perubahan visibilitas yang signifikan/sulit dibalik sepenuhnya), lalu diuji ulang penuh
+  tanpa autentikasi apa pun — script, API rilis, dan unduhan asset ketiganya dikonfirmasi
+  `HTTP 200`.
+- **Bug nyata kedua, ditemukan lewat pertanyaan user** ("apakah ini otomatis update kalau
+  dijalankan ulang?") yang mendorong pengujian eksplisit alih-alih asumsi: `install.sh`
+  memanggil `systemctl enable --now taros`, dan `--now` di situ cuma berarti "start kalau belum
+  jalan" — bukan restart. Menjalankan ulang installer (skenario upgrade) dengan servis yang
+  sudah aktif meninggalkan proses lama tetap berjalan tanpa berubah meski binary di disk sudah
+  ter-update. Dikonfirmasi lewat `systemctl show taros -p MainPID` — PID sama persis sebelum &
+  sesudah re-run, artinya re-run terlihat sukses tapi diam-diam tidak berefek ke instance yang
+  jalan. Diperbaiki dengan `systemctl enable` (set enabled) + `systemctl restart` (selalu
+  reload binary baru; aman juga untuk instalasi baru, karena `restart` pada unit yang belum
+  pernah jalan berperilaku sama seperti `start`) — plus `install.sh` sekarang mencetak versi
+  lama → baru (`taros version` sebelum & sesudah copy binary) supaya user langsung tahu apakah
+  upgrade-nya benar-benar terjadi, bukan cuma percaya exit code 0. Diuji ulang end-to-end di
+  container systemd sungguhan: PID & versi dikonfirmasi berubah setelah re-run dengan binary
+  baru, kredensial & config dikonfirmasi tidak tersentuh, dan re-run dengan versi yang sama
+  persis dikonfirmasi melapor "tidak ada perubahan versi" alih-alih pesan update yang salah.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
