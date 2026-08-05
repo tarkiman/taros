@@ -106,6 +106,10 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
 
 - Daftar container **running** (default) dengan toggle untuk menampilkan **semua** (termasuk
   stopped/exited).
+- **Kolom tabel bisa diurutkan** (klik header) — Status diurutkan berdasarkan tingkat "aktif"
+  (running → restarting → paused → exited/dead), bukan alfabetis, supaya container yang sedang
+  jalan gampang dikelompokkan; CPU/RAM/Network diurutkan numerik dari data live stats-nya.
+  Berlaku juga di tab Images/Volumes/Networks (ukuran, jumlah dipakai, tanggal dibuat, dst).
 - Per container: nama, image, status, uptime, port mapping, dan **live stats**:
   - CPU% (dihitung dari delta `cpu_stats`/`precpu_stats` dalam **satu** panggilan
     `stats?stream=false` — terkonfirmasi Docker sudah mengembalikan `precpu_stats` yang valid
@@ -204,6 +208,9 @@ bukan error 500.
   state**, enabled/disabled (digabung dari `systemctl list-unit-files` berdasarkan nama unit).
 - Search/filter by nama & description, plus quick-filter "hanya yang failed" — keduanya
   filter di sisi server terhadap hasil `list-units`, bukan query systemd terpisah.
+- **Kolom tabel bisa diurutkan** (klik header) — Status diurutkan berdasarkan tingkat "aktif"
+  (active → activating → reloading → deactivating → inactive → failed), bukan alfabetis pada
+  string active state mentah, supaya unit yang sedang jalan gampang dikelompokkan.
 - Aksi: **start / stop / restart / reload**, dengan konfirmasi lebih tegas (teks peringatan
   eksplisit) untuk unit "terproteksi" yang bisa dikonfigurasi lewat `systemd.protectedUnits`
   di `config.yaml` (default: `ssh.service`, `docker.service`, `taros.service` — dicek
@@ -256,6 +263,9 @@ bukan error 500.
 - Upload file dari browser (drag & drop + tombol pilih file).
 - Download file/folder (folder di-zip on-the-fly saat request).
 - Search/filter by nama dalam direktori aktif.
+- **Kolom tabel bisa diurutkan** (klik header: Nama, Ukuran, Pemilik, Diubah) — sortir murni
+  client-side di atas listing yang sudah dimuat, folder & file jadi terurut campur alfabetis
+  saat sort by Nama diaktifkan (beda dari urutan default "folder dulu" yang dikirim server).
 - **Tampilkan/sembunyikan file tersembunyi** (nama diawali titik, pola umum untuk
   dotfile/dotdir konfigurasi) — tombol toggle di toolbar, default **disembunyikan** (sesuai
   konvensi file manager pada umumnya). Murni preferensi tampilan di klien (`localStorage`,

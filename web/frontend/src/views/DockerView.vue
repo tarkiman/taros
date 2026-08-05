@@ -45,6 +45,18 @@ const stateTagType = (state: string): 'success' | 'warning' | 'default' | 'error
   return 'default'
 }
 
+// Lower = "more active" first, matching how someone actually wants to scan
+// this table — not alphabetical on the raw Docker state string.
+const containerStateRank: Record<string, number> = { running: 0, restarting: 1, paused: 2, created: 3, exited: 4, dead: 5 }
+function containerStateSortValue(c: Container) {
+  return containerStateRank[c.state] ?? 6
+}
+// hasStats can be false briefly (stats not polled yet) — sort those last
+// regardless of direction rather than letting them collapse to 0.
+function statVal(c: Container, pick: (s: Container['stats']) => number) {
+  return c.hasStats ? pick(c.stats) : -1
+}
+
 // --- Containers (auto-refresh every 5s while this tab is active, same
 // cadence as the old htmx fragment) ---
 const containers = ref<Container[]>([])
@@ -74,19 +86,27 @@ async function containerAction(id: string, action: 'start' | 'stop' | 'restart' 
 }
 
 const containerColumns: DataTableColumns<Container> = [
-  { title: 'Nama', key: 'name', width: 160, ellipsis: { tooltip: true } },
-  { title: 'Image', key: 'image', width: 180, ellipsis: { tooltip: true } },
+  { title: 'Nama', key: 'name', width: 160, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
+  { title: 'Image', key: 'image', width: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.image.localeCompare(b.image) },
   {
     title: 'Status',
     key: 'state',
     width: 130,
+    sorter: (a, b) => containerStateSortValue(a) - containerStateSortValue(b),
     render: (row) => h(NTag, { type: stateTagType(row.state), size: 'small' }, { default: () => row.status }),
   },
-  { title: 'CPU', key: 'cpu', width: 70, render: (row) => (row.hasStats ? `${row.stats.cpuPercent.toFixed(1)}%` : '—') },
+  {
+    title: 'CPU',
+    key: 'cpu',
+    width: 70,
+    sorter: (a, b) => statVal(a, (s) => s.cpuPercent) - statVal(b, (s) => s.cpuPercent),
+    render: (row) => (row.hasStats ? `${row.stats.cpuPercent.toFixed(1)}%` : '—'),
+  },
   {
     title: 'RAM',
     key: 'ram',
     width: 150,
+    sorter: (a, b) => statVal(a, (s) => s.memUsageBytes) - statVal(b, (s) => s.memUsageBytes),
     render: (row) =>
       row.hasStats ? `${formatBytes(row.stats.memUsageBytes)} / ${formatBytes(row.stats.memLimitBytes)}` : '—',
   },
@@ -94,6 +114,7 @@ const containerColumns: DataTableColumns<Container> = [
     title: 'Network',
     key: 'net',
     width: 140,
+    sorter: (a, b) => statVal(a, (s) => s.netRxBytes + s.netTxBytes) - statVal(b, (s) => s.netRxBytes + s.netTxBytes),
     render: (row) =>
       row.hasStats ? `↓ ${formatBytes(row.stats.netRxBytes)} ↑ ${formatBytes(row.stats.netTxBytes)}` : '—',
   },
@@ -159,14 +180,21 @@ const imageColumns: DataTableColumns<Image> = [
     key: 'tag',
     minWidth: 200,
     ellipsis: { tooltip: true },
+    sorter: (a, b) => a.tag.localeCompare(b.tag),
     render: (row) =>
       row.dangling
         ? h(NSpace, { size: 'small', align: 'center' }, () => [row.tag, h(NTag, { size: 'small', type: 'warning' }, () => 'dangling')])
         : row.tag,
   },
-  { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => formatBytes(row.sizeBytes) },
-  { title: 'Dipakai', key: 'containers', width: 140, render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? 'tidak dipakai' : `${row.containers} container`) },
-  { title: 'Dibuat', key: 'created', width: 150, render: (row) => formatDate(row.created) },
+  { title: 'Ukuran', key: 'sizeBytes', width: 110, sorter: (a, b) => a.sizeBytes - b.sizeBytes, render: (row) => formatBytes(row.sizeBytes) },
+  {
+    title: 'Dipakai',
+    key: 'containers',
+    width: 140,
+    sorter: (a, b) => a.containers - b.containers,
+    render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? 'tidak dipakai' : `${row.containers} container`),
+  },
+  { title: 'Dibuat', key: 'created', width: 150, sorter: (a, b) => Date.parse(a.created) - Date.parse(b.created), render: (row) => formatDate(row.created) },
   {
     title: 'Aksi',
     key: 'actions',
@@ -211,13 +239,20 @@ async function removeVolume(name: string) {
 }
 
 const volumeColumns: DataTableColumns<Volume> = [
-  { title: 'Nama', key: 'name', minWidth: 180, ellipsis: { tooltip: true } },
-  { title: 'Driver', key: 'driver', width: 100 },
-  { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => (row.sizeBytes < 0 ? 'tidak diketahui' : formatBytes(row.sizeBytes)) },
+  { title: 'Nama', key: 'name', minWidth: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
+  { title: 'Driver', key: 'driver', width: 100, sorter: (a, b) => a.driver.localeCompare(b.driver) },
+  {
+    title: 'Ukuran',
+    key: 'sizeBytes',
+    width: 110,
+    sorter: (a, b) => a.sizeBytes - b.sizeBytes,
+    render: (row) => (row.sizeBytes < 0 ? 'tidak diketahui' : formatBytes(row.sizeBytes)),
+  },
   {
     title: 'Status',
     key: 'inUse',
     width: 120,
+    sorter: (a, b) => Number(a.inUse) - Number(b.inUse),
     render: (row) => h(NTag, { size: 'small', type: row.inUse ? 'success' : 'default' }, () => (row.inUse ? 'dipakai' : 'tidak dipakai')),
   },
   {
@@ -269,14 +304,15 @@ const networkColumns: DataTableColumns<Network> = [
     key: 'name',
     minWidth: 160,
     ellipsis: { tooltip: true },
+    sorter: (a, b) => a.name.localeCompare(b.name),
     render: (row) =>
       row.builtin
         ? h(NSpace, { size: 'small', align: 'center' }, () => [row.name, h(NTag, { size: 'small' }, () => 'builtin')])
         : row.name,
   },
-  { title: 'Driver', key: 'driver', width: 100 },
-  { title: 'Subnet', key: 'subnet', width: 150, render: (row) => row.subnet || '—' },
-  { title: 'Container Terhubung', key: 'connectedCount', width: 170 },
+  { title: 'Driver', key: 'driver', width: 100, sorter: (a, b) => a.driver.localeCompare(b.driver) },
+  { title: 'Subnet', key: 'subnet', width: 150, sorter: (a, b) => a.subnet.localeCompare(b.subnet), render: (row) => row.subnet || '—' },
+  { title: 'Container Terhubung', key: 'connectedCount', width: 170, sorter: (a, b) => a.connectedCount - b.connectedCount },
   {
     title: 'Aksi',
     key: 'actions',
