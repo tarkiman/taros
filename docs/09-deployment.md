@@ -142,7 +142,10 @@ SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B/C di step 2
    sudo usermod -aG docker "$SERVICE_USER"
    ```
 4. Copy `deploy/config.example.yaml` → `/etc/taros/config.yaml`, sesuaikan (`fileExplorer.
-   rootDir`, port, dll).
+   rootDir`, port, dll), lalu `sudo chown "$SERVICE_USER" /etc/taros/config.yaml` — servis
+   perlu menulis file ini sendiri untuk toggle "aktifkan Terminal dari browser" di halaman
+   Pengaturan ([04-features.md](04-features.md) §4.7, [07-security.md](07-security.md) §7.6),
+   sama alasannya dengan `/opt/taros/` untuk self-update di §9.5 bawah.
 5. **Akses baca/tulis untuk File Explorer** — `$SERVICE_USER` **tidak otomatis** punya akses ke
    direktori manapun di luar apa yang secara eksplisit diberikan. Kalau `fileExplorer.rootDir`
    (step 4) berisi data yang dimiliki user/proses lain (pola umum: media/dokumen yang
