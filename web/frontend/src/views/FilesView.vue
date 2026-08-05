@@ -18,7 +18,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns, UploadFileInfo } from 'naive-ui'
-import { Folder, File as FileIcon, FolderPlus, FilePlus, Upload as UploadIcon, ArrowUp, Copy, Scissors, ClipboardPaste, Trash2, Pencil, Download } from '@lucide/vue'
+import { Folder, File as FileIcon, FolderPlus, FilePlus, Upload as UploadIcon, ArrowUp, Copy, Scissors, ClipboardPaste, Trash2, Pencil, Download, Eye, EyeOff } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
@@ -48,6 +48,19 @@ const clipboardSize = ref(0)
 const clipboardCut = ref(false)
 const loading = ref(true)
 const checkedKeys = ref<string[]>([])
+
+// Purely a display preference (backend always returns everything, see
+// internal/fileexplorer/list.go) — persisted client-side since it's not
+// something that needs to sync across devices.
+const SHOW_HIDDEN_KEY = 'taros-files-show-hidden'
+const showHidden = ref(localStorage.getItem(SHOW_HIDDEN_KEY) === '1')
+function toggleShowHidden() {
+  showHidden.value = !showHidden.value
+  localStorage.setItem(SHOW_HIDDEN_KEY, showHidden.value ? '1' : '0')
+}
+const visibleEntries = computed(() =>
+  showHidden.value ? entries.value : entries.value.filter((e) => !e.name.startsWith('.')),
+)
 
 function navigateTo(path: string) {
   router.push({ path: '/files', query: path ? { path } : {} })
@@ -336,6 +349,15 @@ onUnmounted(() => stopWatch?.())
           <template #icon><NIcon :component="ClipboardPaste" /></template>
           Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
         </NButton>
+        <NButton
+          size="small"
+          :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+          :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+          @click="toggleShowHidden"
+        >
+          <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
+          {{ showHidden ? 'Sembunyikan Titik' : 'Tampilkan Titik' }}
+        </NButton>
       </NSpace>
       <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
         <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
@@ -358,10 +380,18 @@ onUnmounted(() => stopWatch?.())
       @drop="onDrop"
     >
       <NEmpty v-if="!loading && entries.length === 0" description="Folder kosong." />
+      <NEmpty
+        v-else-if="!loading && visibleEntries.length === 0"
+        description="Semua isi folder ini tersembunyi (diawali titik)."
+      >
+        <template #extra>
+          <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan Titik</NButton>
+        </template>
+      </NEmpty>
       <NDataTable
         v-else
         :columns="columns"
-        :data="entries"
+        :data="visibleEntries"
         :loading="loading"
         :row-key="(r: Entry) => r.name"
         v-model:checked-row-keys="checkedKeys"

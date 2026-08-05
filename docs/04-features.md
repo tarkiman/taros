@@ -256,6 +256,11 @@ bukan error 500.
 - Upload file dari browser (drag & drop + tombol pilih file).
 - Download file/folder (folder di-zip on-the-fly saat request).
 - Search/filter by nama dalam direktori aktif.
+- **Tampilkan/sembunyikan file tersembunyi** (nama diawali titik, pola umum untuk
+  dotfile/dotdir konfigurasi) — tombol toggle di toolbar, default **disembunyikan** (sesuai
+  konvensi file manager pada umumnya). Murni preferensi tampilan di klien (`localStorage`,
+  tidak per-akun/tidak sinkron antar device) — backend selalu mengembalikan listing lengkap
+  apa adanya (`internal/fileexplorer`), jadi ini bukan kontrol akses, cuma filter tampilan.
 
 ### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
 
