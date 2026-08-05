@@ -351,12 +351,14 @@ onUnmounted(() => stopWatch?.())
         </NButton>
         <NButton
           size="small"
+          :type="showHidden ? 'primary' : 'default'"
+          :ghost="showHidden"
           :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
           :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
           @click="toggleShowHidden"
         >
           <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
-          {{ showHidden ? 'Sembunyikan Titik' : 'Tampilkan Titik' }}
+          File Tersembunyi
         </NButton>
       </NSpace>
       <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
@@ -385,7 +387,7 @@ onUnmounted(() => stopWatch?.())
         description="Semua isi folder ini tersembunyi (diawali titik)."
       >
         <template #extra>
-          <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan Titik</NButton>
+          <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan File Tersembunyi</NButton>
         </template>
       </NEmpty>
       <NDataTable
