@@ -826,6 +826,34 @@ command line, yang menurut §"Rilis binary siap pakai" di atas justru target uta
   `quick-install.sh` ke `v0.2.0`, konfirmasi langkah "Copy binary ke `/opt/taros/taros`" muncul
   (bukan lagi `/usr/local/bin/taros` langsung), tombol update di dashboard muncul & berfungsi.
 
+### Prompt interaktif untuk grup docker saat install (v0.2.1 → v0.2.2)
+
+Ditemukan langsung dari laporan STB fisik: instalasi baru (dan upgrade lewat tombol dashboard
+di atas) menampilkan menu Docker yang gagal dengan `permission denied` ke `docker.sock` —
+`docker.enabled` aktif secara default di config, tapi keanggotaan grup `docker` yang
+levelnya setara akses root ke host (§7.4) sengaja dibuat opt-in lewat flag `--docker-group`,
+bukan default diam-diam. Fix pertama (`v0.2.1`, lihat di atas) cuma menambah pengingat teks
+di akhir output installer — user tetap harus tahu untuk menjalankan ulang installer dengan
+flag itu, atau `usermod` manual, yang persis skenario yang dilaporkan: **update lewat tombol
+dashboard tidak membantu sama sekali di sini**, karena self-update cuma mengganti binary,
+tidak pernah menjalankan `install.sh` atau menyentuh keanggotaan grup OS.
+
+Diperbaiki dengan mengganti reminder pasif itu jadi **prompt interaktif** di `install.sh`
+(y/N, dengan penjelasan implikasi keamanannya) setiap kali Docker terdeteksi di sistem dan
+tidak ada flag `--docker-group`/`--no-docker-group` eksplisit — mirip pola yang sudah ada
+untuk `taros setup` (username/password admin). Ini tetap berfungsi lewat `curl | bash` karena
+`quick-install.sh` sudah menyambungkan ulang stdin ke `/dev/tty` untuk kasus persis ini
+(dipakai juga oleh `taros setup`). Sesi non-interaktif (CI/skrip tanpa TTY) diam-diam tetap
+berperilaku seperti sebelumnya (`--no-docker-group`) — tidak ada perubahan behavior untuk
+instalasi terskrip yang sudah ada. Idempoten: kalau user servis sudah anggota grup dari run
+sebelumnya, tidak ditanya ulang setiap re-run/upgrade.
+
+Diuji dengan meng-extract logic prompt-nya ke skrip standalone dengan stub `getent`/`id`/
+`usermod`, dicoba lewat PTY sungguhan (`script(1)`) untuk lima skenario: jawab "y", jawab
+kosong/Enter (default N), non-interaktif tanpa TTY, flag `--docker-group` eksplisit
+(skip prompt), dan re-run saat sudah jadi anggota (skip prompt & skip `usermod`) — kelima
+skenario berperilaku sesuai desain.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

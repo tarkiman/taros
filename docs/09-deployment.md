@@ -67,8 +67,8 @@ di bawah.
 ### Build dari source + `install.sh`
 
 **`scripts/install.sh` mengotomatisasi langkah 1–4, 6, dan 9 di bawah** (binary, user servis,
-config, kredensial admin, systemd unit) — non-interaktif kecuali prompt username/password di
-langkah 6, dikendalikan lewat flag (`./scripts/install.sh --help` untuk daftar lengkap):
+config, kredensial admin, systemd unit), dikendalikan lewat flag
+(`./scripts/install.sh --help` untuk daftar lengkap):
 
 ```bash
 sudo ./scripts/install.sh --binary dist/taros-arm64
@@ -76,9 +76,18 @@ sudo ./scripts/install.sh --binary dist/taros-arm64
 sudo ./scripts/install.sh --binary dist/taros-arm64 --service-user pi --no-create-user
 ```
 
+Dua titik interaktif (bisa dilewati lewat flag untuk instalasi terskrip/CI): username/password
+admin di langkah 6, dan — karena Docker aktif secara default di config tapi aksesnya butuh
+persetujuan sadar (lihat langkah 3 di bawah) — kalau sesi ini punya TTY (termasuk lewat
+`curl | bash`, lihat [07-security.md](07-security.md) §7.4) dan tidak dipakai
+`--docker-group`/`--no-docker-group` eksplisit, script tanya langsung y/N sebelum
+menambahkan `$SERVICE_USER` ke grup `docker`; sesi non-interaktif diam-diam berperilaku
+seperti `--no-docker-group`.
+
 Idempoten — aman dijalankan ulang (mis. setelah upgrade binary): user/config/kredensial yang
 sudah ada tidak ditimpa diam-diam kecuali diminta eksplisit (`--force-setup` untuk reset
-password admin). Langkah 5, 7, dan 8 **sengaja tetap manual** (butuh keputusan sadar per
+password admin), dan kalau `$SERVICE_USER` sudah anggota grup `docker` dari run sebelumnya
+tidak ditanya ulang. Langkah 5, 7, dan 8 **sengaja tetap manual** (butuh keputusan sadar per
 device — akses lintas-pemilik untuk file explorer, dan trade-off keamanan mode sudo) dan
 dicetak sebagai pengingat di akhir output script.
 

@@ -17,9 +17,13 @@
 #                          (Opsi B di §9.2 langkah 2, mis. user login utamamu
 #                          sendiri di device pribadi). $SERVICE_USER harus
 #                          sudah ada kalau opsi ini dipakai.
-#   --docker-group        Tambahkan $SERVICE_USER ke group `docker` — lihat
-#                          implikasi keamanannya di docs/07-security.md §7.4
-#                          sebelum dipakai. Tidak aktif otomatis.
+#   --docker-group        Tambahkan $SERVICE_USER ke group `docker` tanpa tanya —
+#                          lihat implikasi keamanannya di docs/07-security.md §7.4.
+#   --no-docker-group     Jangan tambahkan (dan jangan tanya). Kalau kedua opsi ini
+#                          tidak dipakai dan sesi ini interaktif (ada TTY) serta
+#                          Docker terdeteksi, script akan tanya y/N langsung —
+#                          non-interaktif (mis. CI) diam-diam berperilaku seperti
+#                          --no-docker-group.
 #   --listen <addr>       Alamat:port dashboard (default: 0.0.0.0:8090).
 #   --root-dir <path>     fileExplorer.rootDir (default: /).
 #   --skip-setup          Jangan jalankan `taros setup` di akhir — berguna
@@ -40,7 +44,7 @@ set -euo pipefail
 
 SERVICE_USER="taros"
 CREATE_USER=1
-DOCKER_GROUP=0
+DOCKER_GROUP=""  # kosong = belum diputuskan, tanya interaktif kalau memungkinkan
 LISTEN_ADDR="0.0.0.0:8090"
 ROOT_DIR="/"
 BINARY_PATH=""
@@ -77,6 +81,7 @@ while [[ $# -gt 0 ]]; do
     --service-user) SERVICE_USER="$2"; shift 2 ;;
     --no-create-user) CREATE_USER=0; shift ;;
     --docker-group) DOCKER_GROUP=1; shift ;;
+    --no-docker-group) DOCKER_GROUP=0; shift ;;
     --listen) LISTEN_ADDR="$2"; shift 2 ;;
     --root-dir) ROOT_DIR="$2"; shift 2 ;;
     --skip-setup) SKIP_SETUP=1; shift ;;
@@ -117,13 +122,48 @@ else
   log "Pakai user yang sudah ada: '$SERVICE_USER'"
 fi
 
-# --- 3. Group docker (opsional) ---
-if [[ "$DOCKER_GROUP" -eq 1 ]]; then
-  if getent group docker >/dev/null; then
-    log "Menambahkan '$SERVICE_USER' ke group docker"
-    usermod -aG docker "$SERVICE_USER"
+# --- 3. Group docker (opsional; tanya interaktif kalau tidak dispesifikkan) ---
+# docker.enabled aktif secara default di config (internal/config/config.go),
+# tapi akses ke docker.sock TIDAK ikut otomatis — keanggotaan grup 'docker'
+# levelnya setara akses root ke host (siapa pun di grup itu bisa mount
+# filesystem host lewat container yang dijalankannya), jadi tetap butuh
+# persetujuan sadar, bukan default diam-diam (docs/07-security.md §7.4).
+# Bedanya dengan sebelumnya: kalau user tidak eksplisit pakai --docker-group/
+# --no-docker-group DAN sesi ini interaktif (ada TTY — termasuk lewat
+# `curl | bash`, karena scripts/quick-install.sh sudah menyambungkan ulang
+# stdin ke /dev/tty untuk kasus persis seperti ini, sama seperti yang dipakai
+# prompt `taros setup` di bawah), kita tanya langsung di sini alih-alih cuma
+# menaruh pengingat di akhir yang gampang terlewat — user awam tidak perlu
+# tahu command `usermod` sama sekali. Re-run aman: kalau user servis sudah
+# jadi anggota dari run sebelumnya, tidak ditanya ulang.
+if getent group docker >/dev/null 2>&1 && id -nG "$SERVICE_USER" 2>/dev/null | grep -qw docker; then
+  DOCKER_GROUP=1
+elif [[ -z "$DOCKER_GROUP" ]]; then
+  if getent group docker >/dev/null 2>&1 && [[ -t 0 ]]; then
+    echo ""
+    echo "Docker terdeteksi di sistem ini. Menu Docker TarOS aktif secara default,"
+    echo "tapi butuh user servis ('$SERVICE_USER') jadi anggota grup 'docker' —"
+    echo "levelnya SETARA akses root ke host (siapa pun di grup itu bisa mount"
+    echo "filesystem host lewat container yang dijalankannya). Detail:"
+    echo "docs/07-security.md §7.4."
+    read -r -p "Tambahkan '$SERVICE_USER' ke grup docker sekarang? [y/N] " DOCKER_GROUP_ANSWER || DOCKER_GROUP_ANSWER=""
+    case "$DOCKER_GROUP_ANSWER" in
+      [Yy]*) DOCKER_GROUP=1 ;;
+      *) DOCKER_GROUP=0 ;;
+    esac
   else
-    log "PERINGATAN: group 'docker' tidak ditemukan, lewati --docker-group (Docker belum terpasang?)"
+    DOCKER_GROUP=0
+  fi
+fi
+
+if [[ "$DOCKER_GROUP" -eq 1 ]]; then
+  if getent group docker >/dev/null 2>&1; then
+    if ! id -nG "$SERVICE_USER" | grep -qw docker; then
+      log "Menambahkan '$SERVICE_USER' ke group docker"
+      usermod -aG docker "$SERVICE_USER"
+    fi
+  else
+    log "PERINGATAN: group 'docker' tidak ditemukan, lewati (Docker belum terpasang?)"
   fi
 fi
 
