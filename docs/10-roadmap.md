@@ -574,6 +574,51 @@ sudah tercapai di atas.
   `setpgid` sandbox development dari Fase 4, sudah didokumentasikan di sana, tidak terkait
   fase ini).
 
+### Sidebar dihilangkan, navigasi topbar-only
+
+Follow-up cepat dari feedback langsung setelah tema baru dicoba: sidebar kiri (`NLayoutSider`)
+dihapus total — link nav (Dashboard/Docker/Service/Files/Terminal) pindah ke topbar, collapse
+jadi ikon-saja di bawah 768px. Ditambah kredit footer kecil ("TarOS — dibuat oleh Tarkiman") di
+bawah setiap halaman, dan perbaikan bug layout nyata: grid dua kolom Dashboard sempat
+meninggalkan celah kosong di bawah kartu "Ringkasan Sistem" kalau kolom sebelahnya (Container
+Teratas + Docker) lebih tinggi — `align-items: start` di CSS grid diganti default (`stretch`)
+supaya kartu yang lebih pendek ikut memenuhi baris alih-alih menyisakan lubang.
+
+### Monitoring proses OS + widget "Pemakai Teratas" yang bisa disortir (selesai-dev)
+
+Perluasan nyata dari sekadar reskin: sekarang ada **monitoring proses level sistem operasi**
+sungguhan, bukan cuma statistik per-container yang sudah ada sejak Fase 2a.
+
+- `internal/collector/proc.go` (baru): baca `/proc/[pid]/stat` (nama proses + `utime`/`stime`
+  untuk CPU% berbasis delta antar-tick, pola sama seperti CPU total system-wide di
+  `cpu.go`) dan `/proc/[pid]/status` (`VmRSS` untuk RAM) — **langsung**, bukan lewat
+  `gopsutil`, konsisten dengan keputusan arsitektur yang sudah ada
+  ([03-tech-stack.md](03-tech-stack.md) "Kenapa tidak gopsutil?"). Dijalankan di ticker
+  terpisah (`Intervals.Proc`, default 5 detik — lebih jarang dari `CPUMemNet` karena baca
+  ratusan PID×2-file jauh lebih berat dari satu `/proc/stat` agregat) dan hasilnya disimpan
+  di `store.Store` lewat method baru `SetProcesses`/`Processes()` — **terpisah dari
+  `Snapshot`/SSE**, karena data ini jauh lebih besar dan tidak semua klien SSE sedang
+  membuka widget-nya; membebani setiap tick broadcast dengan data yang sering tidak
+  terpakai tidak sepadan di perangkat 2GB RAM.
+- Endpoint baru `GET /api/processes?sortBy=cpu|mem&limit=N` — sorting & pemotongan jumlah
+  terjadi di server, bukan kirim semua proses ke client lalu sort di sana.
+- **Widget "Pemakai Teratas"** (Dashboard, gantinya "Container Teratas"): tab **Container**
+  (data yang sudah ada) vs **Proses** (data baru di atas), dan gauge **CPU**/**RAM** di kartu
+  "Ringkasan Sistem" sekarang bisa **diklik** untuk menentukan urutan widget — berlaku ke
+  kedua tab sekaligus. Refresh proses cuma jalan (polling 5 detik) selagi tab "Proses" aktif,
+  berhenti otomatis begitu pindah tab/halaman — tidak ada alasan menghantam endpoint di
+  belakang layar kalau tidak ada yang melihatnya.
+- **Verifikasi nyata lewat curl + headless browser**: endpoint `/api/processes` diuji
+  langsung di mesin dev dan benar-benar menampilkan proses sungguhan (termasuk proses
+  Chromium milik skrip pengujian headless itu sendiri, `dockerd`, `containerd`, `systemd`,
+  dll) dengan CPU%/RAM yang masuk akal dan berubah antar sampling; klik gauge CPU→RAM dan
+  tab Container↔Proses di headless browser terkonfirmasi mengubah data & urutan yang
+  ditampilkan sesuai ekspektasi, sort tetap terbawa saat pindah tab.
+- **Catatan, bukan bug dari fase ini**: kolom RAM container menampilkan "0 B" untuk container
+  di mesin dev — sudah begitu sejak sebelum fase ini juga (terlihat sama di tabel Docker biasa),
+  kemungkinan `docker stats` di host ini tidak melaporkan `memUsageBytes` untuk container-
+  container tsb. Di luar scope perbaikan fase ini (bukan masalah di kode yang ditulis di sini).
+
 ### Installer non-interaktif (`scripts/install.sh`)
 
 Mengisi placeholder yang sejak Fase 0 disebut di [09-deployment.md](09-deployment.md) §9.2

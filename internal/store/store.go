@@ -24,7 +24,8 @@ const (
 )
 
 type Store struct {
-	latest atomic.Pointer[Snapshot]
+	latest      atomic.Pointer[Snapshot]
+	latestProcs atomic.Pointer[[]ProcInfo]
 
 	mu      sync.Mutex
 	buffers map[string]*RingBuffer
@@ -50,6 +51,22 @@ func (s *Store) Set(snap *Snapshot) {
 
 func (s *Store) Latest() *Snapshot {
 	return s.latest.Load()
+}
+
+// SetProcesses/Processes hold the latest full process list (unsorted,
+// unfiltered) — sorting/limiting for a given request happens in the HTTP
+// handler, not here, so this stays a single cheap swap per sample tick
+// regardless of how many different views/sort orders end up asking for it.
+func (s *Store) SetProcesses(procs []ProcInfo) {
+	s.latestProcs.Store(&procs)
+}
+
+func (s *Store) Processes() []ProcInfo {
+	p := s.latestProcs.Load()
+	if p == nil {
+		return nil
+	}
+	return *p
 }
 
 // AddSample appends a value to the named series' ring buffer. Series not

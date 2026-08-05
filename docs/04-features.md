@@ -61,6 +61,31 @@
 - Per interface: rx/tx bytes, dihitung throughput (bytes/s) dari delta `/proc/net/dev`.
 - Exclude `lo` (loopback) dari tampilan utama, tapi tetap tersedia jika dibutuhkan.
 
+### Proses (per-process)
+
+- Widget "Pemakai Teratas" di Dashboard menjawab "siapa yang pakai CPU/RAM ini" di dua level
+  granularitas berbeda, dipilih lewat tab **Container** / **Proses**:
+  - **Container**: dari data `dockerApi.containers()` yang sudah ada (stats per container),
+    tidak ada pengumpulan data baru.
+  - **Proses (OS)**: daftar proses sungguhan di level sistem operasi (bukan cuma container) —
+    baca langsung `/proc/[pid]/stat` (nama proses, `utime`+`stime` untuk CPU% berbasis delta,
+    pola sama seperti CPU total system-wide di atas) dan `/proc/[pid]/status` (`VmRSS` untuk
+    RAM), **bukan** lewat `gopsutil` — konsisten dengan keputusan "Kenapa tidak gopsutil?" di
+    [03-tech-stack.md](03-tech-stack.md).
+- Klik gauge **CPU** atau **RAM** di kartu "Ringkasan Sistem" menentukan pengurutan widget
+  (berlaku ke kedua tab, Container maupun Proses) — bukan modal/drawer terpisah, supaya tetap
+  satu layar tanpa navigasi tambahan, sesuai filosofi "informasi penting terlihat tanpa scroll"
+  di [06-api-ui-ux.md](06-api-ui-ux.md) §6.2.
+- Endpoint `GET /api/processes?sortBy=cpu|mem&limit=N` melakukan sorting & pembatasan jumlah
+  di server (bukan kirim semua proses lalu sort di client) — di perangkat dengan ratusan proses
+  berjalan, tidak ada alasan mengirim seluruhnya lewat jaringan tiap kali sort berganti padahal
+  yang ditampilkan cuma 5 baris teratas.
+- Sampling proses **terpisah dari SSE snapshot** metrics utama (interval sendiri, lebih jarang
+  — lihat tabel di bawah): membaca `/proc` per-PID (dua file per proses) untuk ratusan proses
+  jauh lebih berat daripada satu pembacaan `/proc/stat` agregat, dan tidak semua klien yang
+  terhubung ke SSE sedang melihat widget ini — membebani setiap tick SSE dengan data yang
+  sering tidak dipakai tidak sepadan di perangkat 2GB RAM.
+
 ### Interval Sampling (default, bisa dikonfigurasi)
 
 | Metric | Interval default |
@@ -69,6 +94,7 @@
 | Disk usage | 10 detik |
 | Disk I/O | 2 detik |
 | Suhu | 5 detik |
+| Proses (daftar OS-level) | 5 detik |
 
 ## 4.2 Monitoring & Pengaturan Docker
 

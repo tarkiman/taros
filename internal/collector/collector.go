@@ -14,6 +14,7 @@ type Intervals struct {
 	CPUMemNet time.Duration
 	DiskUsage time.Duration
 	Temp      time.Duration
+	Proc      time.Duration
 }
 
 // Collector owns the small bits of state needed for delta-based metrics
@@ -32,6 +33,11 @@ type Collector struct {
 	prevDiskIO   *diskIOSample
 	prevDiskIOAt time.Time
 
+	// prevProcTimes/prevProcAt are the same delta-CPU% bookkeeping as
+	// prevCPU above, just keyed per-PID instead of system-wide.
+	prevProcTimes map[int]uint64
+	prevProcAt    time.Time
+
 	// latestDisks/latestTemps are refreshed on their own slower tickers but
 	// read every fast tick to assemble a full Snapshot. No mutex needed:
 	// Run's select loop is single-threaded, so ticks never overlap.
@@ -41,8 +47,9 @@ type Collector struct {
 
 func New(s *store.Store) *Collector {
 	return &Collector{
-		store:   s,
-		prevNet: make(map[string]netStatSample),
+		store:         s,
+		prevNet:       make(map[string]netStatSample),
+		prevProcTimes: make(map[int]uint64),
 	}
 }
 
@@ -57,9 +64,11 @@ func (c *Collector) Run(ctx context.Context, iv Intervals) {
 	fast := time.NewTicker(iv.CPUMemNet)
 	diskUsage := time.NewTicker(iv.DiskUsage)
 	temp := time.NewTicker(iv.Temp)
+	proc := time.NewTicker(iv.Proc)
 	defer fast.Stop()
 	defer diskUsage.Stop()
 	defer temp.Stop()
+	defer proc.Stop()
 
 	for {
 		select {
@@ -71,6 +80,8 @@ func (c *Collector) Run(ctx context.Context, iv Intervals) {
 			c.sampleDiskUsage()
 		case <-temp.C:
 			c.sampleTemps()
+		case now := <-proc.C:
+			c.store.SetProcesses(c.sampleProcesses(now))
 		}
 	}
 }

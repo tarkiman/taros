@@ -78,6 +78,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
 	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))
+	mux.HandleFunc("GET /api/processes", s.requireAuth(s.handleProcesses))
 
 	mux.HandleFunc("GET /api/docker/containers", s.requireAuth(s.handleAPIDockerContainers))
 	mux.HandleFunc("GET /api/docker/images", s.requireAuth(s.handleAPIDockerImages))
