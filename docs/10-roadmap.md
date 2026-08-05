@@ -678,6 +678,67 @@ resolution** — go.mod yang menyatakan path lama sementara diminta lewat path b
 verifikasi module path, jadi menyamakan `go.mod` bukan sekadar kerapian tapi memang wajib
 begitu repo-nya benar-benar pindah nama.
 
+### Rilis binary siap pakai + installer satu perintah
+
+Dipicu laporan nyata: teman user mencoba install TarOS di STB-nya dan gagal — jalur satu-
+satunya yang ada sampai titik ini masih mengharuskan build dari source (Go + Node/npm) di
+perangkat target, yang untuk kebanyakan STB entah tidak terpasang, atau tidak layak dipasang
+cuma demi build sekali. Fokus fase ini murni **menghilangkan langkah build dari alur instalasi
+end-user**, bukan mengubah cara kerja aplikasi.
+
+- **`.github/workflows/release.yml`** (baru): trigger dari push tag `v*` — build frontend
+  sekali, cross-compile binary arm64 & armv7 (langkah yang sama seperti §9.1, sekarang
+  otomatis), paket masing-masing jadi tarball flat (`taros` binary + `install.sh` + `deploy/`)
+  lewat GitHub Actions, publish sebagai release asset. Versi di-embed ke binary via
+  `-ldflags -X main.version=<tag>`.
+- **`main.go`**: tambah `var version = "dev"` (di-override saat build rilis) + subcommand
+  `taros version`/`taros --version`, dan dicatat di log startup — sebelumnya cuma rencana di
+  §9.5, sekarang benar-benar ada meski belum ditampilkan di UI (belum ada halaman Settings).
+- **`scripts/quick-install.sh`** (baru): satu perintah, tanpa clone repo atau build tools sama
+  sekali di perangkat target —
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | sudo bash
+  ```
+  Deteksi arsitektur dari `uname -m`, tanya GitHub API untuk rilis terbaru, unduh tarball yang
+  cocok, ekstrak, jalankan `install.sh` dari fase sebelumnya — semua flag `install.sh` tetap
+  bisa diteruskan lewat `--`.
+- **`scripts/install.sh` disesuaikan** supaya jalan dari dua layout berbeda: checkout repo
+  penuh (`scripts/install.sh`, `deploy/` satu level di atas — layout lama) **atau** tarball
+  rilis flat (`install.sh` dan `deploy/` sejajar — layout baru). Dideteksi otomatis, bukan flag
+  terpisah.
+- **Bug nyata ditemukan & diperbaiki lewat testing, bukan cuma dibaca ulang**: `curl | bash`
+  membuat stdin script itu sendiri berasal dari pipe `curl`, bukan terminal — begitu
+  `quick-install.sh` memanggil `install.sh` yang lalu memanggil `taros setup` (prompt
+  username/password interaktif), prompt itu mencoba baca dari pipe yang sudah habis terpakai
+  dan gagal (`read password: EOF`). Ini bukan bug di `install.sh`/`taros setup` (keduanya sudah
+  benar saat dites langsung, tanpa pipe) — akar masalahnya murni cara `curl | bash` bekerja.
+  Diperbaiki dengan membaca ulang stdin dari `/dev/tty` (terminal asli, terpisah dari stdin
+  proses) khusus untuk langkah terakhir yang butuh input interaktif. Percobaan pertama
+  perbaikan ini sendiri masih bocor pesan error ke output (`/dev/tty: No such device or
+  address`) di lingkungan tanpa controlling terminal sama sekali (mis. `docker exec` tanpa
+  `-it`) — karena `2>/dev/null` yang ditulis setelah redirection yang gagal tidak sempat
+  berlaku (bash melaporkan error redirection sebelum redirection lain di baris yang sama
+  diproses). Diperbaiki lagi dengan membungkus percobaan buka `/dev/tty` di subshell
+  (`( exec 3</dev/tty ) 2>/dev/null`) supaya stderr-nya benar-benar teredam.
+- **Checkpoint tercapai — diuji end-to-end di container Docker dengan systemd sungguhan**
+  (pola sama seperti testing `install.sh` sebelumnya), termasuk **PTY asli** (lewat `script
+  -qec`, bukan cuma pipe biasa) supaya skenario `curl | bash` interaktif teruji persis seperti
+  yang akan dialami user sungguhan, bukan cuma jalur `--skip-setup`:
+  - Tarball hasil packaging (dibuat manual meniru langkah workflow, karena workflow sendiri
+    baru jalan nyata setelah tag pertama di-push) diverifikasi strukturnya benar & bisa
+    diekstrak oleh `quick-install.sh`.
+  - Parsing URL unduhan dari response GitHub API (`browser_download_url`) diuji dengan sample
+    JSON asli formatnya (pretty-printed & minified) untuk arch `arm64` dan `armv7`.
+  - Jalur `--skip-setup` lewat pipe `curl | bash` sungguhan (bukan cuma lokal) dikonfirmasi
+    selesai bersih tanpa pesan error nyasar, servis aktif, dashboard merespons `HTTP 200`.
+  - Jalur interaktif penuh lewat PTY asli (`script -qec 'curl ... | bash'`) dikonfirmasi
+    prompt username/password benar-benar menerima input, kredensial tersimpan dengan username
+    yang benar, servis aktif & merespons.
+- **`README.md`** (baru, sebelumnya tidak ada di root repo) dan `docs/09-deployment.md` §9.1–
+  §9.2 diperbarui: jalur satu-perintah ini sekarang jadi cara instalasi **utama** yang
+  ditonjolkan, build-dari-source didemosikan jadi opsi untuk arsitektur di luar arm64/armv7
+  atau yang memang mau build sendiri.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

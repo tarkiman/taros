@@ -1,0 +1,60 @@
+name: Release
+
+# Triggered by pushing a version tag (git tag v0.1.0 && git push origin v0.1.0).
+# Builds the Vue frontend once, cross-compiles the Go binary for both
+# documented target architectures (docs/09-deployment.md §9.1), packages
+# each into a flat tarball (binary + install.sh + deploy/ — the layout
+# scripts/quick-install.sh expects), and publishes them as release assets.
+# No build tools needed on the target device — that's the whole point.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build frontend
+        run: |
+          cd web/frontend
+          npm ci
+          npm run build
+
+      - name: Cross-compile
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-arm64 ./cmd/taros
+          GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-armv7 ./cmd/taros
+
+      - name: Package release tarballs
+        run: |
+          for arch in arm64 armv7; do
+            pkg="taros-${GITHUB_REF_NAME}-${arch}"
+            mkdir -p "$pkg/deploy/systemd"
+            cp "dist/taros-${arch}" "$pkg/taros"
+            cp scripts/install.sh "$pkg/install.sh"
+            cp deploy/config.example.yaml "$pkg/deploy/config.example.yaml"
+            cp deploy/systemd/taros.service "$pkg/deploy/systemd/taros.service"
+            chmod +x "$pkg/taros" "$pkg/install.sh"
+            tar -czf "${pkg}.tar.gz" "$pkg"
+          done
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: taros-*.tar.gz
+          generate_release_notes: true
