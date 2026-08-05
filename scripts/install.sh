@@ -44,7 +44,15 @@ SKIP_SETUP=0
 FORCE_SETUP=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Two valid layouts: a full repo checkout (this script lives at
+# scripts/install.sh, deploy/ is one level up) or a flat release tarball
+# (this script and deploy/ sit side by side — see .github/workflows/release.yml
+# and scripts/quick-install.sh, which downloads exactly that layout).
+if [[ -d "$SCRIPT_DIR/deploy" ]]; then
+  REPO_DIR="$SCRIPT_DIR"
+else
+  REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 
 usage() {
   sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'

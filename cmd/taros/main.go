@@ -28,7 +28,15 @@ import (
 	"github.com/tarkiman/taros/internal/web"
 )
 
+// version is set at build time via -ldflags "-X main.version=vX.Y.Z" (see
+// .github/workflows/release.yml) — "dev" for a plain local `go build`.
+var version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Println("taros " + version)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		runSetup(os.Args[2:])
 		return
@@ -136,7 +144,7 @@ func runServer(args []string) {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	slog.Info("taros starting", "listen", cfg.Server.Listen)
+	slog.Info("taros starting", "version", version, "listen", cfg.Server.Listen)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)

@@ -2,6 +2,12 @@
 
 ## 9.1 Cross-Compile
 
+**Kebanyakan orang tidak perlu melakukan ini secara manual** — lihat §9.2 "Jalur tercepat" untuk
+instalasi satu perintah yang mengunduh binary dari [GitHub Releases](https://github.com/tarkiman/taros/releases)
+(dibuild otomatis, lihat `.github/workflows/release.yml`). Bagian ini relevan kalau memang mau
+build sendiri (arsitektur di luar ARM64/ARMv7, ingin memverifikasi build dari source, atau
+berkontribusi ke proyek).
+
 Go native cross-compile, tanpa CGO (menghindari kebutuhan toolchain C untuk ARM di mesin dev):
 
 ```bash
@@ -31,6 +37,34 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
   uPlot dipakai langsung sebagai file dist resmi tanpa build sama sekali.
 
 ## 9.2 Instalasi di Perangkat
+
+### Jalur tercepat: satu perintah, tanpa build sama sekali
+
+Untuk perangkat ARM64/ARMv7 (Raspberry Pi, kebanyakan STB Android), **tidak perlu Go, Node,
+atau clone repo di perangkat target sama sekali** — `scripts/quick-install.sh` mendeteksi
+arsitektur, mengunduh binary siap pakai dari [GitHub Releases](https://github.com/tarkiman/taros/releases)
+(dibuild otomatis oleh `.github/workflows/release.yml` tiap tag `v*` di-push), lalu menjalankan
+`install.sh` (lihat di bawah) untuknya:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | sudo bash
+```
+
+Sudah root (umum di image STB minimal, tidak ada `sudo` terpasang)? Jalankan tanpa `sudo` di
+depan `bash` — script mendeteksi ini sendiri. Semua flag `install.sh` di bawah tetap berlaku,
+diteruskan lewat `--`:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | bash -s -- --service-user pi --no-create-user
+```
+
+Prompt username/password admin (langkah 6 di bawah) tetap muncul normal meski dijalankan lewat
+`curl | bash` — script secara eksplisit membaca ulang dari `/dev/tty` (terminal asli) untuk
+bagian ini, bukan dari pipe `curl` yang sudah habis terpakai untuk mengirim script itu sendiri.
+Kalau arsitektur perangkat bukan ARM64/ARMv7, atau memang mau build dari source, lanjut ke opsi
+di bawah.
+
+### Build dari source + `install.sh`
 
 **`scripts/install.sh` mengotomatisasi langkah 1–4, 6, dan 9 di bawah** (binary, user servis,
 config, kredensial admin, systemd unit) — non-interaktif kecuali prompt username/password di
@@ -223,8 +257,10 @@ ringan dari CasaOS" bisa dibuktikan, bukan cuma diasumsikan, sebelum mulai Fase 
 - Tidak ada migrasi data yang rumit di versi awal karena tidak ada database persisten
   (lihat [05-data-storage.md](05-data-storage.md)) — kalau nanti opsi SQLite persistence
   diaktifkan, perlu strategi migrasi skema (`golang-migrate` atau migrasi manual sederhana).
-- Versi binary di-embed via `-ldflags "-X main.version=$(git describe --tags)"` saat build,
-  ditampilkan di halaman Settings.
+- Versi binary di-embed via `-ldflags "-X main.version=vX.Y.Z"` saat build (dilakukan otomatis
+  oleh `.github/workflows/release.yml` untuk tiap tag rilis) — cek dengan `taros version`, juga
+  tercatat di log startup (`journalctl -u taros`). Belum ditampilkan di UI (halaman Settings
+  sendiri belum ada, lihat Fase 6 di [10-roadmap.md](10-roadmap.md)).
 
 ## 9.6 Konfigurasi Contoh (`config.yaml`)
 
