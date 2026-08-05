@@ -205,6 +205,12 @@ log "Selesai. Cek status: systemctl status taros"
 log "Dashboard: http://<alamat-perangkat>:${LISTEN_ADDR##*:}"
 log ""
 log "Langkah opsional yang SENGAJA tidak dijalankan otomatis (baca implikasinya dulu):"
+if [[ "$DOCKER_GROUP" -ne 1 ]]; then
+  log "  - Group docker (TANPA ini, menu Docker di dashboard akan gagal dengan"
+  log "    'permission denied' walau docker.enabled aktif secara default) — jalankan ulang"
+  log "    installer ini dengan --docker-group, lihat implikasi keamanannya dulu"
+  log "    -> docs/07-security.md §7.4"
+fi
 log "  - Akses baca/tulis fileExplorer.rootDir kalau isinya dimiliki user/servis lain"
 log "    -> docs/09-deployment.md §9.2 langkah 5"
 log "  - Mode sudo (untuk sudo di web terminal / tombol aksi Service)"
