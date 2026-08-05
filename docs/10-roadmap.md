@@ -854,6 +854,48 @@ kosong/Enter (default N), non-interaktif tanpa TTY, flag `--docker-group` ekspli
 (skip prompt), dan re-run saat sudah jadi anggota (skip prompt & skip `usermod`) — kelima
 skenario berperilaku sesuai desain.
 
+### Opsi C: mode root penuh saat install, setara CasaOS
+
+Dipicu laporan STB fisik lagi: setelah fix grup docker, muncul masalah sejenis di File
+Explorer — `permission denied` membuka `/home/tarkiman` karena servis (Opsi A, user `taros`)
+memang tidak otomatis punya akses ke folder milik user lain. Solusi ad-hoc (ACL manual per
+folder) valid tapi tidak scalable untuk user awam yang memang cuma mau akses penuh gaya
+CasaOS ke seluruh sistemnya sendiri.
+
+**Riset dulu sebelum putuskan arah**, karena TarOS eksplisit dibuat sebagai
+tandingan/alternatif CasaOS (lihat motivasi proyek) — dicek langsung ke source code CasaOS
+resmi, bukan asumsi: unit systemd mereka (`casaos.service`) **tidak punya baris `User=` sama
+sekali** (default systemd = jalan sebagai root), dan script instalasi resmi mereka
+(`03-setup-casaos.sh`) **tidak ada logika `useradd`/`adduser` apa pun** — backend CasaOS
+selalu jalan sebagai root, tanpa pilihan, tanpa mencoba drop privilege sama sekali. Temuan ini
+juga konsisten dengan CVE-2024-24765 (path filtering longgar di `casaos-userservice` yang bisa
+dipakai eskalasi ke root) — konsekuensi langsung dari arsitektur "semua = root" itu.
+
+Diputuskan **tidak** menyamai itu sebagai default (bertentangan dengan pola least-privilege
+yang sudah dibangun konsisten sepanjang proyek ini — grup docker, terminal off by default,
+mode sudo opt-in — dan blast radius-nya lebih besar khusus di TarOS karena fitur self-update
+men-download & menjalankan binary dari GitHub secara otomatis: kalau prosesnya root, satu
+masalah di pipeline rilis langsung jadi root RCE di semua device terinstall). Sebagai
+gantinya, ditambah **Opsi C** sebagai pilihan eksplisit ketiga (setara Opsi A/B yang sudah
+ada), bukan menggantikannya:
+
+- `scripts/install.sh --root-mode`: set `SERVICE_USER=root`, lewati pembuatan user, dan
+  otomatis melewati/menandai selesai semua langkah privilege lain (grup docker, reminder
+  file explorer & mode sudo di akhir output) karena semuanya jadi moot ketika sudah root.
+- Menu interaktif user servis (dari fitur docker-group-prompt di atas) diperluas dari y/N
+  jadi pilihan 1/2/3 (Opsi A/B/C) setiap kali tidak ada flag eksplisit — default tetap Opsi B
+  (user login, dideteksi lewat `$SUDO_USER`) kalau terdeteksi, jatuh ke Opsi A kalau tidak,
+  **tidak pernah** default ke Opsi C — itu harus dipilih sadar.
+- Sesi non-interaktif (CI/skrip) tidak berubah perilaku — tetap diam-diam jatuh ke Opsi A
+  seperti sebelum fitur ini ada.
+
+Diuji dengan pendekatan sama seperti docker-group-prompt: logic menu di-extract ke skrip
+standalone dengan stub `id`/`useradd`, dicoba lewat PTY sungguhan (`script(1)`) untuk enam
+skenario — default ke Opsi B saat `$SUDO_USER` terdeteksi, pilih Opsi A eksplisit, pilih
+Opsi C eksplisit, non-interaktif (silently Opsi A, tidak ada perubahan), flag `--root-mode`
+melewati menu sepenuhnya, dan sesi interaktif tanpa `$SUDO_USER` terdeteksi (opsi 2 otomatis
+disembunyikan dari menu, default jatuh ke Opsi A) — keenamnya sesuai desain.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

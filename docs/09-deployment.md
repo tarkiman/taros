@@ -74,22 +74,32 @@ config, kredensial admin, systemd unit), dikendalikan lewat flag
 sudo ./scripts/install.sh --binary dist/taros-arm64
 # atau untuk Opsi B (pakai user login yang sudah ada, bukan user dedicated baru):
 sudo ./scripts/install.sh --binary dist/taros-arm64 --service-user pi --no-create-user
+# atau untuk Opsi C (root, setara CasaOS — baca §7.4 dulu):
+sudo ./scripts/install.sh --binary dist/taros-arm64 --root-mode
 ```
 
-Dua titik interaktif (bisa dilewati lewat flag untuk instalasi terskrip/CI): username/password
-admin di langkah 6, dan — karena Docker aktif secara default di config tapi aksesnya butuh
-persetujuan sadar (lihat langkah 3 di bawah) — kalau sesi ini punya TTY (termasuk lewat
-`curl | bash`, lihat [07-security.md](07-security.md) §7.4) dan tidak dipakai
-`--docker-group`/`--no-docker-group` eksplisit, script tanya langsung y/N sebelum
-menambahkan `$SERVICE_USER` ke grup `docker`; sesi non-interaktif diam-diam berperilaku
-seperti `--no-docker-group`.
+Tiga titik interaktif (bisa dilewati lewat flag untuk instalasi terskrip/CI):
+
+1. **User servis** (langkah 2 di bawah) — kalau tidak satu pun dari `--service-user`,
+   `--no-create-user`, `--root-mode` dipakai dan sesi ini punya TTY (termasuk lewat
+   `curl | bash`), script tanya langsung mana dari Opsi A/B/C yang mau dipakai, dengan
+   penjelasan trade-off masing-masing (Opsi B jadi default kalau ada user login terdeteksi
+   lewat `$SUDO_USER`, kalau tidak jatuh ke Opsi A) — sesi non-interaktif diam-diam jatuh ke
+   Opsi A seperti sebelumnya, tidak ada perubahan untuk instalasi terskrip yang sudah ada.
+2. **Grup `docker`** (langkah 3) — karena Docker aktif secara default di config tapi aksesnya
+   butuh persetujuan sadar, kalau sesi ini punya TTY dan tidak dipakai
+   `--docker-group`/`--no-docker-group` eksplisit, script tanya langsung y/N sebelum
+   menambahkan `$SERVICE_USER` ke grup `docker`; sesi non-interaktif diam-diam berperilaku
+   seperti `--no-docker-group`. Dilewati otomatis (dianggap sudah "ya") kalau Opsi C dipilih.
+3. **Username/password admin** (langkah 6).
 
 Idempoten — aman dijalankan ulang (mis. setelah upgrade binary): user/config/kredensial yang
 sudah ada tidak ditimpa diam-diam kecuali diminta eksplisit (`--force-setup` untuk reset
 password admin), dan kalau `$SERVICE_USER` sudah anggota grup `docker` dari run sebelumnya
 tidak ditanya ulang. Langkah 5, 7, dan 8 **sengaja tetap manual** (butuh keputusan sadar per
 device — akses lintas-pemilik untuk file explorer, dan trade-off keamanan mode sudo) dan
-dicetak sebagai pengingat di akhir output script.
+dicetak sebagai pengingat di akhir output script — kecuali Opsi C dipilih, di mana semuanya
+otomatis penuh dan pengingat itu diganti satu baris yang menjelaskan itu.
 
 Langkah manual lengkap di bawah ini tetap didokumentasikan — untuk yang ingin paham persis apa
 yang dilakukan script di atas, mau kustomisasi di luar flag yang tersedia, atau troubleshooting.
@@ -98,11 +108,12 @@ langkah di bawah ditulis dengan `SERVICE_USER` sebagai variabel — bukan asumsi
 user dedicated baru bernama `taros`. Set sekali di awal, lalu salin-tempel apa adanya:
 
 ```bash
-SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
+SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B/C di step 2
 ```
 
 1. Copy binary ke `/usr/local/bin/taros`.
-2. Tentukan user yang akan menjalankan servis — dua opsi valid, pilih salah satu:
+2. Tentukan user yang akan menjalankan servis — tiga opsi valid, pilih salah satu (`install.sh`
+   menanyakan ini interaktif kalau tidak dispesifikkan lewat flag, lihat bagian sebelumnya):
    - **Opsi A (direkomendasikan untuk server bersama banyak orang/publik)**: user sistem
      dedicated baru, tanpa login interaktif — paling sesuai prinsip least-privilege:
      ```bash
@@ -112,7 +123,16 @@ SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B di step 2
      pakai (mis. user login utama di Raspberry Pi/STB kamu) — set `SERVICE_USER` ke user itu
      dan **lewati** perintah `useradd` di atas. Trade-off-nya: proses servis punya hak akses
      yang sama seperti akun kamu sehari-hari (bukan devices terisolasi sepenuhnya), tapi jauh
-     lebih sederhana untuk setup rumahan single-user.
+     lebih sederhana untuk setup rumahan single-user — termasuk akses baca+tulis langsung ke
+     folder home akun itu sendiri, tanpa perlu ACL manual (lihat langkah 5 di bawah).
+   - **Opsi C (PALING BERISIKO — akses penuh ke seluruh sistem, setara CasaOS)**: set
+     `SERVICE_USER=root` dan lewati `useradd`. Ini menghilangkan **semua** batasan izin di
+     panduan ini sekaligus (langkah 3, 5, dan mode sudo di langkah 8 semuanya jadi otomatis
+     penuh) — tapi juga berarti bug apa pun di TarOS (path traversal, dsb) berpotensi
+     berdampak ke seluruh sistem, bukan cuma bagian yang seharusnya dikelolanya. **Bukan
+     default** — lihat [07-security.md](07-security.md) §7.4 untuk perbandingan
+     langsung dengan arsitektur CasaOS (yang justru selalu berjalan seperti ini, tanpa
+     pilihan) sebelum memutuskan.
 
    Siapa pun `$SERVICE_USER`-nya, edit `User=`/`Group=` di `deploy/systemd/taros.service`
    (default `taros`) supaya cocok **sebelum** meng-copy-nya di step 8.

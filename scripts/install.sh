@@ -12,11 +12,20 @@
 #   --binary <path>       Path ke binary taros yang sudah di-build. Default:
 #                          cari ./taros di sebelah script ini, lalu di root
 #                          repo, lalu dist/taros-<arch> sesuai `uname -m`.
-#   --service-user <nama> User yang menjalankan servis (default: taros).
+#   --service-user <nama> User dedicated baru yang menjalankan servis (Opsi A,
+#                          default: taros).
 #   --no-create-user      Jangan buat user baru — pakai user yang sudah ada
 #                          (Opsi B di §9.2 langkah 2, mis. user login utamamu
 #                          sendiri di device pribadi). $SERVICE_USER harus
 #                          sudah ada kalau opsi ini dipakai.
+#   --root-mode           Jalankan servis sebagai root (Opsi C) — akses penuh ke
+#                         SELURUH sistem, setara CasaOS. PALING BERISIKO: baca
+#                         docs/07-security.md §7.4 dulu sebelum dipakai.
+#
+#                         Kalau TIDAK satu pun dari tiga flag di atas dipakai dan
+#                         sesi ini interaktif (ada TTY, termasuk lewat `curl | bash`),
+#                         script tanya langsung mana yang mau dipakai — non-interaktif
+#                         (CI/skrip) diam-diam jatuh ke Opsi A seperti sebelumnya.
 #   --docker-group        Tambahkan $SERVICE_USER ke group `docker` tanpa tanya —
 #                          lihat implikasi keamanannya di docs/07-security.md §7.4.
 #   --no-docker-group     Jangan tambahkan (dan jangan tanya). Kalau kedua opsi ini
@@ -44,6 +53,8 @@ set -euo pipefail
 
 SERVICE_USER="taros"
 CREATE_USER=1
+ROOT_MODE=0
+USER_MODE_EXPLICIT=0  # 1 kalau --service-user/--no-create-user/--root-mode dipakai eksplisit
 DOCKER_GROUP=""  # kosong = belum diputuskan, tanya interaktif kalau memungkinkan
 LISTEN_ADDR="0.0.0.0:8090"
 ROOT_DIR="/"
@@ -63,7 +74,7 @@ else
 fi
 
 usage() {
-  sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,43p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 log() {
@@ -78,8 +89,9 @@ die() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --binary) BINARY_PATH="$2"; shift 2 ;;
-    --service-user) SERVICE_USER="$2"; shift 2 ;;
-    --no-create-user) CREATE_USER=0; shift ;;
+    --service-user) SERVICE_USER="$2"; USER_MODE_EXPLICIT=1; shift 2 ;;
+    --no-create-user) CREATE_USER=0; USER_MODE_EXPLICIT=1; shift ;;
+    --root-mode) ROOT_MODE=1; USER_MODE_EXPLICIT=1; shift ;;
     --docker-group) DOCKER_GROUP=1; shift ;;
     --no-docker-group) DOCKER_GROUP=0; shift ;;
     --listen) LISTEN_ADDR="$2"; shift 2 ;;
@@ -109,8 +121,55 @@ fi
 [[ -n "$BINARY_PATH" && -f "$BINARY_PATH" ]] || die "binary taros tidak ditemukan — build dulu (docs/09-deployment.md §9.1) lalu pakai --binary <path>"
 log "Pakai binary: $BINARY_PATH"
 
-# --- 2. User servis ---
-if [[ "$CREATE_USER" -eq 1 ]]; then
+# --- 2. User servis (opsional; tanya interaktif kalau tidak dispesifikkan) ---
+# Tiga mode, lihat docs/09-deployment.md §9.2 langkah 2 & docs/07-security.md §7.4
+# untuk perbandingan lengkap (termasuk kenapa CasaOS SELALU pakai mode 3 tanpa
+# pilihan — riset langsung ke source code mereka, bukan asumsi):
+#   1) Opsi A — user dedicated baru, terisolasi (paling aman, cocok server bersama).
+#   2) Opsi B — user yang sedang login (via $SUDO_USER) — akses penuh ke file
+#      miliknya sendiri, cocok device pribadi.
+#   3) Opsi C — root, akses penuh ke SELURUH sistem, setara CasaOS. Trade-off yang
+#      sama seperti CVE-2024-24765 di CasaOS-UserService: root berarti bug apa pun
+#      di TarOS bisa berdampak ke seluruh sistem, bukan cuma bagian yang seharusnya
+#      dikelolanya — jadi tetap butuh pilihan SADAR, bukan default diam-diam,
+#      persis pola --docker-group.
+LOGIN_USER="${SUDO_USER:-}"
+if [[ "$USER_MODE_EXPLICIT" -eq 0 && -t 0 ]]; then
+  echo ""
+  echo "Pilih user yang menjalankan servis TarOS:"
+  echo "  1) User baru khusus, terisolasi dari akun lain di sistem ini — paling aman,"
+  echo "     direkomendasikan untuk server bersama/publik."
+  DEFAULT_CHOICE=1
+  if [[ -n "$LOGIN_USER" && "$LOGIN_USER" != "root" ]]; then
+    echo "  2) User yang sedang login ('$LOGIN_USER') — akses penuh ke file miliknya"
+    echo "     sendiri (mis. /home/$LOGIN_USER), cocok untuk device pribadi. (default)"
+    DEFAULT_CHOICE=2
+  fi
+  echo "  3) root — akses penuh ke SELURUH sistem, setara CasaOS. PALING BERISIKO:"
+  echo "     bug apa pun di TarOS bisa berdampak ke seluruh sistem, bukan cuma bagian"
+  echo "     yang seharusnya dikelolanya. Detail: docs/07-security.md §7.4."
+  read -r -p "Pilihan [1/2/3] (default: $DEFAULT_CHOICE): " USER_MODE_ANSWER || USER_MODE_ANSWER=""
+  USER_MODE_ANSWER="${USER_MODE_ANSWER:-$DEFAULT_CHOICE}"
+  case "$USER_MODE_ANSWER" in
+    1) CREATE_USER=1 ;;
+    2)
+      if [[ -n "$LOGIN_USER" && "$LOGIN_USER" != "root" ]]; then
+        CREATE_USER=0
+        SERVICE_USER="$LOGIN_USER"
+      else
+        die "opsi 2 tidak tersedia (tidak terdeteksi user login lewat sudo) — pilih 1 atau 3"
+      fi
+      ;;
+    3) ROOT_MODE=1 ;;
+    *) die "pilihan tidak dikenal: $USER_MODE_ANSWER" ;;
+  esac
+fi
+
+if [[ "$ROOT_MODE" -eq 1 ]]; then
+  SERVICE_USER="root"
+  CREATE_USER=0
+  log "Servis akan jalan sebagai root (Opsi C) — akses penuh ke seluruh sistem, lihat docs/07-security.md §7.4"
+elif [[ "$CREATE_USER" -eq 1 ]]; then
   if id "$SERVICE_USER" &>/dev/null; then
     log "User '$SERVICE_USER' sudah ada, lewati pembuatan"
   else
@@ -135,8 +194,12 @@ fi
 # prompt `taros setup` di bawah), kita tanya langsung di sini alih-alih cuma
 # menaruh pengingat di akhir yang gampang terlewat — user awam tidak perlu
 # tahu command `usermod` sama sekali. Re-run aman: kalau user servis sudah
-# jadi anggota dari run sebelumnya, tidak ditanya ulang.
-if getent group docker >/dev/null 2>&1 && id -nG "$SERVICE_USER" 2>/dev/null | grep -qw docker; then
+# jadi anggota dari run sebelumnya, tidak ditanya ulang. Kalau servis jalan sebagai
+# root (Opsi C di atas), semua ini otomatis moot — root sudah bypass permission
+# check grup sama sekali, tidak perlu ditanya.
+if [[ "$SERVICE_USER" == "root" ]]; then
+  DOCKER_GROUP=1
+elif getent group docker >/dev/null 2>&1 && id -nG "$SERVICE_USER" 2>/dev/null | grep -qw docker; then
   DOCKER_GROUP=1
 elif [[ -z "$DOCKER_GROUP" ]]; then
   if getent group docker >/dev/null 2>&1 && [[ -t 0 ]]; then
@@ -156,7 +219,7 @@ elif [[ -z "$DOCKER_GROUP" ]]; then
   fi
 fi
 
-if [[ "$DOCKER_GROUP" -eq 1 ]]; then
+if [[ "$SERVICE_USER" != "root" && "$DOCKER_GROUP" -eq 1 ]]; then
   if getent group docker >/dev/null 2>&1; then
     if ! id -nG "$SERVICE_USER" | grep -qw docker; then
       log "Menambahkan '$SERVICE_USER' ke group docker"
@@ -244,14 +307,20 @@ log ""
 log "Selesai. Cek status: systemctl status taros"
 log "Dashboard: http://<alamat-perangkat>:${LISTEN_ADDR##*:}"
 log ""
-log "Langkah opsional yang SENGAJA tidak dijalankan otomatis (baca implikasinya dulu):"
-if [[ "$DOCKER_GROUP" -ne 1 ]]; then
-  log "  - Group docker (TANPA ini, menu Docker di dashboard akan gagal dengan"
-  log "    'permission denied' walau docker.enabled aktif secara default) — jalankan ulang"
-  log "    installer ini dengan --docker-group, lihat implikasi keamanannya dulu"
-  log "    -> docs/07-security.md §7.4"
+if [[ "$SERVICE_USER" == "root" ]]; then
+  log "Servis jalan sebagai root (Opsi C) — tidak ada langkah privilege tambahan yang"
+  log "perlu di-setup manual (Docker, File Explorer, mode sudo semuanya otomatis penuh)."
+  log "Baca implikasi keamanannya: docs/07-security.md §7.4."
+else
+  log "Langkah opsional yang SENGAJA tidak dijalankan otomatis (baca implikasinya dulu):"
+  if [[ "$DOCKER_GROUP" -ne 1 ]]; then
+    log "  - Group docker (TANPA ini, menu Docker di dashboard akan gagal dengan"
+    log "    'permission denied' walau docker.enabled aktif secara default) — jalankan ulang"
+    log "    installer ini dengan --docker-group, lihat implikasi keamanannya dulu"
+    log "    -> docs/07-security.md §7.4"
+  fi
+  log "  - Akses baca/tulis fileExplorer.rootDir kalau isinya dimiliki user/servis lain"
+  log "    -> docs/09-deployment.md §9.2 langkah 5"
+  log "  - Mode sudo (untuk sudo di web terminal / tombol aksi Service)"
+  log "    -> docs/09-deployment.md §9.2 langkah 8, docs/07-security.md §7.6"
 fi
-log "  - Akses baca/tulis fileExplorer.rootDir kalau isinya dimiliki user/servis lain"
-log "    -> docs/09-deployment.md §9.2 langkah 5"
-log "  - Mode sudo (untuk sudo di web terminal / tombol aksi Service)"
-log "    -> docs/09-deployment.md §9.2 langkah 8, docs/07-security.md §7.6"

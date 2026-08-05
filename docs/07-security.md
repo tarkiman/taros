@@ -79,8 +79,25 @@ tidak ada jalur kode yang lupa memvalidasi:
   `org.freedesktop.systemd1.Manager` tanpa perlu jadi root penuh — lebih granular dibanding
   menjalankan seluruh proses sebagai root. Contoh rule polkit disediakan di
   `deploy/polkit/10-taros-systemd.rules` (lihat [09-deployment.md](09-deployment.md)).
-- **Tidak berjalan sebagai root.** Proses jalan sebagai user sistem dedicated `taros`
-  (dibuat saat instalasi), dengan hanya membership/permission yang benar-benar dibutuhkan.
+- **Tidak berjalan sebagai root secara default.** Proses jalan sebagai user sistem dedicated
+  `taros` (dibuat saat instalasi, Opsi A) atau user login yang sudah ada (Opsi B), dengan
+  hanya membership/permission yang benar-benar dibutuhkan. Root **tersedia sebagai pilihan
+  eksplisit** (Opsi C, `scripts/install.sh --root-mode`) — lihat poin CasaOS di bawah untuk
+  kapan dan kenapa itu mungkin masuk akal, tapi ini bukan default dan tetap butuh persetujuan
+  sadar (installer menanyakannya interaktif, sama pola dengan grup `docker` di atas).
+- **Perbandingan langsung dengan CasaOS** (proyek yang jadi acuan/pembanding TarOS, lihat
+  [10-roadmap.md](10-roadmap.md)) — dicek langsung ke source code mereka, bukan asumsi:
+  unit systemd resmi mereka (`casaos.service`) **tidak punya baris `User=` sama sekali**
+  (default systemd = root), dan script instalasi resmi mereka (`03-setup-casaos.sh`) **tidak
+  ada logika `useradd`/`adduser` apa pun** — CasaOS tidak pernah mencoba drop privilege,
+  seluruh backend-nya selalu jalan sebagai root, tanpa pilihan. ID kerentanan publik
+  CVE-2024-24765 (di `casaos-userservice`, path filtering yang tidak ketat sehingga bisa
+  dipakai akses file sembarangan + eskalasi ke root) adalah konsekuensi langsung dari
+  arsitektur itu — bug yang di TarOS dengan Opsi A/B "cuma" berdampak ke lingkup user servis,
+  di CasaOS otomatis berarti kompromise sistem penuh, karena prosesnya memang sudah root.
+  Opsi C di TarOS memberi kemampuan yang sama (akses filesystem penuh, tanpa perlu ACL manual
+  per-folder) untuk yang memang menginginkannya, tapi sebagai pilihan sadar per instalasi,
+  bukan satu-satunya mode yang tersedia.
 - **Aksi destruktif Docker** (remove container/image/volume/network, semua bentuk prune —
   lihat [04-features.md](04-features.md) §4.2) mengikuti pola konfirmasi yang sama dengan
   file explorer: modal konfirmasi jelas (tegas untuk remove image/volume yang isinya besar,
@@ -199,6 +216,7 @@ bagian ini fokus ke kontrol keamanannya.
 | Kredensial dashboard bocor → akses root instan (kalau sudo NOPASSWD aktif) | Sudo tidak aktif default; mode "dengan password" direkomendasikan; NOPASSWD didokumentasikan eksplisit sebagai risiko tinggi, bukan default |
 | Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |
 | Fitur update disalahgunakan untuk jalankan binary arbitrer | URL rilis hardcoded ke `github.com/tarkiman/taros`, tidak configurable; tetap butuh sesi terautentikasi + CSRF; `update.enabled` bisa dimatikan |
+| Bug (path traversal, dsb) berdampak ke seluruh sistem, bukan cuma lingkup TarOS | Non-root tetap default (Opsi A/B); mode root (Opsi C, setara CasaOS) hanya lewat pilihan eksplisit saat instalasi, bukan default diam-diam |
 
 ## 7.9 Update Aplikasi
 
