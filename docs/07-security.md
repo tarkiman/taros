@@ -171,6 +171,14 @@ bagian ini fokus ke kontrol keamanannya.
 - **Cleanup proses terjamin.** Saat koneksi WebSocket terputus (tab ditutup, network putus,
   idle timeout, logout), proses shell & file descriptor PTY terkait di-`kill`/`Close()` di
   sisi server — mencegah proses menumpuk (resource leak) di perangkat 2GB RAM.
+- **Kegagalan spawn PTY tercatat ke log**, bukan cuma dikembalikan sebagai body HTTP —
+  penting karena kegagalan upgrade WebSocket **tidak pernah** membuat body respons-nya
+  sampai ke browser (batasan WebSocket API, bukan sesuatu yang bisa diakali dari sisi
+  klien), jadi `journalctl -u taros` adalah satu-satunya tempat error sungguhan (shell
+  tidak ada, `exec` diblokir kebijakan sandbox/seccomp, limit fd/pid, dst) bisa terlihat.
+  Penolakan handshake WebSocket (mis. `Origin` tidak cocok — biasanya CSWSH yang tertolak,
+  tapi bisa juga reverse proxy yang salah konfigurasi menghapus header `Origin`) juga
+  dicatat, bukan diam-diam.
 - **Bisa dimatikan total.** `terminal.enabled: false` di `config.yaml` menghapus fitur ini
   sepenuhnya dari routing (bukan cuma disembunyikan di UI) — direkomendasikan untuk instalasi
   yang perangkatnya ter-expose lebih luas dari LAN rumah (lihat juga §7.5 di atas soal

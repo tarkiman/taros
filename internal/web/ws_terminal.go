@@ -50,6 +50,17 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusInternalServerError
 		if errors.Is(err, terminal.ErrTooManySessions) {
 			status = http.StatusServiceUnavailable
+		} else {
+			// ErrTooManySessions is expected/routine (capacity limit, not a
+			// fault) — anything else (PTY spawn failure: shell missing,
+			// exec blocked by a sandbox/seccomp policy, fd/pid limits,
+			// ...) is worth an operator's attention. Without this, the
+			// only trace of the failure was the JSON body in the HTTP
+			// response — invisible here since a WebSocket upgrade failure
+			// never surfaces its response body to the browser, so
+			// `journalctl -u taros` was the only place this could ever
+			// have shown up, and it didn't.
+			slog.Error("terminal session start failed", "username", sess.Username, "err", err)
 		}
 		writeJSONError(w, status, err.Error())
 		return
@@ -63,6 +74,11 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	// already does it correctly by default.
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
+		// Almost always the Origin check above rejecting the handshake —
+		// worth logging either way: a misconfigured reverse proxy that
+		// drops/rewrites Origin looks identical to a blocked CSWSH
+		// attempt from here, and both are worth knowing about.
+		slog.Warn("terminal websocket upgrade rejected", "username", sess.Username, "remote", clientIP(r), "err", err)
 		termSession.Close()
 		return
 	}

@@ -959,6 +959,38 @@ semua proses, bukan cuma top 5.
   `ps` bawaan sistem menunjukkan hasil yang sama, jadi bukan bug), search filter & sort kolom
   berfungsi, tidak ada console error.
 
+### Web Terminal: kegagalan spawn PTY sekarang tercatat ke log
+
+Ditemukan saat mencoba mengaktifkan & menguji fitur Web Terminal (Fase 4) yang sebelumnya
+sudah dibangun tapi belum tervalidasi di STB fisik: mengklik menu Terminal di instance
+development menghasilkan "Gagal terhubung" tanpa detail apa pun.
+
+- **Root cause di instance development**: bukan bug TarOS — spawn PTY (`fork/exec /bin/bash`)
+  ditolak dengan `operation not permitted`, gara-gara instance itu dijalankan di dalam sandbox
+  Claude Code sendiri, yang sengaja mencegah agent men-spawn shell PTY interaktif (bahkan
+  dengan sandbox dinonaktifkan untuk command start-nya sekalipun) — batasan level environment
+  development, tidak relevan sama sekali untuk instalasi sungguhan (systemd di STB/RPi biasa,
+  di luar sandbox apa pun).
+- **Gap nyata yang tetap ditemukan & diperbaiki** selama investigasi ini:
+  `internal/web/ws_terminal.go` sebelumnya **tidak pernah mencatat error apa pun** ke log
+  server saat `TerminalManager.NewSession()` gagal (shell tidak ada, `exec` diblokir
+  kebijakan sistem, limit fd/pid, dst) — error itu cuma dikembalikan sebagai body JSON di
+  respons HTTP, yang untuk upgrade WebSocket **tidak pernah sampai ke browser** (batasan
+  WebSocket API, browser tidak mengekspos body response gagal-upgrade demi keamanan) —
+  jadi kalau ini kejadian sungguhan di STB user, tidak ada cara sama sekali untuk tahu
+  kenapa, baik dari UI maupun dari `journalctl -u taros`. Ditambahkan `slog.Error`/
+  `slog.Warn` untuk kedua jalur gagal (spawn PTY, dan penolakan handshake WebSocket —
+  biasanya mismatch header `Origin`, entah CSWSH yang berhasil diblokir atau reverse proxy
+  yang salah konfigurasi).
+- Diverifikasi lewat reproduksi langsung (request `GET /api/terminal/ws` biasa, bukan lewat
+  upgrade WebSocket, supaya body JSON error-nya kebaca) sebelum dan sesudah fix — sebelumnya
+  nihil di log, sesudahnya baris `ERROR terminal session start failed ... err="..."` muncul
+  persis seperti errornya.
+- **Validasi STB fisik untuk fitur Terminal secara keseluruhan masih tertunda** — perlu
+  dicoba langsung di STB (bukan instance development) karena batasan sandbox di atas membuat
+  ini satu-satunya fitur yang strukturalnya tidak bisa divalidasi end-to-end dari lingkungan
+  development ini.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
