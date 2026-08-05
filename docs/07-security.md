@@ -16,6 +16,40 @@ permukaan risikonya besar jika tidak dijaga. Bagian ini mendefinisikan pagar pen
   5 menit), lalu lockout sementara — mencegah brute-force sederhana. Disimpan in-memory
   (map IP → counter + timestamp), tidak butuh dependency eksternal.
 - Semua route selain `/login` dan asset statis wajib melewati middleware auth.
+- **TOTP (2FA), opsional** (`internal/auth/totp.go`, [04-features.md](04-features.md) §4.7)
+  — nonaktif secara default, diaktifkan sadar dari halaman Pengaturan, bukan default
+  diam-diam (pola yang sama dengan grup docker/mode root/Terminal di sepanjang dokumen ini).
+  - **Implementasi RFC 6238 langsung dari Go stdlib** (`crypto/hmac`, `crypto/sha1`,
+    `crypto/subtle` untuk perbandingan constant-time), bukan library pihak ketiga —
+    algoritmanya kecil, stabil, dan presisi terspesifikasi (beda dengan misalnya framing
+    WebSocket, yang di proyek ini justru pakai library — lihat `internal/web/ws_terminal.go`
+    — karena di situ risiko salah implementasi sendiri jauh lebih tinggi). Diverifikasi
+    terhadap vector resmi RFC 6238 Appendix B **dan** disilangcek terhadap `pyotp`
+    (implementasi independen populer) sebelum kode ini pernah menyentuh jalur login
+    sungguhan — lihat riwayat di [10-roadmap.md](10-roadmap.md).
+  - Secret di-generate saat setup tapi **belum disimpan** sampai user membuktikan sudah
+    scan dengan benar (submit kode 6 digit yang valid) — mencegah kondisi "TOTP aktif tapi
+    secret-nya tidak pernah benar-benar sampai ke aplikasi authenticator manapun", yang akan
+    mengunci akses tanpa jalan keluar.
+  - **10 kode cadangan** (bcrypt-hashed di `credentials.yaml`, sama seperti password) dibuat
+    sekali saat konfirmasi, ditampilkan **satu kali** ke user, sekali pakai (dihapus dari
+    penyimpanan begitu dipakai). Ini satu-satunya jalur recovery bawaan aplikasi kalau
+    perangkat authenticator hilang — kalau kode cadangan **juga** habis/hilang, satu-satunya
+    jalan tersisa adalah edit `credentials.yaml` langsung (hapus baris `totpSecret`/
+    `totpBackupCodes`) lewat akses filesystem (SSH) ke perangkat, yang selalu tersedia tanpa
+    perlu fitur tambahan apa pun karena filenya memang cuma YAML biasa.
+  - **Menonaktifkan TOTP selalu minta password dashboard ulang** (`POST
+    /api/settings/totp/disable`, status 403 khusus untuk password salah — bukan 401, dengan
+    alasan yang sama seperti toggle Terminal: `api/client.ts` treat 401 apa pun sebagai
+    "sesi habis" dan auto-redirect ke `/login`, yang salah untuk kasus ini) — ini
+    aksi yang **mengurangi** keamanan, beda dari setup/konfirmasi yang cuma menambah.
+  - Login dua langkah **stateless** — tidak ada token pending-auth di server. Request kedua
+    (dengan `totpCode` terisi) mengirim ulang username+password yang sama persis, dicek
+    ulang sebelum kode TOTP-nya — jadi tidak ada state tambahan yang perlu dijaga/di-cleanup
+    di server antara langkah 1 dan 2.
+  - Toggle aktif/nonaktifkan TOTP **tidak memengaruhi sesi yang sedang berjalan** — beda dari
+    toggle Terminal (yang perlu restart servis karena route WS didaftarkan saat boot), status
+    TOTP langsung berlaku di proses yang sama untuk login berikutnya, tanpa restart.
 
 ## 7.2 CSRF Protection
 

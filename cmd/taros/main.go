@@ -120,6 +120,7 @@ func runServer(args []string) {
 		Version:         version,
 		UpdateEnabled:   cfg.Update.Enabled,
 		ConfigPath:      *configPath,
+		CredentialsPath: cfg.Auth.CredentialsFile,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
