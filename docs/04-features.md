@@ -69,17 +69,24 @@
     tidak ada pengumpulan data baru.
   - **Proses (OS)**: daftar proses sungguhan di level sistem operasi (bukan cuma container) —
     baca langsung `/proc/[pid]/stat` (nama proses, `utime`+`stime` untuk CPU% berbasis delta,
-    pola sama seperti CPU total system-wide di atas) dan `/proc/[pid]/status` (`VmRSS` untuk
-    RAM), **bukan** lewat `gopsutil` — konsisten dengan keputusan "Kenapa tidak gopsutil?" di
-    [03-tech-stack.md](03-tech-stack.md).
+    pola sama seperti CPU total system-wide di atas) dan `/proc/[pid]/status` (`VmRSS`, jumlah
+    thread, dan uid pemilik — satu kali baca untuk ketiganya), **bukan** lewat `gopsutil` —
+    konsisten dengan keputusan "Kenapa tidak gopsutil?" di [03-tech-stack.md](03-tech-stack.md).
+  - Widget ini cuma tampilkan 5 baris teratas — link "Lihat semua proses" di tab Proses
+    membuka **halaman Proses** tersendiri (menu topbar "Proses"): tabel penuh gaya
+    `btop`/`htop` (PID, Program, Command lengkap dari `/proc/[pid]/cmdline`, Threads, User,
+    CPU%, MemB), semua kolom bisa diurutkan (klik header, sama pola dengan tabel Docker/
+    Service/Files), plus search by nama/command/user. Auto-refresh tiap 5 detik. Render pakai
+    `virtual-scroll` NDataTable karena baris bisa ratusan di host yang sibuk.
 - Klik gauge **CPU** atau **RAM** di kartu "Ringkasan Sistem" menentukan pengurutan widget
   (berlaku ke kedua tab, Container maupun Proses) — bukan modal/drawer terpisah, supaya tetap
   satu layar tanpa navigasi tambahan, sesuai filosofi "informasi penting terlihat tanpa scroll"
   di [06-api-ui-ux.md](06-api-ui-ux.md) §6.2.
-- Endpoint `GET /api/processes?sortBy=cpu|mem&limit=N` melakukan sorting & pembatasan jumlah
-  di server (bukan kirim semua proses lalu sort di client) — di perangkat dengan ratusan proses
-  berjalan, tidak ada alasan mengirim seluruhnya lewat jaringan tiap kali sort berganti padahal
-  yang ditampilkan cuma 5 baris teratas.
+- Endpoint `GET /api/processes?sortBy=cpu|mem&limit=N` (`limit` maks 1000) melakukan sorting &
+  pembatasan jumlah di server. Widget Dashboard minta `limit=5` (tidak ada alasan kirim
+  ratusan baris lewat jaringan padahal cuma 5 yang ditampilkan); halaman Proses penuh minta
+  sekali dengan limit besar lalu semua interaksi sort/filter berikutnya murni di client —
+  sama pola dengan tabel Docker/Service/Files, bukan re-fetch tiap klik header.
 - Sampling proses **terpisah dari SSE snapshot** metrics utama (interval sendiri, lebih jarang
   — lihat tabel di bawah): membaca `/proc` per-PID (dua file per proses) untuk ratusan proses
   jauh lebih berat daripada satu pembacaan `/proc/stat` agregat, dan tidak semua klien yang

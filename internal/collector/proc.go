@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"log/slog"
 	"os"
+	"os/user"
 	"strconv"
 	"strings"
 	"time"
@@ -68,31 +69,76 @@ func readPIDStat(pid int) (comm string, utime, stime uint64, err error) {
 	return comm, utime, stime, nil
 }
 
-// readProcRSS reads resident memory from /proc/[pid]/status' VmRSS line
-// (already in kB, unlike /proc/[pid]/stat's page-count RSS field — one
-// less unit conversion to get wrong). Kernel threads have no VmRSS line at
-// all; that's not an error, they just report 0.
-func readProcRSS(pid int) uint64 {
+// readPIDStatus reads /proc/[pid]/status once and pulls out the three
+// fields sampleProcesses needs from it (RSS, thread count, owning uid) —
+// one file read per process instead of three, which matters here since
+// this runs for every PID on every tick. Kernel threads have no VmRSS
+// line at all; that's not an error, rssBytes just stays 0.
+func readPIDStatus(pid int) (rssBytes uint64, threads int, uid string) {
 	f, err := os.Open("/proc/" + strconv.Itoa(pid) + "/status")
 	if err != nil {
-		return 0
+		return 0, 0, ""
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.HasPrefix(line, "VmRSS:") {
-			continue
+		switch {
+		case strings.HasPrefix(line, "VmRSS:"):
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				kb, _ := strconv.ParseUint(fields[1], 10, 64)
+				rssBytes = kb * 1024
+			}
+		case strings.HasPrefix(line, "Threads:"):
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				threads, _ = strconv.Atoi(fields[1])
+			}
+		case strings.HasPrefix(line, "Uid:"):
+			// Real/effective/saved/filesystem uid, in that order — real
+			// (first) is what "owns" the process for display purposes.
+			if fields := strings.Fields(line); len(fields) >= 2 {
+				uid = fields[1]
+			}
 		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			return 0
-		}
-		kb, _ := strconv.ParseUint(fields[1], 10, 64)
-		return kb * 1024
 	}
-	return 0
+	return rssBytes, threads, uid
+}
+
+// readPIDCmdline reads the full command line from /proc/[pid]/cmdline,
+// where the kernel separates argv entries with NUL bytes (and terminates
+// the whole thing with a trailing NUL, not a newline) — joined with spaces
+// for display. Kernel threads have an empty cmdline (they were never
+// exec'd with argv), so callers fall back to "[name]" in that case, same
+// convention `ps`/`top` use.
+func readPIDCmdline(pid int) string {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	if err != nil {
+		return ""
+	}
+	data = []byte(strings.Trim(string(data), "\x00"))
+	parts := strings.Split(string(data), "\x00")
+	return strings.Join(parts, " ")
+}
+
+// userCache resolves uid strings to usernames, memoized per sampleProcesses
+// call — hundreds of processes typically belong to a small handful of
+// distinct users, so this avoids repeating the same NSS lookup per PID.
+// Fresh each tick rather than long-lived on Collector: user/group changes
+// are rare enough that a few seconds of staleness would never matter, so
+// there's no benefit worth the extra state to justify caching across ticks.
+type userCache map[string]string
+
+func (c userCache) lookup(uid string) string {
+	if name, ok := c[uid]; ok {
+		return name
+	}
+	name := uid
+	if u, err := user.LookupId(uid); err == nil {
+		name = u.Username
+	}
+	c[uid] = name
+	return name
 }
 
 // sampleProcesses lists every process currently on the system and computes
@@ -112,6 +158,7 @@ func (c *Collector) sampleProcesses(now time.Time) []store.ProcInfo {
 	elapsed := now.Sub(c.prevProcAt).Seconds()
 	curTimes := make(map[int]uint64, len(pids))
 	result := make([]store.ProcInfo, 0, len(pids))
+	users := make(userCache)
 
 	for _, pid := range pids {
 		comm, utime, stime, err := readPIDStat(pid)
@@ -132,11 +179,20 @@ func (c *Collector) sampleProcesses(now time.Time) []store.ProcInfo {
 			}
 		}
 
+		rssBytes, threads, uid := readPIDStatus(pid)
+		cmd := readPIDCmdline(pid)
+		if cmd == "" {
+			cmd = "[" + comm + "]"
+		}
+
 		result = append(result, store.ProcInfo{
 			PID:        pid,
 			Name:       comm,
+			Command:    cmd,
+			Threads:    threads,
+			User:       users.lookup(uid),
 			CPUPercent: cpuPct,
-			MemBytes:   readProcRSS(pid),
+			MemBytes:   rssBytes,
 		})
 	}
 

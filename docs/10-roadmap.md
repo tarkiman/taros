@@ -896,6 +896,69 @@ Opsi C eksplisit, non-interaktif (silently Opsi A, tidak ada perubahan), flag `-
 melewati menu sepenuhnya, dan sesi interaktif tanpa `$SUDO_USER` terdeteksi (opsi 2 otomatis
 disembunyikan dari menu, default jatuh ke Opsi A) — keenamnya sesuai desain.
 
+### Kolom tabel bisa diurutkan (Docker, Service, File Explorer)
+
+Dipicu permintaan user langsung: bisa urutkan data Docker (container aktif, konsumsi
+resource), nama, dll — bukan cuma terpaku di urutan yang dikirim backend.
+
+- Semua murni client-side lewat `sorter` bawaan `NDataTable`, tanpa perubahan backend/API:
+  container Docker (Status berdasarkan tingkat "aktif" — running → restarting → paused →
+  created → exited → dead, bukan alfabetis; CPU/RAM/Network numerik dari live stats, dengan
+  proses yang belum ada datanya konsisten di satu ujung, bukan nabrak nilai nol asli), Images/
+  Volumes/Networks (ukuran, jumlah dipakai, tanggal, connected count), unit Service (Status
+  pakai urutan "aktif" yang sama: active → activating → reloading → deactivating → inactive →
+  failed), dan File Explorer (Nama/Ukuran/Pemilik/Diubah — sort by Nama berarti folder & file
+  campur alfabetis, beda dari default "folder dulu" dari server, trade-off yang diterima
+  begitu user eksplisit minta sort).
+- Diuji terhadap **data sungguhan** (container Docker & unit systemd asli mesin development,
+  bukan fixture) lewat automasi browser: klik header mengelompokkan/mengurutkan benar dan
+  toggle asc/desc konsisten, nilai placeholder (stats belum ada, count tidak diketahui)
+  konsisten di satu posisi bukan nyampur acak, tidak ada console error.
+
+### Banner kesehatan dashboard bisa diklik ke unit yang gagal
+
+Ditemukan saat testing STB fisik: banner "2 unit systemd gagal" cuma menampilkan angka, tidak
+ada cara lihat unit mana — satu-satunya opsi sebelumnya adalah tebak atau buka Service manual
+lalu centang filter failed sendiri.
+
+- Banner (cuma pernah warning soal unit systemd gagal — jumlah container di situ murni
+  informatif, bukan sinyal kesehatan) sekarang jadi `RouterLink` ke `/services?failed=1` saat
+  ada warning; `ServiceView` baca query param itu saat mount untuk otomatis centang "Hanya
+  yang failed" alih-alih mendarat di daftar tanpa filter.
+- Diuji dengan unit failed sungguhan (`systemd-run ... /bin/false`) lewat automasi browser:
+  teks/href banner benar, klik menavigasi ke `/services?failed=1`, checkbox failed-only
+  benar-benar tercentang (dicek lewat class list, bukan cuma asumsi dari ref), tabel cuma
+  menampilkan unit yang gagal itu.
+
+### Halaman Proses penuh, gaya `btop`/`htop`
+
+Dipicu permintaan langsung, dengan contoh tangkapan layar `btop`: widget "Pemakai Teratas" di
+Dashboard cuma nampilkan 5 proses teratas dengan kolom terbatas (nama, PID, CPU/RAM) — user
+mau detail selengkap `btop` (command lengkap, jumlah thread, user pemilik) dan bisa lihat
+semua proses, bukan cuma top 5.
+
+- **Backend**: `store.ProcInfo` (dan `internal/collector/proc.go`) ditambah tiga field baru —
+  `Command` (dari `/proc/[pid]/cmdline`, gabungan argv yang dipisah NUL byte oleh kernel;
+  fallback `"[nama]"` gaya `ps`/`top` untuk kernel thread yang memang tidak punya cmdline),
+  `Threads` dan `User` (uid nyata, di-resolve ke username lewat `os/user`, di-cache per
+  panggilan sampling — bukan lintas-tick, karena pemetaan uid→user jarang berubah dan tidak
+  sepadan nambah state jangka panjang untuk itu). `readProcRSS` yang lama digabung jadi satu
+  fungsi `readPIDStatus` yang baca `/proc/[pid]/status` **sekali** untuk RSS+Threads+Uid
+  sekaligus — bukan tiga kali baca file yang sama per proses per tick, penting karena ini
+  jalan untuk tiap proses di sistem tiap 5 detik.
+- `processesMaxLimit` naik dari 100 ke 1000 supaya halaman baru bisa minta semua proses
+  sekaligus (widget Dashboard tetap minta `limit=5` seperti sebelumnya, tidak berubah).
+- **Frontend**: halaman baru `/processes` (nav topbar "Proses", ikon `Cpu`) — tabel kolom
+  PID/Program/Command/Threads/User/CPU%/MemB, semua bisa diurutkan (pola sama dengan Docker/
+  Service/Files), search by nama/command/user, auto-refresh 5 detik, `virtual-scroll` karena
+  baris bisa ratusan di host yang sibuk. Widget Dashboard dapat link "Lihat semua proses" di
+  tab Proses-nya, plus entry baru di grid quick-link.
+- Diuji terhadap **proses sungguhan mesin development** (600+ proses riil, bukan fixture)
+  lewat automasi browser: field baru (command, threads, user) terisi benar — termasuk kasus
+  uid-namespace container yang ke-resolve ke username host yang "kebetulan" cocok (dikonfirmasi
+  `ps` bawaan sistem menunjukkan hasil yang sama, jadi bukan bug), search filter & sort kolom
+  berfungsi, tidak ada console error.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

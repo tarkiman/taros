@@ -75,6 +75,9 @@ type TempSensor struct {
 type ProcInfo struct {
 	PID        int     `json:"pid"`
 	Name       string  `json:"name"`
+	Command    string  `json:"command"` // full cmdline, or "[name]" for kernel threads (no cmdline)
+	Threads    int     `json:"threads"`
+	User       string  `json:"user"` // username, falls back to numeric uid as a string if unresolvable
 	CPUPercent float64 `json:"cpuPercent"`
 	MemBytes   uint64  `json:"memBytes"`
 }
