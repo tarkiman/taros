@@ -765,6 +765,57 @@ end-user**, bukan mengubah cara kerja aplikasi.
   baru, kredensial & config dikonfirmasi tidak tersentuh, dan re-run dengan versi yang sama
   persis dikonfirmasi melapor "tidak ada perubahan versi" alih-alih pesan update yang salah.
 
+### Update satu-klik lewat dashboard (`internal/selfupdate`)
+
+Dipicu permintaan user langsung: sediakan menu di web app untuk cek & pasang update, tanpa
+harus SSH dan menjalankan installer manual — jauh lebih ramah untuk user yang tidak familiar
+command line, yang menurut §"Rilis binary siap pakai" di atas justru target utamanya.
+
+- **`internal/selfupdate/selfupdate.go`** (baru): `CheckLatest()` menanyakan GitHub Releases
+  API (URL hardcoded, sama seperti yang dipakai `quick-install.sh`) dan mencocokkan asset
+  sesuai `runtime.GOARCH`; `Apply()` mengunduh tarball-nya, mengekstrak binary `taros` (stdlib
+  `archive/tar` + `compress/gzip`, tanpa dependency baru), dan `os.Rename` menimpa binary yang
+  sedang berjalan sendiri — aman karena proses tetap memegang inode lama lewat file descriptor
+  sendiri. Endpoint baru `GET /api/update/check` & `POST /api/update/apply` (keduanya lewat
+  `requireAuth`, sama seperti handler lain), digerbangi config baru `update.enabled` (default
+  **true** — beda dari `terminal.enabled`, karena ini tidak memberi akses shell/command apa
+  pun, cuma mengganti binary sendiri dengan asset resmi repo ini).
+- **Topbar dashboard** (`AppShell.vue`): tombol versi baru di sebelah toggle tema, membuka
+  popover — cek update on-demand (bukan polling background), tampilkan versi sekarang/terbaru,
+  tombol "Update Sekarang" → konfirmasi eksplisit (termasuk peringatan downtime singkat + perlu
+  login ulang) → progress → otomatis reload begitu servis hidup lagi pasca-restart.
+- **Bug nyata pertama, ditemukan lewat testing langsung bukan asumsi**: percobaan awal
+  menaruh binary tetap di `/usr/local/bin/taros` dan cuma `chown` file-nya ke user servis
+  (warisan dari fase sebelumnya) — gagal dengan `permission denied`, baik untuk bikin file
+  sementara maupun rename akhir. Diverifikasi manual dua kali sebelum memutuskan desain ulang:
+  kepemilikan atas *file* tidak memberi izin membuat/mengganti entry di *direktori* yang
+  memuatnya — itu butuh izin tulis ke direktori itu sendiri (dibuktikan lewat `mv` langsung
+  sebagai user servis ke direktori root-owned, tetap ditolak walau file tujuannya sudah milik
+  user itu). Diperbaiki dengan memindahkan binary ke direktori baru yang dimiliki penuh oleh
+  user servis, `/opt/taros/`, dengan `/usr/local/bin/taros` jadi symlink saja untuk pemakaian
+  CLI — `scripts/install.sh` dan unit systemd (`ExecStart`) disesuaikan. Lihat
+  [09-deployment.md](09-deployment.md) §9.5 dan [07-security.md](07-security.md) §7.9.
+- **Bug nyata kedua**: unit systemd sebelumnya `Restart=on-failure`, yang cuma restart kalau
+  proses keluar dengan kode non-nol/sinyal/timeout — proses yang keluar bersih (`os.Exit(0)`,
+  memang disengaja setelah mengganti binary sendiri) justru **tidak** akan di-restart di bawah
+  kebijakan itu. Diubah ke `Restart=always` supaya handler update cukup keluar bersih dan
+  systemd yang menghidupkannya lagi menjalankan binary baru — tidak butuh panggilan `systemctl`
+  (dan karenanya tidak butuh sudo/polkit) dari dalam aplikasi sama sekali, beda dari tombol aksi
+  Docker/Service yang memang butuh privilege tambahan.
+- **Temuan ketiga (bukan bug, tapi perlu dikomunikasikan ke user)**: session store TarOS murni
+  in-memory (`internal/auth`, tidak ada database) — restart proses apa pun, termasuk dari
+  self-update, otomatis membersihkan semua sesi login aktif. Dikonfirmasi lewat testing (cookie
+  sesi lama ditolak dengan redirect ke `/login` setelah update sukses). Bukan regresi baru,
+  tapi UI update ini secara eksplisit memperingatkan sebelum konfirmasi, supaya user tidak
+  kaget diminta login ulang.
+- **Testing**: divalidasi end-to-end di container systemd sungguhan (bukan cuma review kode) —
+  check/apply lewat HTTP API langsung dengan mock release server (tag versi berbeda-beda),
+  termasuk kasus sudah-versi-terbaru (no-op, PID tidak berubah) dan `update.enabled: false`
+  (ditolak 403). Alur klik penuh di browser juga diuji lewat automasi headless browser
+  sungguhan (bukan panggilan API sintetis): buka popover versi → klik "Update Sekarang" → klik
+  "Ya, Update" → progress → auto-reload pasca-restart → mendarat di `/login` karena sesi
+  invalid — semua langkah dikonfirmasi lewat screenshot & pembacaan DOM nyata.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

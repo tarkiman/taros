@@ -514,4 +514,30 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
 - Konfigurasi root direktori file explorer.
 - Konfigurasi daftar unit systemd "terproteksi" (butuh extra-confirm sebelum stop/restart).
 - Konfigurasi terminal: enable/disable, shell default, idle timeout, max concurrent session.
-- Lihat versi aplikasi, uptime service TarOS sendiri.
+- ~~Lihat versi aplikasi, uptime service TarOS sendiri~~ — bagian versi sudah ada duluan
+  lewat §4.8 di bawah (tombol versi/update di topbar), tanpa menunggu halaman Settings penuh
+  ini selesai dibangun. Sisanya (ganti password, konfigurasi lain-lain) masih di [10-roadmap.md](10-roadmap.md)
+  Fase 6, belum ada halaman Settings sungguhan.
+
+## 4.8 Update Aplikasi
+
+- Tombol versi (mis. `v0.1.0`) di topbar, ada di setiap halaman — klik untuk buka panel kecil:
+  versi yang jalan saat ini, dan (kalau `update.enabled: true`) status pengecekan rilis
+  terbaru dari GitHub. Pengecekan terjadi **saat panel dibuka**, bukan polling latar belakang
+  di setiap kunjungan halaman — lihat [09-deployment.md](09-deployment.md) §9.5 untuk
+  mekanisme lengkapnya (unduh, ganti binary di tempat, restart otomatis lewat systemd).
+- Kalau ada update: tombol "Update Sekarang" → konfirmasi eksplisit (menyebutkan bakal ada
+  downtime singkat & perlu login ulang) → proses berjalan → begitu servis kembali aktif,
+  halaman reload otomatis (polling `/api/update/check` sampai server merespons lagi, bukan
+  delay tetap yang bisa meleset di device lambat).
+- **Kenapa perlu login ulang setelah update**: sesi login TarOS murni in-memory (tidak ada
+  database, lihat [05-data-storage.md](05-data-storage.md)) — restart proses apa pun (update,
+  crash, reboot device) otomatis menghapus semua sesi aktif. Ini bukan hal baru yang
+  diperkenalkan fitur update; fitur ini cuma bikin restart jadi kejadian yang disengaja &
+  lebih sering, jadi perlu dikomunikasikan jelas di UI, bukan mengejutkan user.
+- Toggle `update.enabled` (default **on**, beda dari `terminal.enabled` yang default off) —
+  lihat [07-security.md](07-security.md) untuk kenapa fitur ini dianggap risiko lebih rendah
+  dari web terminal walau sama-sama mengubah state di device: tidak pernah membuka akses
+  command/shell, cuma mengganti satu file binary dengan asset resmi dari
+  `github.com/tarkiman/taros`, dan tetap butuh sesi dashboard yang sudah terautentikasi untuk
+  memicunya.

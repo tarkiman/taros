@@ -117,6 +117,8 @@ func runServer(args []string) {
 		Jail:            jail,
 		Jobs:            jobQueue,
 		MaxUploadSizeMB: cfg.FileExplorer.MaxUploadSizeMB,
+		Version:         version,
+		UpdateEnabled:   cfg.Update.Enabled,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

@@ -44,6 +44,14 @@ type Deps struct {
 	// cuma disembunyikan"), so handlers never need to nil-check this.
 	TerminalEnabled bool
 	TerminalManager *terminal.Manager
+
+	// Version is this build's version string ("dev" for a plain local
+	// build) — see cmd/taros/main.go. UpdateEnabled gates
+	// /api/update/apply; /api/update/check stays registered either way so
+	// the UI can show a clear "disabled" state, same pattern as terminal
+	// status. See internal/selfupdate.
+	Version       string
+	UpdateEnabled bool
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -113,6 +121,14 @@ func (s *Server) Handler() http.Handler {
 	if s.deps.TerminalEnabled {
 		mux.HandleFunc("GET /api/terminal/ws", s.requireAuth(s.handleTerminalWS))
 	}
+
+	// /api/update/check always registered (same "show a clear disabled
+	// state" reasoning as terminal/status above); /apply checks
+	// UpdateEnabled itself rather than being conditionally routed, since
+	// unlike the terminal WS it's not a standing connection someone could
+	// discover by scanning — a plain disabled response is enough.
+	mux.HandleFunc("GET /api/update/check", s.requireAuth(s.handleUpdateCheck))
+	mux.HandleFunc("POST /api/update/apply", s.requireAuth(s.handleUpdateApply))
 
 	return recoverMiddleware(loggingMiddleware(mux))
 }
