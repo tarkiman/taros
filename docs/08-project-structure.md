@@ -4,7 +4,7 @@ Layout mengikuti konvensi umum Go project (`cmd/` + `internal/`), dipisah per do
 tanggung jawab sesuai komponen arsitektur di [02-architecture.md](02-architecture.md).
 
 ```
-tarkiman-os/
+taros/
 ├── cmd/
 │   └── taros/
 │       └── main.go              # entrypoint: load config, wire komponen, start server
@@ -155,7 +155,7 @@ tarkiman-os/
   `assets` (bukan `web`) — direktori top-level `web/` dan `internal/web/` sama-sama bernama
   "web", jadi kalau package top-level juga bernama `web`, `internal/web` yang meng-impornya
   akan bentrok nama dengan package-nya sendiri. Diimpor sebagai
-  `assets "github.com/tarkiman/tarkiman-os/web"`. `internal/web/spa.go` mem-`fs.Sub` embed
+  `assets "github.com/tarkiman/taros/web"`. `internal/web/spa.go` mem-`fs.Sub` embed
   `SPA` ke `frontend/dist` supaya path-nya cocok dengan yang direferensikan `index.html`
   hasil build Vite (`/assets/...`). **Riwayat**: sebelum migrasi Vue selesai total, package
   ini juga meng-embed `templates/` (html/template) & `static/` (CSS/JS tangan) lewat var

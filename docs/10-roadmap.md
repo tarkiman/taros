@@ -519,10 +519,11 @@ sudah tercapai di atas.
   nama cookie sesi (`tarkimanos_session` → `taros_session` — sesi lama otomatis tidak valid,
   cukup login ulang, bukan kehilangan data), file probe write-check filesystem, entri
   `ProtectedUnits` default (supaya proteksi self-service tetap cocok dengan nama unit baru).
-  **Sengaja tidak diubah**: module path Go (`github.com/tarkiman/tarkiman-os`) dan nama repo
-  GitHub — mengubah itu berarti rename repo GitHub itu sendiri, tindakan terpisah yang lebih
-  berisiko dan tidak diminta. Lihat [[project-taros-motivation]] (memori) untuk konteks
-  keputusan nama.
+  **Sengaja tidak diubah saat itu**: module path Go (`github.com/tarkiman/tarkiman-os`) dan
+  nama repo GitHub — mengubah itu berarti rename repo GitHub itu sendiri, tindakan terpisah
+  yang lebih berisiko dan waktu itu tidak diminta. Lihat [[project-taros-motivation]] (memori)
+  untuk konteks keputusan nama. (Repo GitHub & module path menyusul di-rename belakangan,
+  lihat entri "Rename repo GitHub + module path Go" di bawah.)
 - **Tema visual baru "Malam Jaga"**: kanvas gelap dengan tiga "blob" cahaya (biru/ungu/teal)
   yang blur besar dan bergerak pelan di belakang seluruh app (`AppShell.vue` dan `LoginView.vue`
   masing-masing me-mount `.app-backdrop` sendiri, karena keduanya bukan child dari layout yang
@@ -617,6 +618,65 @@ sungguhan, bukan cuma statistik per-container yang sudah ada sejak Fase 2a.
   di mesin dev — sudah begitu sejak sebelum fase ini juga (terlihat sama di tabel Docker biasa),
   kemungkinan `docker stats` di host ini tidak melaporkan `memUsageBytes` untuk container-
   container tsb. Di luar scope perbaikan fase ini (bukan masalah di kode yang ditulis di sini).
+
+### Installer non-interaktif (`scripts/install.sh`)
+
+Mengisi placeholder yang sejak Fase 0 disebut di [09-deployment.md](09-deployment.md) §9.2
+("dituangkan jadi `scripts/install.sh` saat implementasi") tapi belum pernah benar-benar
+ditulis — semua instalasi sejauh ini dilakukan manual mengikuti langkah di dokumen itu.
+
+- Mengotomatisasi langkah 1–4, 6, 9 di §9.2: deteksi/pasang binary (`--binary`, atau auto-
+  cari `./taros` di sebelah script lalu `dist/taros-<arch>` sesuai `uname -m`), buat user
+  servis (Opsi A) **atau** pakai user existing lewat `--no-create-user --service-user <nama>`
+  (Opsi B — device pribadi), generate `/etc/taros/config.yaml` dari
+  `deploy/config.example.yaml` dengan `--listen`/`--root-dir`, pasang systemd unit dengan
+  `User=`/`Group=` disesuaikan otomatis, lalu jalankan `taros setup` untuk kredensial admin
+  pertama.
+- **Langkah 5, 7, 8 sengaja tetap manual** (butuh keputusan sadar per device — akses lintas-
+  pemilik untuk file explorer, trade-off keamanan mode sudo) — dicetak sebagai pengingat
+  eksplisit di akhir output script, bukan didiamkan begitu saja.
+- **Idempoten**: aman dijalankan ulang — user/config/kredensial yang sudah ada tidak ditimpa
+  diam-diam. Reset kredensial admin butuh `--force-setup` eksplisit, bukan default.
+- `deploy/systemd/taros.service` disinkronkan dengan contoh di §9.3 saat proses ini (sempat
+  drift — file yang sebenarnya di-copy installer belum punya `After=docker.service`/
+  `Wants=docker.service` yang sudah ada di contoh dokumentasi).
+- **Checkpoint tercapai — diuji end-to-end di container Docker dengan systemd sungguhan
+  sebagai PID 1** (`--privileged --cgroupns=host`, bukan mock/stub systemctl), binary
+  di-cross-compile untuk arch container (dikoreksi setelah percobaan pertama gagal "Exec
+  format error" — mesin dev ternyata aarch64, bukan x86_64 seperti asumsi awal):
+  - Instalasi bersih (Opsi A) dikonfirmasi end-to-end: servis `active (running)`, proses
+    berjalan sebagai user `taros` non-root (dicek lewat `/proc/<pid>/status`, bukan cuma
+    baca unit file), dashboard merespons `HTTP 200` di port yang dikonfigurasi.
+  - Re-run kedua (idempotency) dikonfirmasi tidak membuat ulang user/config, dan **tidak**
+    meminta prompt `taros setup` lagi karena kredensial sudah ada.
+  - `--force-setup` dikonfirmasi mengganti kredensial admin (username baru benar-benar
+    tersimpan).
+  - Opsi B (`--no-create-user --service-user <existing>`) dikonfirmasi: systemd unit yang
+    dipasang benar-benar memuat `User=`/`Group=` sesuai user yang dipilih, bukan default.
+  - Dua jalur error dikonfirmasi berhenti dengan pesan jelas + exit code 1: `--no-create-user`
+    dengan user yang tidak ada, dan menjalankan script bukan sebagai root.
+
+### Rename repo GitHub + module path Go
+
+Follow-up dari rebrand TarkimanOS → TarOS: repo GitHub sendiri di-rename ke
+`github.com/tarkiman/taros` (tindakan yang sengaja **tidak** dilakukan otomatis saat rebrand
+awal — lihat catatan di bagian "Rebrand ke TarOS" di atas — karena itu perubahan di luar repo
+lokal yang lebih berisiko/hard-to-reverse, jadi ditunggu sampai user melakukannya sendiri
+secara sadar). Menyusul rename itu:
+
+- `go.mod`: `module github.com/tarkiman/tarkiman-os` → `module github.com/tarkiman/taros`.
+- Semua import internal di 17 file `.go` (`cmd/taros/`, `internal/web/`,
+  `internal/collector/`) ikut disesuaikan ke path module baru — mekanis tapi menyeluruh,
+  tidak ada file yang terlewat (diverifikasi dengan grep sebelum & sesudah).
+- Referensi path di dua file docs (`08-project-structure.md` — diagram struktur folder &
+  contoh import `internal/web/spa.go`) ikut disamakan.
+- Remote git lokal (`origin`) diarahkan ulang ke URL repo baru.
+
+GitHub sendiri otomatis me-redirect URL repo lama (`tarkiman-os`) ke yang baru untuk operasi
+git biasa (clone/fetch/push), tapi **itu tidak menyelesaikan masalah untuk `go get`/module
+resolution** — go.mod yang menyatakan path lama sementara diminta lewat path baru akan gagal
+verifikasi module path, jadi menyamakan `go.mod` bukan sekadar kerapian tapi memang wajib
+begitu repo-nya benar-benar pindah nama.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 

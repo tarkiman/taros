@@ -1,6 +1,7 @@
 [Unit]
 Description=TarOS - Lightweight Linux system monitor
-After=network.target
+After=network.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple
@@ -12,7 +13,7 @@ RestartSec=5
 
 # Hardening dasar — lihat docs/09-deployment.md §9.3 kenapa
 # ProtectHome/ProtectSystem sengaja tidak diperketat (fitur file explorer
-# butuh akses baca/tulis luas begitu diimplementasikan).
+# butuh akses baca/tulis luas ke filesystem sesuai konfigurasi rootDir).
 NoNewPrivileges=true
 ProtectHome=false
 ProtectSystem=false

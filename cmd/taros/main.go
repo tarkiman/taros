@@ -18,14 +18,14 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/tarkiman/tarkiman-os/internal/auth"
-	"github.com/tarkiman/tarkiman-os/internal/collector"
-	"github.com/tarkiman/tarkiman-os/internal/config"
-	"github.com/tarkiman/tarkiman-os/internal/docker"
-	"github.com/tarkiman/tarkiman-os/internal/fileexplorer"
-	"github.com/tarkiman/tarkiman-os/internal/store"
-	"github.com/tarkiman/tarkiman-os/internal/terminal"
-	"github.com/tarkiman/tarkiman-os/internal/web"
+	"github.com/tarkiman/taros/internal/auth"
+	"github.com/tarkiman/taros/internal/collector"
+	"github.com/tarkiman/taros/internal/config"
+	"github.com/tarkiman/taros/internal/docker"
+	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/store"
+	"github.com/tarkiman/taros/internal/terminal"
+	"github.com/tarkiman/taros/internal/web"
 )
 
 func main() {

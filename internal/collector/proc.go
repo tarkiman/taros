@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 // clockTicksPerSec is USER_HZ, the unit /proc/[pid]/stat's utime/stime are

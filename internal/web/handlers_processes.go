@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/tarkiman/tarkiman-os/internal/store"
+	"github.com/tarkiman/taros/internal/store"
 )
 
 const (

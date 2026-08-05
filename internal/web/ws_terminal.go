@@ -10,7 +10,7 @@ import (
 
 	"nhooyr.io/websocket"
 
-	"github.com/tarkiman/tarkiman-os/internal/terminal"
+	"github.com/tarkiman/taros/internal/terminal"
 )
 
 // handleAPITerminalStatus is always registered (unlike the WS endpoint
