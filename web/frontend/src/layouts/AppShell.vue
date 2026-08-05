@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin } from 'naive-ui'
-import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert } from '@lucide/vue'
+import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
 import { useThemeMode, type ThemeMode } from '../composables/useTheme'
@@ -30,6 +30,7 @@ const navLinks = computed(() => {
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/docker', label: 'Docker', icon: Box },
     { to: '/services', label: 'Service', icon: Server },
+    { to: '/processes', label: 'Proses', icon: Cpu },
     { to: '/files', label: 'Files', icon: FolderOpen },
   ]
   if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })

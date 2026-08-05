@@ -10,7 +10,11 @@ import (
 
 const (
 	processesDefaultLimit = 10
-	processesMaxLimit     = 100
+	// processesMaxLimit covers the dedicated Proses page (internal/web
+	// serves every process, client sorts/filters — see docs/04-features.md
+	// §4.1), not just the Dashboard's top-5 widget. 1000 comfortably
+	// exceeds process counts seen on real STB/RPi hosts in practice.
+	processesMaxLimit = 1000
 )
 
 type processesResponse struct {

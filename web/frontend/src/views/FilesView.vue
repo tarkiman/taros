@@ -251,6 +251,7 @@ const columns: DataTableColumns<Entry> = [
     key: 'name',
     minWidth: 180,
     ellipsis: { tooltip: true },
+    sorter: (a, b) => a.name.localeCompare(b.name),
     render: (row) => {
       const icon = h(NIcon, { component: row.isDir ? Folder : FileIcon, size: 16, style: 'margin-right: 6px; vertical-align: -3px' })
       if (row.isDir) {
@@ -275,9 +276,15 @@ const columns: DataTableColumns<Entry> = [
       )
     },
   },
-  { title: 'Ukuran', key: 'sizeBytes', width: 110, render: (row) => (row.isDir ? '—' : formatBytes(row.sizeBytes)) },
-  { title: 'Pemilik', key: 'owner', width: 120 },
-  { title: 'Diubah', key: 'modTime', width: 150, render: (row) => formatDate(row.modTime) },
+  {
+    title: 'Ukuran',
+    key: 'sizeBytes',
+    width: 110,
+    sorter: (a, b) => a.sizeBytes - b.sizeBytes,
+    render: (row) => (row.isDir ? '—' : formatBytes(row.sizeBytes)),
+  },
+  { title: 'Pemilik', key: 'owner', width: 120, sorter: (a, b) => a.owner.localeCompare(b.owner) },
+  { title: 'Diubah', key: 'modTime', width: 150, sorter: (a, b) => Date.parse(a.modTime) - Date.parse(b.modTime), render: (row) => formatDate(row.modTime) },
   {
     title: 'Aksi',
     key: 'actions',
