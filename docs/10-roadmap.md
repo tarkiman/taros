@@ -765,7 +765,7 @@ end-user**, bukan mengubah cara kerja aplikasi.
   baru, kredensial & config dikonfirmasi tidak tersentuh, dan re-run dengan versi yang sama
   persis dikonfirmasi melapor "tidak ada perubahan versi" alih-alih pesan update yang salah.
 
-### Update satu-klik lewat dashboard (`internal/selfupdate`)
+### Update satu-klik lewat dashboard (`internal/selfupdate`) (selesai-rilis)
 
 Dipicu permintaan user langsung: sediakan menu di web app untuk cek & pasang update, tanpa
 harus SSH dan menjalankan installer manual — jauh lebih ramah untuk user yang tidak familiar
@@ -815,6 +815,16 @@ command line, yang menurut §"Rilis binary siap pakai" di atas justru target uta
   sungguhan (bukan panggilan API sintetis): buka popover versi → klik "Update Sekarang" → klik
   "Ya, Update" → progress → auto-reload pasca-restart → mendarat di `/login` karena sesi
   invalid — semua langkah dikonfirmasi lewat screenshot & pembacaan DOM nyata.
+- **Temuan keempat, ketahuan saat validasi di STB fisik**: `quick-install.sh` mengambil rilis
+  GitHub **terbaru yang sudah di-tag**, bukan langsung dari `main` — jadi kode fitur ini yang
+  sudah di-merge ke `main` **tidak otomatis** tersedia lewat installer sampai ada tag rilis baru
+  yang benar-benar di-push (`v0.1.0` yang ada saat itu dibuat sebelum fitur ini di-merge).
+  Diperbaiki dengan push tag `v0.2.0`, memicu `.github/workflows/release.yml` build & publish
+  ulang — bukan bug di kode, tapi pengingat proses: setiap fitur yang mau dicoba lewat jalur
+  instalasi publik butuh tag rilis baru, tidak cukup cuma merge ke `main`.
+- **Validasi STB fisik (B860H): berhasil** — instalasi lama (pra-`/opt/taros/`) di-upgrade lewat
+  `quick-install.sh` ke `v0.2.0`, konfirmasi langkah "Copy binary ke `/opt/taros/taros`" muncul
+  (bukan lagi `/usr/local/bin/taros` langsung), tombol update di dashboard muncul & berfungsi.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
