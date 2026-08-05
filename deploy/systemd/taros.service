@@ -7,8 +7,16 @@ Wants=docker.service
 Type=simple
 User=taros
 Group=taros
-ExecStart=/usr/local/bin/taros --config /etc/taros/config.yaml
-Restart=on-failure
+# /opt/taros, not /usr/local/bin: this directory is owned by User= above
+# (scripts/install.sh) so the in-app self-update feature can replace this
+# binary in place without root — see docs/09-deployment.md §9.5. A symlink
+# at /usr/local/bin/taros still exists for normal CLI use.
+ExecStart=/opt/taros/taros --config /etc/taros/config.yaml
+# always, not on-failure: the in-app self-update feature (internal/selfupdate,
+# docs/09-deployment.md §9.5) replaces the binary then exits cleanly (code 0)
+# on purpose, relying on this to bring it back up running the new build —
+# on-failure would only restart on a crash/non-zero exit, not a clean one.
+Restart=always
 RestartSec=5
 
 # Hardening dasar — lihat docs/09-deployment.md §9.3 kenapa

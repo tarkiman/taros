@@ -30,7 +30,11 @@
 #   -h, --help             Tampilkan ini.
 #
 # Idempoten: aman dijalankan ulang — user/config/kredensial yang sudah ada
-# tidak ditimpa diam-diam (kecuali --force-setup untuk kredensial).
+# tidak ditimpa diam-diam (kecuali --force-setup untuk kredensial). Ini juga
+# jalur update: menjalankan ulang (mis. lewat quick-install.sh) dengan
+# binary lebih baru akan menggantikan /usr/local/bin/taros dan me-restart
+# servisnya supaya benar-benar jalan di versi baru — bukan cuma mengganti
+# file di disk sementara proses lama tetap jalan.
 
 set -euo pipefail
 
@@ -124,8 +128,25 @@ if [[ "$DOCKER_GROUP" -eq 1 ]]; then
 fi
 
 # --- 4. Install binary ---
-log "Copy binary ke /usr/local/bin/taros"
-install -m 0755 "$BINARY_PATH" /usr/local/bin/taros
+# Lives in its own directory, not directly in the shared /usr/local/bin —
+# the in-app self-update feature (internal/selfupdate) needs to create a
+# temp file and rename it over the running binary, and *that* needs write
+# access to the containing directory itself, not just the binary file
+# (file ownership alone doesn't grant it — verified directly, not assumed).
+# Granting the service user write access to the whole shared bin directory
+# would be a much bigger privilege grant than intended, so instead it gets
+# a small dedicated directory it fully owns, with a symlink from
+# /usr/local/bin for normal CLI use (`taros setup`, etc.) to keep working
+# unchanged. See docs/09-deployment.md §9.5 and docs/07-security.md.
+BIN_DIR=/opt/taros
+OLD_VERSION=""
+[[ -x "$BIN_DIR/taros" ]] && OLD_VERSION="$("$BIN_DIR/taros" version 2>/dev/null | awk '{print $2}')"
+log "Copy binary ke $BIN_DIR/taros"
+mkdir -p "$BIN_DIR"
+install -m 0755 "$BINARY_PATH" "$BIN_DIR/taros"
+chown -R "$SERVICE_USER" "$BIN_DIR"
+ln -sf "$BIN_DIR/taros" /usr/local/bin/taros
+NEW_VERSION="$("$BIN_DIR/taros" version 2>/dev/null | awk '{print $2}')"
 
 # --- 5. Config ---
 mkdir -p /etc/taros
@@ -162,8 +183,22 @@ if [[ -f "$CREDS_FILE" ]]; then
 fi
 
 # --- 8. Aktifkan servis ---
-log "Mengaktifkan & menjalankan servis taros"
-systemctl enable --now taros
+# `enable --now` only *starts* the unit — a no-op if it's already active,
+# which means a re-run of this script (e.g. via quick-install.sh to pick
+# up a newer release) would copy the new binary to disk but leave the
+# already-running old process untouched indefinitely. `restart` actually
+# reloads the new binary either way: on a fresh install there's nothing
+# running yet, so it behaves exactly like start.
+log "Mengaktifkan servis taros"
+systemctl enable --quiet taros
+log "Merestart servis taros (memuat binary baru kalau ini update)"
+systemctl restart taros
+
+if [[ -n "$OLD_VERSION" && "$OLD_VERSION" != "$NEW_VERSION" ]]; then
+  log "Diupdate: $OLD_VERSION -> $NEW_VERSION"
+elif [[ -n "$OLD_VERSION" ]]; then
+  log "Sudah di versi $NEW_VERSION, tidak ada perubahan versi"
+fi
 
 log ""
 log "Selesai. Cek status: systemctl status taros"

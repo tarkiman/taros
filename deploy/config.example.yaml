@@ -56,3 +56,12 @@ terminal:
   shell: "/bin/bash"          # eksplisit, TIDAK mengikuti shell akun taros di /etc/passwd
   idleTimeoutMin: 15
   maxConcurrentSessions: 1
+
+update:
+  # Tombol "Update" di topbar dashboard — cek & pasang rilis GitHub
+  # terbaru sendiri, restart otomatis (lihat docs/09-deployment.md §9.5).
+  # ON secara default (beda dari terminal di atas): tidak memberi akses
+  # shell/command apa pun, cuma mengganti binary ini sendiri dengan asset
+  # resmi dari github.com/tarkiman/taros — set false untuk update manual
+  # saja lewat scripts/quick-install.sh.
+  enabled: true

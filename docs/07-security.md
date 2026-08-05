@@ -198,3 +198,41 @@ bagian ini fokus ke kontrol keamanannya.
 | Proses/PTY menumpuk (resource exhaustion) dari sesi terminal | Kill otomatis saat koneksi terputus, batas sesi konkuren |
 | Kredensial dashboard bocor → akses root instan (kalau sudo NOPASSWD aktif) | Sudo tidak aktif default; mode "dengan password" direkomendasikan; NOPASSWD didokumentasikan eksplisit sebagai risiko tinggi, bukan default |
 | Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |
+| Fitur update disalahgunakan untuk jalankan binary arbitrer | URL rilis hardcoded ke `github.com/tarkiman/taros`, tidak configurable; tetap butuh sesi terautentikasi + CSRF; `update.enabled` bisa dimatikan |
+
+## 7.9 Update Aplikasi
+
+Lihat [04-features.md](04-features.md) §4.8 untuk UX-nya dan [09-deployment.md](09-deployment.md)
+§9.5 untuk mekanisme teknis lengkap. Bagian ini fokus ke trade-off keamanannya.
+
+- **Kenapa dianggap risiko lebih rendah dari web terminal**, walau sama-sama mengubah state
+  aktif di device (jadi tetap butuh perhatian, bukan "aman total"): fitur ini tidak pernah
+  membuka jalur eksekusi command/shell arbitrer. Satu-satunya aksi yang bisa dipicu adalah
+  "unduh asset resmi dari `github.com/tarkiman/taros` (URL **hardcoded**, tidak bisa diarahkan
+  ke tempat lain lewat config/API) lalu timpa binary sendiri" — permukaan serangannya jauh
+  lebih sempit daripada shell interaktif penuh. Karena itu `update.enabled` default **true**
+  (beda dari `terminal.enabled` yang default false).
+- **Tetap butuh sesi dashboard yang sudah terautentikasi** (lewat `requireAuth`, sama seperti
+  semua endpoint state-changing lain) + token CSRF — kredensial dashboard bocor tetap jadi
+  prasyarat, bukan endpoint yang bisa dipicu tanpa login.
+- **Tidak ada verifikasi checksum/signature terhadap asset rilis** — integritas unduhan
+  disandarkan ke HTTPS (TLS) ke domain GitHub resmi, sama seperti model trust
+  `scripts/quick-install.sh` yang sudah ada. Ini keputusan sadar untuk menghindari kompleksitas
+  infrastruktur signing (GPG/cosign) yang tidak diminta — dicatat di sini sebagai batasan
+  eksplisit, bukan diam-diam diasumsikan aman total.
+- **Kenapa binary tidak lagi hidup langsung di `/usr/local/bin`**: mengganti file yang sedang
+  berjalan butuh izin tulis ke *direktori* yang menampungnya, bukan cuma ke file itu sendiri
+  (diverifikasi langsung, bukan diasumsikan — lihat riwayat di [10-roadmap.md](10-roadmap.md)).
+  Memberi user servis izin tulis ke `/usr/local/bin` yang dipakai bersama banyak program lain
+  di sistem adalah privilege jauh lebih luas daripada yang dibutuhkan. Sebagai gantinya, binary
+  dipindah ke `/opt/taros/` — direktori kecil yang **seluruhnya** dimiliki user servis, jadi
+  akses tulisnya tetap terbatas ke situ saja, tidak menyebar ke direktori sistem bersama.
+  `/usr/local/bin/taros` jadi symlink saja, untuk pemakaian CLI manual (`taros setup`, dst)
+  tetap seperti sebelumnya.
+- **Restart otomatis via `systemd Restart=always`, bukan lewat `systemctl` yang butuh
+  privilege** — proses cuma perlu keluar bersih (`exit(0)`) setelah mengganti binary; systemd
+  yang menghidupkannya lagi. Tidak ada permintaan sudo/polkit sama sekali untuk alur ini,
+  beda dari tombol aksi Docker/Service yang memang butuh privilege tambahan (§7.4).
+- **Semua sesi login hilang setelah update** (bukan celah keamanan baru — konsekuensi dari
+  session store in-memory, lihat [04-features.md](04-features.md) §4.8) — dikomunikasikan
+  eksplisit di UI sebelum user menekan konfirmasi, bukan kejutan setelahnya.
