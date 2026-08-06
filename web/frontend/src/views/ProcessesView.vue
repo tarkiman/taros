@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NCard, NInput, NDataTable, useMessage } from 'naive-ui'
+import { NCard, NInput, NDataTable, NAlert } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import { processesApi } from '../api/processes'
 import { ApiError } from '../api/client'
 import type { ProcInfo } from '../types/processes'
 import { formatBytes } from '../utils/format'
-
-const message = useMessage()
 
 // Fetches every process the server can see (backend caps at 1000, well
 // past real STB/RPi process counts) once per refresh, then all
@@ -20,7 +18,7 @@ const REFRESH_MS = 5000
 
 const processes = ref<ProcInfo[]>([])
 const loading = ref(true)
-const unavailable = ref(false)
+const unavailable = ref('')
 const query = ref('')
 
 let refreshTimer: ReturnType<typeof setInterval> | undefined
@@ -29,10 +27,13 @@ async function loadProcesses() {
   try {
     const res = await processesApi.list('cpu', PROC_LIMIT)
     processes.value = res.processes
-    unavailable.value = false
+    unavailable.value = ''
   } catch (e) {
-    unavailable.value = true
-    message.error(e instanceof ApiError ? e.message : 'Gagal membaca daftar proses.')
+    // No toast here — this runs on an interval (REFRESH_MS), and a
+    // condition like "not supported on this OS" never resolves on its
+    // own, so a toast would just repeat every few seconds forever. The
+    // persistent NAlert below is enough.
+    unavailable.value = e instanceof ApiError ? e.message : 'Gagal membaca daftar proses.'
   } finally {
     loading.value = false
   }
@@ -85,7 +86,7 @@ onUnmounted(() => {
         clearable
         style="width: 320px; margin-bottom: 16px"
       />
-      <p v-if="unavailable" class="text-muted">Daftar proses tidak bisa dibaca.</p>
+      <NAlert v-if="unavailable" type="warning" :title="unavailable" />
       <NDataTable
         v-else
         :columns="columns"

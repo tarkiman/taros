@@ -25,23 +25,40 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 command -v curl >/dev/null || die "butuh 'curl' (belum terpasang) — install dulu (mis. apt install curl) atau build manual sesuai docs/09-deployment.md §9.1"
 command -v tar >/dev/null || die "butuh 'tar' (belum terpasang)"
 
-case "$(uname -s)" in
+OS_NAME="$(uname -s)"
+IS_DARWIN=0
+case "$OS_NAME" in
   Linux) ;;
-  *) die "cuma mendukung Linux — target device TarOS adalah Raspberry Pi/STB, bukan $(uname -s)" ;;
+  Darwin) IS_DARWIN=1 ;;
+  *) die "cuma mendukung Linux dan macOS — bukan $OS_NAME" ;;
 esac
 
-case "$(uname -m)" in
-  aarch64|arm64) ARCH="arm64" ;;
-  armv7l|armv6l) ARCH="armv7" ;;
-  # Bukan target device utama TarOS (STB/Raspberry Pi), tapi dibuild juga
-  # supaya bisa dicoba di WSL2/Linux x86 biasa — lihat docs/09-deployment.md
-  # §9.1 dan §9.2 "WSL2 (Windows)".
-  x86_64) ARCH="amd64" ;;
-  *) die "arsitektur '$(uname -m)' tidak punya binary siap pakai — build manual sesuai docs/09-deployment.md §9.1 (cross-compile) lalu pakai scripts/install.sh --binary <path>" ;;
-esac
+if [[ "$IS_DARWIN" -eq 1 ]]; then
+  # macOS: Docker/Files/Terminal jalan penuh, Dashboard/Proses/Service
+  # gracefully lapor "tidak didukung" (baca /proc + systemd, Linux-only)
+  # — lihat docs/09-deployment.md §9.2 "macOS". Tidak ada install.sh untuk
+  # OS ini (itu mengasumsikan systemd/useradd) — paket rilisnya cuma
+  # binary + config contoh, dijalankan manual di bawah, jadi jalur ini
+  # sama sekali tidak butuh sudo/root.
+  case "$(uname -m)" in
+    arm64) ARCH="darwin-arm64" ;;
+    x86_64) ARCH="darwin-amd64" ;;
+    *) die "arsitektur '$(uname -m)' tidak punya binary siap pakai untuk macOS — build manual sesuai docs/09-deployment.md §9.1" ;;
+  esac
+else
+  case "$(uname -m)" in
+    aarch64|arm64) ARCH="arm64" ;;
+    armv7l|armv6l) ARCH="armv7" ;;
+    # Bukan target device utama TarOS (STB/Raspberry Pi), tapi dibuild juga
+    # supaya bisa dicoba di WSL2/Linux x86 biasa — lihat docs/09-deployment.md
+    # §9.1 dan §9.2 "WSL2 (Windows)".
+    x86_64) ARCH="amd64" ;;
+    *) die "arsitektur '$(uname -m)' tidak punya binary siap pakai — build manual sesuai docs/09-deployment.md §9.1 (cross-compile) lalu pakai scripts/install.sh --binary <path>" ;;
+  esac
+fi
 log "Arsitektur terdeteksi: $ARCH"
 
-if grep -qi microsoft /proc/version 2>/dev/null; then
+if [[ "$IS_DARWIN" -eq 0 ]] && grep -qi microsoft /proc/version 2>/dev/null; then
   log "WSL terdeteksi — lihat docs/09-deployment.md §9.2 'WSL2 (Windows)' soal requirement systemd."
 fi
 
@@ -58,7 +75,35 @@ curl -sSL "$DOWNLOAD_URL" -o "$WORKDIR/taros.tar.gz"
 tar -xzf "$WORKDIR/taros.tar.gz" -C "$WORKDIR"
 
 EXTRACTED_DIR="$(find "$WORKDIR" -maxdepth 1 -mindepth 1 -type d | head -1)"
-[[ -n "$EXTRACTED_DIR" && -x "$EXTRACTED_DIR/install.sh" ]] || die "isi rilis tidak seperti yang diharapkan (install.sh tidak ditemukan) — laporkan ini sebagai bug"
+[[ -n "$EXTRACTED_DIR" ]] || die "isi rilis tidak seperti yang diharapkan — laporkan ini sebagai bug"
+
+if [[ "$IS_DARWIN" -eq 1 ]]; then
+  # No install.sh in the macOS package (see the Cross-compile step in
+  # .github/workflows/release.yml — it assumes systemd/useradd, neither
+  # of which exist here). Just place the binary somewhere sane under
+  # $HOME and print how to run it — no sudo/root needed for this.
+  [[ -x "$EXTRACTED_DIR/taros" ]] || die "isi rilis tidak seperti yang diharapkan (binary taros tidak ditemukan) — laporkan ini sebagai bug"
+  DEST="$HOME/taros"
+  mkdir -p "$DEST"
+  cp "$EXTRACTED_DIR/taros" "$DEST/taros"
+  if [[ ! -f "$DEST/config.yaml" ]]; then
+    cp "$EXTRACTED_DIR/config.example.yaml" "$DEST/config.yaml"
+  fi
+  log "Selesai. Binary ada di $DEST/taros."
+  log ""
+  log "Langkah berikutnya (jalankan manual, belum ada auto-start/restart di"
+  log "fase ini — lihat docs/09-deployment.md §9.2 'macOS'):"
+  log "  cd $DEST"
+  log "  ./taros setup --config ./config.yaml   # sekali saja, buat admin"
+  log "  ./taros --config ./config.yaml"
+  log ""
+  log "Dashboard, Proses, dan Service akan lapor 'tidak didukung' (fitur"
+  log "itu baca /proc + systemd, khusus Linux) — Docker, File Explorer,"
+  log "dan Web Terminal jalan penuh."
+  exit 0
+fi
+
+[[ -x "$EXTRACTED_DIR/install.sh" ]] || die "isi rilis tidak seperti yang diharapkan (install.sh tidak ditemukan) — laporkan ini sebagai bug"
 
 log "Menjalankan installer..."
 cd "$EXTRACTED_DIR"

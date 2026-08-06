@@ -73,6 +73,16 @@ type Deps struct {
 	// TerminalEnabled above, not re-read from disk per request. Shown by
 	// the Settings page's port-change status endpoint.
 	Listen string
+
+	// SystemMonitoringSupported is runtime.GOOS == "linux" — the resource
+	// collector (internal/collector) reads /proc directly (no gopsutil,
+	// see its package doc) and Service monitoring shells out to systemd,
+	// neither of which exist outside Linux. False on darwin (macOS build,
+	// see docs/09-deployment.md) — handlers gate on this the same way
+	// DockerEnabled is checked above, and cmd/taros/main.go skips starting
+	// the collector goroutine entirely when it's false rather than let it
+	// spin forever logging failed /proc reads.
+	SystemMonitoringSupported bool
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -107,6 +117,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/auth/session", s.handleAuthSession)
 	mux.HandleFunc("POST /api/auth/logout", s.requireAuth(s.handleLogout))
 
+	// Always registered, same "let the UI show a clear state up front"
+	// reasoning as /api/terminal/status — checked by the Dashboard/Proses
+	// pages before they ever open the metrics SSE stream, since a plain
+	// EventSource has no clean way to signal "this will never send data"
+	// (a 503 from the stream endpoint itself just makes the browser retry
+	// forever) — see docs/04-features.md §4.2 "Graceful Degradation".
+	mux.HandleFunc("GET /api/system/monitoring-status", s.requireAuth(s.handleSystemMonitoringStatus))
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
 	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))
 	mux.HandleFunc("GET /api/processes", s.requireAuth(s.handleProcesses))

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -76,13 +77,26 @@ func runServer(args []string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	coll := collector.New(metricsStore)
-	go coll.Run(ctx, collector.Intervals{
-		CPUMemNet: fastInterval,
-		DiskUsage: time.Duration(cfg.Polling.DiskUsageIntervalSec) * time.Second,
-		Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
-		Proc:      time.Duration(cfg.Polling.ProcIntervalSec) * time.Second,
-	})
+	// internal/collector reads /proc directly (no gopsutil, see its
+	// package doc) — that only exists on Linux. Starting it anyway on
+	// e.g. macOS wouldn't crash (every read failure is already handled
+	// gracefully, see internal/collector), but it would spin forever
+	// logging failed /proc reads for a feature the UI is about to tell
+	// the user isn't available anyway (web.Deps.SystemMonitoringSupported,
+	// checked by handleMetricsStream/History/Processes) — better to just
+	// not start it.
+	systemMonitoringSupported := runtime.GOOS == "linux"
+	if systemMonitoringSupported {
+		coll := collector.New(metricsStore)
+		go coll.Run(ctx, collector.Intervals{
+			CPUMemNet: fastInterval,
+			DiskUsage: time.Duration(cfg.Polling.DiskUsageIntervalSec) * time.Second,
+			Temp:      time.Duration(cfg.Polling.TempIntervalSec) * time.Second,
+			Proc:      time.Duration(cfg.Polling.ProcIntervalSec) * time.Second,
+		})
+	} else {
+		slog.Warn("monitoring resource sistem (Dashboard/Proses) tidak didukung di OS ini — butuh Linux", "os", runtime.GOOS)
+	}
 
 	protectedUnits := make(map[string]bool, len(cfg.Systemd.ProtectedUnits))
 	for _, u := range cfg.Systemd.ProtectedUnits {
@@ -107,21 +121,22 @@ func runServer(args []string) {
 	})
 
 	deps := web.Deps{
-		Sessions:        sessions,
-		Creds:           creds,
-		RateLimiter:     rateLimiter,
-		Store:           metricsStore,
-		SSEInterval:     fastInterval,
-		DockerEnabled:   cfg.Docker.Enabled,
-		ProtectedUnits:  protectedUnits,
-		Jail:            jail,
-		Jobs:            jobQueue,
-		MaxUploadSizeMB: cfg.FileExplorer.MaxUploadSizeMB,
-		Version:         version,
-		UpdateEnabled:   cfg.Update.Enabled,
-		ConfigPath:      *configPath,
-		CredentialsPath: cfg.Auth.CredentialsFile,
-		Listen:          cfg.Server.Listen,
+		Sessions:                  sessions,
+		Creds:                     creds,
+		RateLimiter:               rateLimiter,
+		Store:                     metricsStore,
+		SSEInterval:               fastInterval,
+		DockerEnabled:             cfg.Docker.Enabled,
+		ProtectedUnits:            protectedUnits,
+		Jail:                      jail,
+		Jobs:                      jobQueue,
+		MaxUploadSizeMB:           cfg.FileExplorer.MaxUploadSizeMB,
+		Version:                   version,
+		UpdateEnabled:             cfg.Update.Enabled,
+		ConfigPath:                *configPath,
+		CredentialsPath:           cfg.Auth.CredentialsFile,
+		Listen:                    cfg.Server.Listen,
+		SystemMonitoringSupported: systemMonitoringSupported,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

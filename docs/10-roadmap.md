@@ -1489,6 +1489,87 @@ ini aksi berisiko tinggi) — cuma satu tambahan penting yang tidak dibutuhkan t
   teknik klik+`Ctrl+A`+backspace asli via `page.keyboard` — pola yang sama persis dengan
   fix serupa di pengujian TOTP sebelumnya untuk masalah field-clearing yang serupa.
 
+### Kompatibilitas macOS (fase pertama)
+
+Dipicu user mencoba `quick-install.sh` di Mac mini pribadinya dan kena block eksplisit
+("cuma mendukung Linux — bukan Darwin"). Motivasi lanjutannya spesifik: alternatif lebih
+ringan dari Docker Desktop untuk monitoring Docker di Mac yang sama. Didiskusikan scope-nya
+sebelum dikerjakan — full native macOS parity (termasuk padanan systemd/launchd penuh) jelas
+proyek jauh lebih besar daripada kerjaan amd64/WSL sebelumnya (itu "OS sama, arsitektur
+beda"; macOS "OS beda total"). User setuju mulai dari fase kecil: Docker/Files/Terminal jalan
+penuh, Dashboard/Proses/Service gracefully lapor "tidak didukung", instalasi manual dulu
+(belum launchd).
+
+- **Kejutan positif paling besar**: kekhawatiran awal bahwa `internal/fileexplorer`
+  (`syscall.Statfs_t` dkk) tidak akan compile untuk `GOOS=darwin` (field struct beda antar
+  OS) — **ternyata salah**, `GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build ./...` sukses
+  total tanpa satu baris kode pun diubah, dikonfirmasi langsung (bukan diasumsikan) sebelum
+  melangkah lebih jauh ke desain apa pun. Ini artinya seluruh pekerjaan fase ini murni soal
+  *runtime graceful degradation*, bukan compile-time build tags (`//go:build linux`) yang
+  tadinya dikira perlu.
+- **Docker ternyata sudah portable tanpa sentuh kode sama sekali** — `internal/docker` dial
+  ke `docker.socketPath` dari config, tidak hardcode path Linux. Arahkan ke socket Docker
+  Desktop/Colima dan langsung jalan.
+- **Dashboard & Proses** (`/proc`, `internal/collector`) dan **Monitoring Service**
+  (`systemctl`/`journalctl`) tidak punya padanan ditulis di fase ini — keduanya di-gate
+  lewat `web.Deps.SystemMonitoringSupported` (`runtime.GOOS == "linux"`, snapshot sekali saat
+  startup, sama pola dengan `DockerEnabled`/`TerminalEnabled` yang sudah ada). Collector
+  goroutine di `cmd/taros/main.go` malah **tidak pernah di-start** kalau tidak didukung —
+  sebelumnya (tanpa perubahan ini) dia akan tetap jalan dan spam `slog.Error` tiap tick
+  gara-gara `/proc` tidak pernah ada, untuk fitur yang UI-nya sudah bilang "tidak tersedia".
+- **Kenapa butuh endpoint status terpisah** (`GET /api/system/monitoring-status`), bukan
+  cuma andalkan error dari endpoint metrics yang sudah ada: `EventSource` bawaan browser
+  (dipakai `useMetricsStream.ts` buat SSE) tidak punya cara bersih menerima "endpoint ini
+  tidak akan pernah kirim data" — kalau endpoint SSE langsung dikembalikan 503, browser cuma
+  retry connect selamanya tanpa pesan apa pun ke user (`connected: false` diam-diam,
+  selamanya). Composable-nya diubah supaya cek status endpoint dulu **sebelum** pernah
+  membuka `EventSource` sama sekali, baru kalau didukung lanjut connect seperti biasa. Untuk
+  Monitoring Service, endpoint REST biasa (bukan SSE) jadi tidak punya masalah ini —
+  errornya sendiri **sudah** cukup rapi dari sebelumnya (`systemd.List` gagal wajar kalau
+  `systemctl` tidak ada di PATH), cuma ditambah pesan eksplisit "khusus Linux" di depan biar
+  tidak menampilkan raw exec error bahasa Inggris untuk kasus spesifik ini (raw error tetap
+  jadi fallback untuk kasus lain, mis. Linux tanpa systemd).
+- **`ProcessesView.vue` sekaligus dibenahi** — ternyata SUDAH ada state `unavailable`
+  sebelumnya, tapi implementasinya cuma boolean (`Daftar proses tidak bisa dibaca.`, generik)
+  DAN memanggil `message.error(...)` toast di **setiap** siklus polling gagal (tiap 5 detik
+  selamanya kalau kondisinya permanen seperti "tidak didukung di OS ini") — kalau dibiarkan,
+  fase ini akan membuat toast spam tak berkesudahan di macOS. Diubah jadi simpan pesan asli
+  (bukan cuma flag), toast dihapus, diganti `NAlert` persisten (pola sama dengan
+  `ServiceView.vue` yang sudah lebih dulu benar).
+- **Instalasi**: paket rilis macOS (`taros-<versi>-darwin-arm64.tar.gz` /
+  `-darwin-amd64.tar.gz`) sengaja **tidak** menyertakan `install.sh` — script itu
+  mengasumsikan `systemctl`/`useradd` yang tidak ada di macOS sama sekali, beda dari kasus
+  WSL2 yang cukup deteksi-dan-lewati satu bagian. `quick-install.sh` mendeteksi Darwin lebih
+  awal dan ambil jalur terpisah total: unduh, taruh binary di `~/taros/`, cetak instruksi
+  jalan manual — **tanpa butuh sudo/root sama sekali** (beda dari Linux yang selalu perlu
+  root untuk user servis dedicated + systemd unit). Auto-restart setara `launchd`'s
+  `KeepAlive` (padanan systemd `Restart=always`, yang baru dipakai fitur ganti-port dan
+  toggle-terminal) **sengaja belum dikerjakan** — di luar scope fase pertama yang disepakati,
+  dipertimbangkan lagi kalau memang dibutuhkan setelah dicoba nyata.
+- **Diuji end-to-end**, termasuk regresi ke jalur Linux normal yang sudah ada:
+  - Cross-compile darwin/arm64 & darwin/amd64 dikonfirmasi sukses dan hasilkan binary Mach-O
+    valid (`file` command).
+  - Logic instalasi manual macOS (`quick-install.sh` bagian Darwin) diuji terisolasi dengan
+    binary darwin asli hasil cross-compile di atas + config template — tanpa perlu mesin
+    macOS sungguhan, cukup override variabel & panggil blok kodenya langsung.
+  - Degradasi runtime **tidak bisa dites di macOS sungguhan** (lingkungan dev ini Linux ARM)
+    — disimulasikan dengan cara paksa `systemMonitoringSupported := false` sementara di
+    source, build ulang, uji lewat Puppeteer, lalu **dikembalikan** ke
+    `runtime.GOOS == "linux"` sebelum commit (dikonfirmasi bersih, tidak ada sisa kode debug,
+    lewat grep eksplisit sebelum lanjut). Dashboard/Proses/Service ketiganya menampilkan
+    pesan spesifik yang benar, Docker/Files/Terminal tidak terpengaruh sama sekali.
+  - **Satu kesalahan nyata selama pengujian** (murni kelalaian proses, bukan bug kode): lupa
+    `npm run build` ulang sebelum build binary Go untuk sesi pengujian degradasi pertama —
+    binary yang dijalankan masih meng-embed `dist/` lama (dari sebelum perubahan
+    `useMetricsStream.ts`/`DashboardView.vue`), sehingga endpoint status baru tidak pernah
+    ter-bundle dan Dashboard macet selamanya di spinner alih-alih menampilkan alert.
+    Terdeteksi lewat `grep -rl "monitoring-status" dist/assets/*.js` yang kosong — bukti
+    telak sebelum sempat salah menyimpulkan ada bug di logic reaktivitas Vue. Setelah
+    `npm run build` ulang, pengujian yang sama langsung berhasil di percobaan berikutnya.
+  - Jalur Linux normal diuji ulang setelah itu (dengan `dist/` yang sudah benar) untuk
+    memastikan nol regresi — Dashboard tetap tampil dengan data live seperti sebelum
+    perubahan ini sama sekali.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
