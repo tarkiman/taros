@@ -315,6 +315,21 @@ bukan error 500.
     bergaya "theater" gelap. Seek/scrub jalan langsung tanpa kerja tambahan di backend —
     `handleFilesDownload` sudah pakai `http.ServeFile` yang otomatis mendukung HTTP Range
     request.
+  - **Video: pemutaran berkelanjutan (playlist per folder)** — sama seperti mode galeri
+    gambar, tapi untuk video: membuka satu video otomatis menjadikan video lain di folder
+    yang sama sebagai daftar putar (indikator posisi "X / Y" di bilah atas, navigasi
+    panah/keyboard yang sama). Saat satu video selesai, otomatis lanjut ke video berikutnya
+    dan lanjut memutar tanpa perlu klik play lagi — video **pertama** yang dibuka dari
+    daftar file tetap butuh klik play manual seperti biasa (tidak pernah autoplay tanpa
+    interaksi), tapi video-video berikutnya dalam sesi pratinjau yang sama (baik lewat
+    auto-advance maupun navigasi manual sebelumnya/berikutnya) melanjutkan otomatis — ini
+    kelanjutan pemutaran yang sudah dimulai user, bukan autoplay yang tidak diminta. Berhenti
+    di video terakhir folder (tidak berputar kembali ke awal). Instance Plyr dipakai ulang
+    lintas video (bukan dibuat ulang tiap ganti track) dengan source diganti langsung di
+    elemen `<video>` native — pendekatan yang lebih rumit (destroy+recreate Plyr, atau
+    `player.source` API bawaan Plyr) sempat dicoba dan sama-sama gagal menjaga pemutaran
+    tetap jalan mulus saat berpindah track, baca komentar di source
+    `FilePreviewOverlay.vue` untuk detail kenapa.
 
 ### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
 
