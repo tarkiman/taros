@@ -1129,6 +1129,54 @@ dikerjakan tak lama setelahnya, lihat entri di bawah.
   baru diperbaiki dengan klik+select-all+backspace asli via `page.keyboard`, bukan manipulasi
   DOM langsung.
 
+### File Explorer: panel tree folder + mode tampilan List/Grid
+
+Permintaan langsung untuk menyempurnakan UI/UX File Explorer supaya lebih mirip file manager
+desktop pada umumnya — didiskusikan dulu bentuk desainnya (layout, cara tree lazy-load, apa
+saja yang dipakai ulang dari backend yang sudah ada) sebelum dikerjakan, karena ini perubahan
+besar ke halaman yang sudah berfungsi penuh.
+
+- **Murni fitur frontend** — tidak ada endpoint backend baru sama sekali. Tree folder
+  (`components/files/FileTree.vue` + `FileTreeNode.vue`, rekursif) memakai ulang
+  `GET /api/files/list` yang sama dengan listing utama, difilter ke folder saja di sisi
+  klien; thumbnail gambar di mode Grid memakai ulang endpoint download yang sama sebagai
+  `<img src>` (cookie sesi otomatis ikut terkirim, tidak perlu token tambahan untuk request
+  gambar). Konsekuensinya: pengurangan risiko yang signifikan (tidak ada permukaan API baru)
+  sekaligus pengerjaan lebih cepat karena tidak menyentuh Go sama sekali untuk fitur ini.
+- **Tree lazy-load + auto-expand-to-active-path** — anak folder diambil saat node di-expand
+  (bukan seluruh tree dimuat sekaligus, penting karena `rootDir` default `/` bisa sangat
+  besar), dan saat folder aktif berubah (termasuk dari refresh/buka link langsung ke folder
+  dalam, bukan cuma klik manual), tree berjalan dari root menyusuri tiap segmen path,
+  meng-load + expand tiap level sampai node aktif kelihatan & ter-highlight — pola "reveal in
+  sidebar" yang sama seperti VS Code/file manager desktop, bukan meninggalkan user harus klik
+  manual turun sendiri.
+- **Mode Grid**: thumbnail gambar asli (deteksi dari ekstensi file, fallback otomatis ke
+  ikon kalau gambar gagal dimuat — dilacak lewat reactive `Set` supaya UI update begitu
+  event `error` gambar terjadi), ikon per tipe file untuk video/audio/arsip/kode/dokumen/
+  lainnya. Interaksi seleksi konsisten dengan mode List: checkbox terpisah dari area
+  klik-untuk-buka (bukan seluruh kartu jadi target klik ganda), share state seleksi
+  (`checkedKeys`) yang sama supaya operasi massal (salin/potong/hapus) bekerja identik di
+  kedua mode tanpa logic terpisah.
+- **Bug nyata ditemukan & diperbaiki lewat testing di viewport sempit**: sidebar tree
+  defaultnya selalu terbuka, yang di layar HP (< 860px, dites langsung di viewport 420px)
+  mendorong daftar file ke bawah layar sebelum user sempat melihatnya sama sekali — padahal
+  fitur intinya (lihat/kelola file) seharusnya langsung terlihat. Diperbaiki dengan default
+  yang viewport-aware: kalau belum ada preferensi tersimpan, default terbuka di desktop
+  tapi tertutup di layar sempit; begitu user ubah manual sekali, preferensi itu yang dipakai
+  terlepas dari lebar layar (sama filosofi persistence dengan toggle file tersembunyi/mode
+  tampilan). Overflow horizontal tabel di mode List pada layar sempit **tidak** termasuk yang
+  diperbaiki di sini — itu perilaku `NDataTable` yang sudah ada sejak sebelum perubahan ini,
+  di luar scope redesign.
+- **Diuji menyeluruh lewat browser sungguhan** (bukan cuma type-check): direktori uji nyata
+  dengan struktur bertingkat (termasuk nama folder berspasi) dan gambar PNG asli (bukan file
+  kosong — dibuat langsung via `zlib`/`struct` Python supaya benar-benar valid PNG yang bisa
+  dirender browser sebagai thumbnail sungguhan) — expand/collapse tree, navigasi via klik
+  tree DAN via klik tile grid, deep-link (reload langsung ke path bersarang lalu konfirmasi
+  tree auto-expand & highlight node yang benar), multi-select di grid, kembali ke mode List
+  (sort kolom tetap berfungsi, tidak ada regresi), collapse/expand sidebar, dan tampilan di
+  kedua tema (dark — default aplikasi ini — dan light) plus viewport mobile, dikonfirmasi
+  lewat screenshot nyata bukan cuma asersi otomatis.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

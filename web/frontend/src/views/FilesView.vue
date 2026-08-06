@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NCard,
@@ -15,11 +15,38 @@ import {
   NProgress,
   NUpload,
   NEmpty,
+  NCheckbox,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns, UploadFileInfo } from 'naive-ui'
-import { Folder, File as FileIcon, FolderPlus, FilePlus, Upload as UploadIcon, ArrowUp, Copy, Scissors, ClipboardPaste, Trash2, Pencil, Download, Eye, EyeOff } from '@lucide/vue'
+import {
+  Folder,
+  File as FileIcon,
+  FileText,
+  FileCode,
+  FileArchive,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Music as MusicIcon,
+  FolderPlus,
+  FilePlus,
+  Upload as UploadIcon,
+  ArrowUp,
+  Copy,
+  Scissors,
+  ClipboardPaste,
+  Trash2,
+  Pencil,
+  Download,
+  Eye,
+  EyeOff,
+  List as ListIcon,
+  LayoutGrid,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
+import FileTree from '../components/files/FileTree.vue'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
 import { ApiError } from '../api/client'
@@ -62,6 +89,28 @@ const visibleEntries = computed(() =>
   showHidden.value ? entries.value : entries.value.filter((e) => !e.name.startsWith('.')),
 )
 
+// --- view mode (list/grid) + sidebar collapse — both persisted the same
+// way as showHidden above, both purely cosmetic client preferences. ---
+const VIEW_MODE_KEY = 'taros-files-view-mode'
+const viewMode = ref<'list' | 'grid'>(localStorage.getItem(VIEW_MODE_KEY) === 'grid' ? 'grid' : 'list')
+function setViewMode(mode: 'list' | 'grid') {
+  viewMode.value = mode
+  localStorage.setItem(VIEW_MODE_KEY, mode)
+}
+const SIDEBAR_KEY = 'taros-files-sidebar-open'
+// No stored preference yet → default open on desktop, closed on narrow
+// screens (matches the 860px breakpoint below) so a first-time mobile
+// visit isn't greeted with the tree pushing the actual file list off
+// screen. Once someone toggles it explicitly, that choice sticks
+// regardless of viewport width, same as every other persisted
+// preference in this view.
+const storedSidebarPref = localStorage.getItem(SIDEBAR_KEY)
+const sidebarOpen = ref(storedSidebarPref !== null ? storedSidebarPref !== '0' : window.innerWidth > 860)
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value
+  localStorage.setItem(SIDEBAR_KEY, sidebarOpen.value ? '1' : '0')
+}
+
 function navigateTo(path: string) {
   router.push({ path: '/files', query: path ? { path } : {} })
 }
@@ -100,6 +149,25 @@ watch(searchQuery, () => {
 
 function fullPath(name: string) {
   return `${resolvedPath.value}/${name}`.replace(/\/+/g, '/')
+}
+
+function editorHref(entry: Entry) {
+  return `/files/edit?path=${encodeURIComponent(fullPath(entry.name))}`
+}
+function openEntry(ev: MouseEvent, entry: Entry) {
+  if (entry.isDir) {
+    ev.preventDefault()
+    navigateTo(fullPath(entry.name))
+    return
+  }
+  if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return // let ctrl/middle-click open in a new tab normally
+  ev.preventDefault()
+  router.push({ path: '/files/edit', query: { path: fullPath(entry.name) } })
+}
+function toggleChecked(name: string) {
+  const i = checkedKeys.value.indexOf(name)
+  if (i === -1) checkedKeys.value.push(name)
+  else checkedKeys.value.splice(i, 1)
 }
 
 // --- prompt modal, shared by New Folder / New File / Rename ---
@@ -244,6 +312,36 @@ async function onDrop(e: DragEvent) {
   }
 }
 
+// --- file-type icon mapping + image thumbnails (grid view) ---
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico'])
+const VIDEO_EXTS = new Set(['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'm4v'])
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'])
+const ARCHIVE_EXTS = new Set(['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar', 'tgz'])
+const CODE_EXTS = new Set(['js', 'ts', 'jsx', 'tsx', 'go', 'py', 'json', 'yaml', 'yml', 'sh', 'vue', 'html', 'css', 'c', 'cpp', 'h', 'rs', 'java', 'sql'])
+const DOC_EXTS = new Set(['txt', 'md', 'pdf', 'doc', 'docx', 'log', 'csv'])
+
+function extOf(name: string) {
+  const i = name.lastIndexOf('.')
+  return i > 0 ? name.slice(i + 1).toLowerCase() : ''
+}
+function isImage(name: string) {
+  return IMAGE_EXTS.has(extOf(name))
+}
+function iconFor(entry: Entry) {
+  if (entry.isDir) return Folder
+  const ext = extOf(entry.name)
+  if (IMAGE_EXTS.has(ext)) return ImageIcon
+  if (VIDEO_EXTS.has(ext)) return VideoIcon
+  if (AUDIO_EXTS.has(ext)) return MusicIcon
+  if (ARCHIVE_EXTS.has(ext)) return FileArchive
+  if (CODE_EXTS.has(ext)) return FileCode
+  if (DOC_EXTS.has(ext)) return FileText
+  return FileIcon
+}
+// Reactive Set so v-if in the template updates when a thumbnail 404s/
+// errors — falls back to the type icon instead of a broken-image glyph.
+const thumbFailed = reactive(new Set<string>())
+
 const columns: DataTableColumns<Entry> = [
   { type: 'selection' },
   {
@@ -253,24 +351,13 @@ const columns: DataTableColumns<Entry> = [
     ellipsis: { tooltip: true },
     sorter: (a, b) => a.name.localeCompare(b.name),
     render: (row) => {
-      const icon = h(NIcon, { component: row.isDir ? Folder : FileIcon, size: 16, style: 'margin-right: 6px; vertical-align: -3px' })
-      if (row.isDir) {
-        return h(
-          'a',
-          { href: '#', class: 'entry-link', onClick: (ev: MouseEvent) => { ev.preventDefault(); navigateTo(fullPath(row.name)) } },
-          [icon, row.name],
-        )
-      }
+      const icon = h(NIcon, { component: iconFor(row), size: 16, style: 'margin-right: 6px; vertical-align: -3px' })
       return h(
         'a',
         {
-          href: `/files/edit?path=${encodeURIComponent(fullPath(row.name))}`,
+          href: row.isDir ? '#' : editorHref(row),
           class: 'entry-link',
-          onClick: (ev: MouseEvent) => {
-            if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return // let ctrl/middle-click open in a new tab normally
-            ev.preventDefault()
-            router.push({ path: '/files/edit', query: { path: fullPath(row.name) } })
-          },
+          onClick: (ev: MouseEvent) => openEntry(ev, row),
         },
         [icon, row.name],
       )
@@ -329,84 +416,162 @@ onUnmounted(() => stopWatch?.())
 
 <template>
   <AppShell>
-    <div class="files-toolbar">
-      <NBreadcrumb>
-        <NBreadcrumbItem v-for="b in breadcrumbs" :key="b.path" @click="navigateTo(b.path)">{{ b.name }}</NBreadcrumbItem>
-      </NBreadcrumb>
-      <NSpace align="center" :size="8" style="margin-top: 8px">
-        <NButton v-if="parentPath" size="small" @click="navigateTo(parentPath)">
-          <template #icon><NIcon :component="ArrowUp" /></template>
-          Naik
-        </NButton>
-        <NInput v-model:value="searchQuery" placeholder="Cari di folder ini…" clearable style="width: 220px" />
-        <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>Folder Baru</NButton>
-        <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>File Baru</NButton>
-        <NUpload
-          :action="uploadUrl"
-          :headers="{ 'X-CSRF-Token': csrfToken }"
-          name="file"
-          multiple
-          :show-file-list="true"
-          @finish="onUploadFinish"
-          @error="onUploadError"
-        >
-          <NButton size="small"><template #icon><NIcon :component="UploadIcon" /></template>Upload</NButton>
-        </NUpload>
-        <NButton v-if="clipboardSize > 0" size="small" type="primary" ghost @click="paste">
-          <template #icon><NIcon :component="ClipboardPaste" /></template>
-          Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
-        </NButton>
-        <NButton
-          size="small"
-          :type="showHidden ? 'primary' : 'default'"
-          :ghost="showHidden"
-          :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
-          :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
-          @click="toggleShowHidden"
-        >
-          <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
-          File Tersembunyi
-        </NButton>
-      </NSpace>
-      <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
-        <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
-        <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>Salin</NButton>
-        <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>Potong</NButton>
-        <NPopconfirm @positive-click="removeSelected">
-          <template #trigger>
-            <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>Hapus</NButton>
-          </template>
-          Hapus {{ checkedKeys.length }} item terpilih?
-        </NPopconfirm>
-      </NSpace>
-    </div>
+    <div class="files-shell" :class="{ 'sidebar-collapsed': !sidebarOpen }">
+      <aside class="files-sidebar" v-show="sidebarOpen">
+        <FileTree :active-path="resolvedPath" @navigate="navigateTo" />
+      </aside>
 
-    <NCard
-      class="files-drop-zone"
-      :class="{ 'files-drop-zone--active': dragActive }"
-      @dragover.prevent="dragActive = true"
-      @dragleave.prevent="dragActive = false"
-      @drop="onDrop"
-    >
-      <NEmpty v-if="!loading && entries.length === 0" description="Folder kosong." />
-      <NEmpty
-        v-else-if="!loading && visibleEntries.length === 0"
-        description="Semua isi folder ini tersembunyi (diawali titik)."
-      >
-        <template #extra>
-          <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan File Tersembunyi</NButton>
-        </template>
-      </NEmpty>
-      <NDataTable
-        v-else
-        :columns="columns"
-        :data="visibleEntries"
-        :loading="loading"
-        :row-key="(r: Entry) => r.name"
-        v-model:checked-row-keys="checkedKeys"
-        :scroll-x="800"
-      />
-    </NCard>
+      <div class="files-main">
+        <div class="files-toolbar">
+          <NSpace align="center" :size="8">
+            <button type="button" class="sidebar-toggle" :title="sidebarOpen ? 'Sembunyikan panel folder' : 'Tampilkan panel folder'" @click="toggleSidebar">
+              <NIcon :component="sidebarOpen ? PanelLeftClose : PanelLeftOpen" size="17" />
+            </button>
+            <NBreadcrumb>
+              <NBreadcrumbItem v-for="b in breadcrumbs" :key="b.path" @click="navigateTo(b.path)">{{ b.name }}</NBreadcrumbItem>
+            </NBreadcrumb>
+          </NSpace>
+          <NSpace align="center" :size="8" style="margin-top: 8px">
+            <NButton v-if="parentPath" size="small" @click="navigateTo(parentPath)">
+              <template #icon><NIcon :component="ArrowUp" /></template>
+              Naik
+            </NButton>
+            <NInput v-model:value="searchQuery" placeholder="Cari di folder ini…" clearable style="width: 220px" />
+            <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>Folder Baru</NButton>
+            <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>File Baru</NButton>
+            <NUpload
+              :action="uploadUrl"
+              :headers="{ 'X-CSRF-Token': csrfToken }"
+              name="file"
+              multiple
+              :show-file-list="true"
+              @finish="onUploadFinish"
+              @error="onUploadError"
+            >
+              <NButton size="small"><template #icon><NIcon :component="UploadIcon" /></template>Upload</NButton>
+            </NUpload>
+            <NButton v-if="clipboardSize > 0" size="small" type="primary" ghost @click="paste">
+              <template #icon><NIcon :component="ClipboardPaste" /></template>
+              Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
+            </NButton>
+            <NButton
+              size="small"
+              :type="showHidden ? 'primary' : 'default'"
+              :ghost="showHidden"
+              :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+              :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+              @click="toggleShowHidden"
+            >
+              <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
+              File Tersembunyi
+            </NButton>
+            <span class="spacer" />
+            <div class="view-toggle" role="group" aria-label="Mode tampilan">
+              <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'list' }" title="Tampilan daftar" @click="setViewMode('list')">
+                <NIcon :component="ListIcon" size="16" />
+              </button>
+              <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'grid' }" title="Tampilan ikon" @click="setViewMode('grid')">
+                <NIcon :component="LayoutGrid" size="16" />
+              </button>
+            </div>
+          </NSpace>
+          <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
+            <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
+            <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>Salin</NButton>
+            <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>Potong</NButton>
+            <NPopconfirm @positive-click="removeSelected">
+              <template #trigger>
+                <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>Hapus</NButton>
+              </template>
+              Hapus {{ checkedKeys.length }} item terpilih?
+            </NPopconfirm>
+          </NSpace>
+        </div>
+
+        <NCard
+          class="files-drop-zone"
+          :class="{ 'files-drop-zone--active': dragActive }"
+          @dragover.prevent="dragActive = true"
+          @dragleave.prevent="dragActive = false"
+          @drop="onDrop"
+        >
+          <NEmpty v-if="!loading && entries.length === 0" description="Folder kosong." />
+          <NEmpty
+            v-else-if="!loading && visibleEntries.length === 0"
+            description="Semua isi folder ini tersembunyi (diawali titik)."
+          >
+            <template #extra>
+              <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan File Tersembunyi</NButton>
+            </template>
+          </NEmpty>
+
+          <NDataTable
+            v-else-if="viewMode === 'list'"
+            :columns="columns"
+            :data="visibleEntries"
+            :loading="loading"
+            :row-key="(r: Entry) => r.name"
+            v-model:checked-row-keys="checkedKeys"
+            :scroll-x="800"
+          />
+
+          <div v-else class="files-grid">
+            <div
+              v-for="entry in visibleEntries"
+              :key="entry.name"
+              class="grid-tile"
+              :class="{ selected: checkedKeys.includes(entry.name) }"
+            >
+              <NCheckbox
+                class="grid-checkbox"
+                :checked="checkedKeys.includes(entry.name)"
+                @click.stop
+                @update:checked="toggleChecked(entry.name)"
+              />
+              <a
+                class="grid-open"
+                :href="entry.isDir ? '#' : editorHref(entry)"
+                :title="entry.name"
+                @click="openEntry($event, entry)"
+              >
+                <div class="grid-thumb">
+                  <img
+                    v-if="isImage(entry.name) && !thumbFailed.has(entry.name)"
+                    :src="filesApi.downloadUrl(fullPath(entry.name))"
+                    :alt="entry.name"
+                    loading="lazy"
+                    @error="thumbFailed.add(entry.name)"
+                  />
+                  <NIcon v-else :component="iconFor(entry)" size="38" class="grid-icon" />
+                </div>
+                <div class="grid-name">{{ entry.name }}</div>
+                <div class="grid-meta">{{ entry.isDir ? ' ' : formatBytes(entry.sizeBytes) }}</div>
+              </a>
+              <div class="grid-actions">
+                <a
+                  v-if="!entry.isDir"
+                  class="grid-action-btn"
+                  :href="filesApi.downloadUrl(fullPath(entry.name))"
+                  title="Unduh"
+                  :aria-label="`Unduh ${entry.name}`"
+                ><NIcon :component="Download" size="14" /></a>
+                <button type="button" class="grid-action-btn" title="Ganti nama" :aria-label="`Ganti nama ${entry.name}`" @click="renameEntry(entry)">
+                  <NIcon :component="Pencil" size="14" />
+                </button>
+                <NPopconfirm @positive-click="removeEntry(entry)">
+                  <template #trigger>
+                    <button type="button" class="grid-action-btn grid-action-btn--danger" title="Hapus" :aria-label="`Hapus ${entry.name}`" @click.stop>
+                      <NIcon :component="Trash2" size="14" />
+                    </button>
+                  </template>
+                  Hapus "{{ entry.name }}"?
+                </NPopconfirm>
+              </div>
+            </div>
+          </div>
+        </NCard>
+      </div>
+    </div>
 
     <NModal v-model:show="promptShow" preset="dialog" :title="promptTitle" positive-text="OK" negative-text="Batal" @positive-click="confirmPrompt">
       <NInput v-model:value="promptValue" @keyup.enter="confirmPrompt" autofocus />
@@ -428,8 +593,83 @@ onUnmounted(() => stopWatch?.())
 </template>
 
 <style scoped>
+.files-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 0;
+}
+
+.files-sidebar {
+  flex: 0 0 220px;
+  width: 220px;
+  max-height: calc(100vh - 140px);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+}
+
+.files-main {
+  flex: 1;
+  min-width: 0;
+}
+
 .files-toolbar {
   margin-bottom: 16px;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.sidebar-toggle:hover {
+  background: var(--track);
+  color: var(--text);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--surface);
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.view-toggle-btn + .view-toggle-btn {
+  border-left: 1px solid var(--glass-border);
+}
+.view-toggle-btn:hover {
+  color: var(--text);
+}
+.view-toggle-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .text-muted {
@@ -452,6 +692,134 @@ onUnmounted(() => stopWatch?.())
 }
 .entry-link:hover {
   text-decoration: underline;
+}
+
+/* --- grid view --- */
+.files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.grid-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 8px 6px;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.grid-tile:hover {
+  background: var(--track);
+}
+.grid-tile.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.grid-checkbox {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.grid-tile:hover .grid-checkbox,
+.grid-tile.selected .grid-checkbox {
+  opacity: 1;
+}
+
+.grid-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.grid-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.grid-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.grid-icon {
+  color: var(--text-muted);
+}
+
+.grid-name {
+  width: 100%;
+  font-size: 0.8rem;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.25;
+  word-break: break-word;
+}
+.grid-meta {
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+.grid-actions {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.grid-tile:hover .grid-actions,
+.grid-tile.selected .grid-actions {
+  opacity: 1;
+}
+.grid-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+}
+.grid-action-btn:hover {
+  background: var(--track);
+  color: var(--text);
+}
+.grid-action-btn--danger:hover {
+  color: var(--danger);
+}
+
+@media (max-width: 860px) {
+  .files-shell {
+    flex-direction: column;
+  }
+  .files-sidebar {
+    width: 100%;
+    flex-basis: auto;
+    max-height: 240px;
+  }
 }
 
 .job-panel {

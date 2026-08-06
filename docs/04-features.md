@@ -278,6 +278,23 @@ bukan error 500.
   konvensi file manager pada umumnya). Murni preferensi tampilan di klien (`localStorage`,
   tidak per-akun/tidak sinkron antar device) — backend selalu mengembalikan listing lengkap
   apa adanya (`internal/fileexplorer`), jadi ini bukan kontrol akses, cuma filter tampilan.
+- **Panel tree folder di sebelah kiri** (`components/files/FileTree.vue`+`FileTreeNode.vue`),
+  mirip file manager desktop pada umumnya — lazy-load (anak folder baru diambil saat node
+  di-expand, bukan seluruh tree sekaligus; penting karena `rootDir` bisa `/` yang isinya
+  besar), sinkron dengan folder aktif (auto-expand + highlight node yang sedang dibuka,
+  termasuk saat buka link langsung/refresh ke folder dalam — bukan cuma navigasi lewat
+  klik). Bisa disembunyikan (tombol collapse di toolbar) — default **tersembunyi** di layar
+  sempit (< 860px) supaya tidak mendorong daftar file ke bawah di HP, default **terbuka** di
+  desktop; sekali diubah manual, preferensi itu yang dipakai terlepas dari lebar layar.
+  Tidak ada endpoint backend baru — tree memakai ulang `GET /api/files/list` yang sama,
+  difilter ke folder saja di sisi klien.
+- **Mode tampilan List / Grid**, toggle di toolbar (preferensi `localStorage`, sama pola
+  dengan toggle file tersembunyi). Grid menampilkan tiap item sebagai kartu: **thumbnail
+  gambar asli** untuk file gambar (lazy-load lewat endpoint download yang sama, fallback
+  otomatis ke ikon kalau gagal dimuat), ikon per tipe file untuk yang lain (video, audio,
+  arsip, kode, dokumen, folder), nama di bawahnya. Checkbox seleksi dan aksi (unduh/ganti
+  nama/hapus) muncul saat hover/dipilih — operasi massal (salin/potong/hapus banyak
+  sekaligus) tetap sama seperti mode List, berbagi state seleksi yang sama.
 
 ### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
 
