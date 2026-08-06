@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api, setCsrfToken } from '../api/client'
+import { usePlayerStore } from './player'
 
 interface SessionInfo {
   authenticated: boolean
@@ -62,6 +63,9 @@ export const useAuthStore = defineStore('auth', {
       this.authenticated = false
       this.username = ''
       setCsrfToken('')
+      // Session's over — music shouldn't keep playing past that (also
+      // avoids the mini-player showing on the login page).
+      usePlayerStore().close()
     },
   },
 })
