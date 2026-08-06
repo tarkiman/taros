@@ -1,1 +1,0 @@
-import{kt as e}from"./auth-B4KPTFOR.js";var t=e(`n-message-api`),n=e(`n-message-provider`);export{n,t};

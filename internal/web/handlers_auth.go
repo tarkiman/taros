@@ -34,6 +34,12 @@ type sessionResponse struct {
 	TOTPRequired bool   `json:"totpRequired,omitempty"`
 	Username     string `json:"username,omitempty"`
 	CSRFToken    string `json:"csrfToken,omitempty"`
+	// Version rides along here (rather than only /api/update/check) so the
+	// AppShell topbar can show the running version immediately on boot —
+	// this is called unconditionally on every fresh load, whereas the
+	// update-check endpoint does a slow (up to 30s) GitHub round-trip and
+	// is only ever triggered on-demand when the version popover is opened.
+	Version string `json:"version"`
 }
 
 // handleAuthLogin is the JSON counterpart of the old form-post login —
@@ -64,7 +70,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 			// Password alone was correct, but that's only half of what
 			// this account needs — don't count it as a failure (it
 			// isn't one) and don't create a session yet.
-			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, TOTPRequired: true})
+			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, TOTPRequired: true, Version: s.deps.Version})
 			return
 		}
 		ok, err := s.deps.Creds.VerifyTOTPOrBackupCode(s.deps.CredentialsPath, req.TOTPCode, time.Now())
@@ -96,7 +102,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		Expires:  sess.ExpiresAt,
 	})
 
-	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken})
+	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken, Version: s.deps.Version})
 }
 
 // handleAuthSession reports whether the request's session cookie (if any)
@@ -106,15 +112,15 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthSession(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(auth.CookieName)
 	if err != nil {
-		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, Version: s.deps.Version})
 		return
 	}
 	sess := s.deps.Sessions.Validate(cookie.Value)
 	if sess == nil {
-		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false})
+		writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, Version: s.deps.Version})
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken})
+	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true, Username: sess.Username, CSRFToken: sess.CSRFToken, Version: s.deps.Version})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

@@ -8,6 +8,7 @@ interface SessionInfo {
   totpRequired?: boolean
   username?: string
   csrfToken?: string
+  version: string
 }
 
 export const useAuthStore = defineStore('auth', {
@@ -15,6 +16,12 @@ export const useAuthStore = defineStore('auth', {
     authenticated: false,
     username: '',
     ready: false,
+    // Populated from every /api/auth/session (and login) response — see
+    // AppShell.vue's version-btn. Kept separate from api/update.ts's
+    // check-for-updates flow, which does a slow network round-trip to
+    // GitHub and only runs on demand; this is always known locally and
+    // should show up the instant the app boots.
+    version: '',
   }),
   actions: {
     // Called once on app boot: reads the httpOnly session cookie server-side
@@ -48,6 +55,7 @@ export const useAuthStore = defineStore('auth', {
     apply(info: SessionInfo) {
       this.authenticated = info.authenticated
       this.username = info.username ?? ''
+      this.version = info.version
       setCsrfToken(info.csrfToken ?? '')
     },
     clear() {
