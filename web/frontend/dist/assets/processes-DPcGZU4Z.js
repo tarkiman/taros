@@ -1,1 +1,0 @@
-import{r as e}from"./auth-B4KPTFOR.js";var t={list:(t,n=5)=>e.get(`/api/processes?sortBy=${t}&limit=${n}`)};export{t};

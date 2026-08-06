@@ -1,0 +1,1 @@
+import{r as e}from"./auth-DqHclkT-.js";var t={list:(t,n=5)=>e.get(`/api/processes?sortBy=${t}&limit=${n}`)};export{t};

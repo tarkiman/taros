@@ -141,7 +141,7 @@ async function waitForRestartThenReload() {
         <template #trigger>
           <button type="button" class="version-btn" title="Versi & pembaruan">
             <NIcon :component="CloudDownload" size="15" />
-            <span class="hide-narrow">{{ updateStatus?.currentVersion ?? 'versi' }}</span>
+            <span class="hide-narrow">{{ updateStatus?.currentVersion || auth.version || 'versi' }}</span>
           </button>
         </template>
 
