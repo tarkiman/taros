@@ -1,0 +1,1 @@
+import{A as e,b as t,p as n}from"./auth-CSROUTah.js";import{c as r}from"./createLucideIcon-QARvfWam.js";var i={iconSize:`22px`};function a(e){let{fontSize:t,warningColor:n}=e;return Object.assign(Object.assign({},i),{fontSize:t,iconColor:n})}var o=e({name:`Popconfirm`,common:t,peers:{Button:n,Popover:r},self:a});export{a as n,o as t};

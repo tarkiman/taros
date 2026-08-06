@@ -1427,6 +1427,68 @@ halaman). User pilih (b).
   elemen lain di layar sempit). Nol error console di seluruh pengujian setelah perbaikan
   storm di atas.
 
+### Pengaturan port aplikasi dari UI
+
+Permintaan langsung: "tambahkan pengaturan opsi user untuk ganti port aplikasinya, defaultnya
+8090". Mengikuti pola yang sudah ada persis untuk toggle Terminal (`internal/config/mutate.go`'s
+`SetTerminalEnabled` — edit `config.yaml` line-level bukan parse-ulang-tulis-ulang penuh,
+supaya komentar di file seperti `deploy/config.example.yaml` tidak hilang; restart via
+`os.Exit(0)` + systemd `Restart=always`; konfirmasi ulang password dashboard tiap kali karena
+ini aksi berisiko tinggi) — cuma satu tambahan penting yang tidak dibutuhkan toggle Terminal:
+**validasi test-bind sebelum menyimpan apa pun.**
+
+- **Kenapa test-bind krusial di sini dan tidak di toggle Terminal**: toggle Terminal
+  cuma menyalakan/mematikan sebuah fitur — apa pun nilainya, servis tetap bisa start normal
+  setelah restart. Port beda cerita: kalau port yang diminta ternyata sudah dipakai proses
+  lain, atau di bawah 1024 tanpa capability, servis akan **gagal start** setelah restart —
+  dan karena systemd `Restart=always`, itu jadi crash-loop tanpa henti, dengan dashboard
+  yang tidak bisa diakses sama sekali untuk memperbaikinya (satu-satunya jalan keluar:
+  edit `config.yaml` manual lewat SSH/akses fisik). Makanya `handleSettingsPort`
+  (`internal/web/handlers_settings.go`) mencoba `net.Listen("tcp", newAddr)` dulu (langsung
+  `Close()` lagi) **sebelum** memanggil `SetServerListen` — kalau gagal, request ditolak
+  dengan pesan jelas, config **tidak tersentuh**, servis **tidak direstart**. Ini bukan
+  jaminan 100% (ada celah waktu kecil antara test-bind dan restart sungguhan di mana port
+  itu secara teori bisa direbut proses lain), tapi menangkap skenario yang sebenarnya
+  terjadi — typo, port yang memang sudah dipakai, port privileged tanpa izin.
+- **Redirect ke origin baru, bukan reload halaman yang sama**: beda dari toggle Terminal
+  (yang polling origin **saat ini** sampai servis hidup lagi, lalu `location.reload()`),
+  ganti port membuat origin yang sedang dibuka browser **berhenti total** begitu servis
+  pindah — tidak ada gunanya polling ke situ. `waitForRestartThenReloadNewPort` di
+  `SettingsView.vue` polling ke **origin baru**
+  (`${protocol}//${hostname}:${portBaru}`) sebagai gantinya. Karena port berbeda dihitung
+  origin berbeda oleh browser (request lintas-origin, dan backend tidak — dan tidak perlu —
+  mengirim header CORS untuk ini), `fetch` biasa akan selalu ditolak duluan oleh browser
+  meski servis sudah hidup. Dipakai `mode: 'no-cors'` sebagai gantinya — browser tetap
+  benar-benar mencoba koneksinya (promise tetap reject kalau connection refused, yang
+  cukup untuk tahu "belum hidup"), cuma tidak bisa membaca isi/status response (yang memang
+  tidak dibutuhkan, cukup tahu request-nya berhasil connect atau tidak).
+- **Setelah redirect, user diarahkan ke halaman login** — ini bukan bug, melainkan
+  konsekuensi wajar dari (a) cookie sesi httpOnly terikat ke origin lama (port berbeda =
+  origin berbeda, cookie tidak ikut pindah) dan (b) proses lama benar-benar diganti proses
+  baru (systemd), bukan sekadar reload config in-memory. Sama seperti toggle Terminal dan
+  update aplikasi, teks konfirmasi di UI secara eksplisit bilang "servis akan restart dan
+  kamu perlu login ulang" sebelum user menekan tombol konfirmasi.
+- **UI**: input angka pakai `NInputNumber` (bukan `NInput` biasa) — dicoba dulu dengan
+  `NInput` + `v-model:value.number`, ternyata tidak cocok (tipe `value` prop `NInput`
+  cuma string, `.number` modifier bikin conflict type). `NInputNumber` sudah punya
+  validasi range bawaan (`:min="1" :max="65535"`), jadi klien juga menolak nilai di luar
+  jangkauan sebelum sempat dikirim ke server.
+- **Diuji end-to-end** lewat instance yang benar-benar direstart (simulasi `Restart=always`
+  systemd pakai loop bash manual, karena instance uji tidak dijalankan lewat systemd
+  sungguhan): ganti port dari 8096 ke 8097 lewat UI → config.yaml tertulis benar (section
+  `terminal:` yang sudah ada di bawahnya tetap utuh, cuma baris `listen:` yang berubah) →
+  proses lama exit, proses baru otomatis naik di port baru (dikonfirmasi lewat `ss -tlnp`) →
+  browser redirect otomatis ke `:8097` → diarahkan ke halaman login (sesuai ekspektasi) →
+  login ulang berhasil normal, halaman Pengaturan menampilkan port baru dengan benar. Dua
+  skenario gagal-aman juga diuji: coba ganti ke port yang sedang dipakai proses lain (dummy
+  listener) → error jelas, servis **tetap** di port lama, tidak ada restart terjadi; password
+  salah → error 403 yang jelas, servis juga tidak terganggu. Sempat ada bug di skrip
+  pengujian sendiri (bukan di aplikasi) — teknik isi field `NInputNumber` via
+  klik-tiga-kali-lalu-ketik tidak benar-benar mengganti nilai lama, hasilnya nilai ganjil
+  ter-clamp ke batas maksimum (65535) alih-alih angka yang dimaksud; diperbaiki dengan
+  teknik klik+`Ctrl+A`+backspace asli via `page.keyboard` — pola yang sama persis dengan
+  fix serupa di pengujian TOTP sebelumnya untuk masalah field-clearing yang serupa.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

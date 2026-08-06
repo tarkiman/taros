@@ -3,8 +3,10 @@ package web
 import (
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/tarkiman/taros/internal/config"
@@ -55,6 +57,79 @@ func (s *Server) handleSettingsTerminal(w http.ResponseWriter, r *http.Request) 
 
 	slog.Info("settings: terminal.enabled diubah, restart", "enabled", req.Enabled, "username", sess.Username)
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		os.Exit(0)
+	}()
+}
+
+type settingsPortRequest struct {
+	Port     int    `json:"port"`
+	Password string `json:"password"`
+}
+
+// handleSettingsPortStatus is always registered, same "let the UI show a
+// clear current state" reasoning as terminal/status — this one just
+// reflects deps.Listen, no gating needed since the value isn't sensitive.
+func (s *Server) handleSettingsPortStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"listen": s.deps.Listen})
+}
+
+// handleSettingsPort changes the port half of server.listen — same
+// restart-and-reload mechanism and password re-confirmation as
+// handleSettingsTerminal above (getting this wrong can lock someone out
+// of the dashboard entirely, same stakes as flipping terminal access).
+//
+// The one thing this handler has that the terminal toggle doesn't need:
+// a test-bind before writing anything. Without it, a typo'd or
+// already-in-use port would only surface *after* the restart, as a
+// service that's now crash-looping with no dashboard left to fix it
+// from — considerably worse than a 409 in the response the user is
+// still looking at. This isn't a perfect guarantee (something else could
+// grab the port in the gap between the test-bind closing and the actual
+// restart binding it for real), but it catches the common cases — typos,
+// picking a port something else already owns, privileged ports without
+// the capability to bind them — before they become an unrecoverable
+// state.
+func (s *Server) handleSettingsPort(w http.ResponseWriter, r *http.Request) {
+	var req settingsPortRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "body tidak valid")
+		return
+	}
+	if req.Port < 1 || req.Port > 65535 {
+		writeJSONError(w, http.StatusBadRequest, "port harus antara 1-65535")
+		return
+	}
+
+	sess := sessionFromContext(r.Context())
+	if !s.deps.Creds.Verify(sess.Username, req.Password) {
+		// 403, not 401 — see handleSettingsTerminal above for why.
+		writeJSONError(w, http.StatusForbidden, "password salah")
+		return
+	}
+
+	host, _, err := net.SplitHostPort(s.deps.Listen)
+	if err != nil {
+		host = "0.0.0.0"
+	}
+	newListen := net.JoinHostPort(host, strconv.Itoa(req.Port))
+
+	ln, err := net.Listen("tcp", newListen)
+	if err != nil {
+		writeJSONError(w, http.StatusConflict, "port "+strconv.Itoa(req.Port)+" tidak bisa dipakai: "+err.Error())
+		return
+	}
+	ln.Close()
+
+	if err := config.SetServerListen(s.deps.ConfigPath, newListen); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	slog.Info("settings: server.listen diubah, restart", "listen", newListen, "username", sess.Username)
+	writeJSON(w, http.StatusOK, map[string]string{"listen": newListen})
 
 	go func() {
 		time.Sleep(700 * time.Millisecond)
