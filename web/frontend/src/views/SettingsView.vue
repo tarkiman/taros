@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NCard, NSpace, NSwitch, NInput, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
+import { NCard, NSpace, NSwitch, NInput, NInputNumber, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
@@ -29,6 +29,7 @@ async function loadStatus() {
 onMounted(() => {
   loadStatus()
   loadTotpStatus()
+  loadPortStatus()
 })
 
 // --- toggle flow: switch never applies directly, always goes through a
@@ -88,6 +89,89 @@ async function waitForRestartThenReload() {
     }
   }
   location.reload()
+}
+
+// --- port config ---
+const portListen = ref('')
+const portFlow = ref<FlowState>('idle')
+const portError = ref('')
+const portPassword = ref('')
+const pendingPort = ref<number | null>(null)
+
+const currentPort = computed(() => {
+  const m = portListen.value.match(/:(\d+)$/)
+  return m ? m[1] : portListen.value
+})
+
+async function loadPortStatus() {
+  try {
+    const res = await settingsApi.getPort()
+    portListen.value = res.listen
+    pendingPort.value = Number(currentPort.value) || null
+  } catch {
+    message.error('Gagal membaca port saat ini.')
+  }
+}
+
+function requestPortChange() {
+  portPassword.value = ''
+  portError.value = ''
+  portFlow.value = 'confirm'
+}
+function cancelPortChange() {
+  portFlow.value = 'idle'
+  portPassword.value = ''
+  pendingPort.value = Number(currentPort.value) || null
+}
+function retryPortChange() {
+  portPassword.value = ''
+  portError.value = ''
+  portFlow.value = 'confirm'
+}
+
+async function confirmPortChange() {
+  if (!portPassword.value || !pendingPort.value) return
+  portFlow.value = 'applying'
+  portError.value = ''
+  try {
+    await settingsApi.setPort(pendingPort.value, portPassword.value)
+    portFlow.value = 'restarting'
+    waitForRestartThenReloadNewPort(pendingPort.value)
+  } catch (e) {
+    portError.value =
+      e instanceof ApiError && e.status === 403
+        ? 'Password salah.'
+        : e instanceof ApiError
+          ? e.message
+          : 'Gagal mengubah port.'
+    portFlow.value = 'error'
+  }
+}
+
+async function waitForRestartThenReloadNewPort(newPort: number) {
+  // Same restart wait as waitForRestartThenReload above, but the port the
+  // browser is currently on is about to stop answering entirely once the
+  // service restarts — polling *this* origin would just spin until
+  // timeout. Poll the NEW origin instead. That's a cross-origin request
+  // (different port = different origin), which the server has no CORS
+  // headers for, so a normal fetch() would always reject even once the
+  // service is back up — mode: 'no-cors' sidesteps that: the browser
+  // still attempts the real network request and the promise still
+  // rejects on connection failure (which is all that's needed here),
+  // it just can't read the (opaque) response body/status, which this
+  // doesn't need anyway.
+  const newOrigin = `${location.protocol}//${location.hostname}:${newPort}`
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    try {
+      await fetch(`${newOrigin}/`, { mode: 'no-cors', cache: 'no-store' })
+      window.location.href = newOrigin
+      return
+    } catch {
+      // still down — keep polling
+    }
+  }
+  window.location.href = newOrigin
 }
 
 // --- TOTP (2FA) ---
@@ -239,6 +323,68 @@ function cancelTotpFlow() {
               docs/07-security.md §7.6 kalau baca dari repo. Setelah aktif, menu Terminal muncul di
               topbar.
             </p>
+          </NSpace>
+        </NCard>
+
+        <NCard embedded size="small" title="Port Aplikasi" style="margin-top: 16px">
+          <NSpace vertical :size="12">
+            <template v-if="portFlow === 'idle'">
+              <NSpace align="center" justify="space-between">
+                <span>Port dashboard ini diakses — saat ini <code>{{ currentPort }}</code></span>
+                <NButton size="small" @click="requestPortChange">Ganti Port</NButton>
+              </NSpace>
+            </template>
+
+            <NAlert v-else-if="portFlow === 'confirm'" type="warning" :show-icon="false">
+              <NSpace vertical :size="10">
+                <span>
+                  Mengganti port akan me-restart servis (downtime singkat) dan alamat dashboard
+                  ini di browser akan berubah — kamu perlu buka ulang dengan port baru setelahnya.
+                  Salah pilih port (bentrok dengan servis lain, atau di bawah 1024 tanpa izin
+                  khusus) bisa membuat servis gagal start; nilai dicoba dulu sebelum disimpan,
+                  tapi tetap pastikan port yang dipilih benar.
+                </span>
+                <NInputNumber
+                  v-model:value="pendingPort"
+                  :min="1"
+                  :max="65535"
+                  :show-button="false"
+                  placeholder="8090"
+                  style="width: 100%"
+                  @keyup.enter="confirmPortChange"
+                />
+                <NInput
+                  v-model:value="portPassword"
+                  type="password"
+                  show-password-on="click"
+                  placeholder="Password dashboard"
+                  autocomplete="current-password"
+                  @keyup.enter="confirmPortChange"
+                />
+                <NSpace>
+                  <NButton size="small" @click="cancelPortChange">Batal</NButton>
+                  <NButton size="small" type="primary" :disabled="!portPassword || !pendingPort" @click="confirmPortChange">
+                    Ganti Port
+                  </NButton>
+                </NSpace>
+              </NSpace>
+            </NAlert>
+
+            <div v-else-if="portFlow === 'applying'" class="flow-row">
+              <NSpin size="small" /> <span>Menyimpan & me-restart servis…</span>
+            </div>
+            <div v-else-if="portFlow === 'restarting'" class="flow-row">
+              <NSpin size="small" />
+              <span>Menunggu servis kembali di port baru… akan diarahkan otomatis.</span>
+            </div>
+            <NAlert v-else-if="portFlow === 'error'" type="error" :show-icon="false">
+              <NSpace vertical :size="10">
+                <span><NIcon :component="TriangleAlert" size="14" /> {{ portError }}</span>
+                <NButton size="small" @click="retryPortChange">Coba lagi</NButton>
+              </NSpace>
+            </NAlert>
+
+            <p class="text-muted">Default: 8090. Berlaku untuk semua alamat IP perangkat ini.</p>
           </NSpace>
         </NCard>
 

@@ -68,6 +68,11 @@ type Deps struct {
 	// *Credentials was originally loaded from. See internal/auth
 	// (credentials.go, totp.go) and docs/07-security.md §7.1.
 	CredentialsPath string
+
+	// Listen is cfg.Server.Listen at startup — a snapshot, same pattern as
+	// TerminalEnabled above, not re-read from disk per request. Shown by
+	// the Settings page's port-change status endpoint.
+	Listen string
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -146,6 +151,14 @@ func (s *Server) Handler() http.Handler {
 	// session alone isn't enough, same as the docker-group/root-mode
 	// install-time prompts require a conscious "yes", not a default.
 	mux.HandleFunc("POST /api/settings/terminal", s.requireAuth(s.handleSettingsTerminal))
+
+	// Port config — same password-gated restart-and-reload mechanism as
+	// the terminal toggle above (changing this can lock someone out of
+	// the dashboard if the new port is wrong, so it gets the same
+	// conscious-confirmation bar). GET always registered so the Settings
+	// page can show the current port on load.
+	mux.HandleFunc("GET /api/settings/port", s.requireAuth(s.handleSettingsPortStatus))
+	mux.HandleFunc("POST /api/settings/port", s.requireAuth(s.handleSettingsPort))
 
 	// TOTP (2FA) settings — see internal/auth/totp.go and
 	// docs/07-security.md §7.1. Setup/confirm only ever *add* protection

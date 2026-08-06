@@ -647,6 +647,20 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
   RFC 6238 dan silang-cek terhadap `pyotp` (implementasi independen) sebelum dipakai di jalur
   login sungguhan. Sesi yang sedang login **tidak terpengaruh** aktif/nonaktifnya TOTP —
   cuma login berikutnya yang kena aturan baru.
+- **Ganti port aplikasi**, sama-sama dari halaman Pengaturan — default **8090**. Alur dan
+  jaminan keamanannya mirip toggle Terminal di atas (edit `config.yaml` line-level, restart
+  otomatis, konfirmasi ulang password dashboard tiap kali), dengan satu lapis tambahan
+  khusus port: sebelum config ditulis, server **mencoba bind langsung** ke port yang diminta
+  (lalu langsung dilepas) — kalau gagal (sudah dipakai proses lain, atau port di bawah 1024
+  tanpa izin khusus), permintaan ditolak dengan pesan jelas **tanpa** menyentuh config atau
+  me-restart servis sama sekali. Ini penting khusus untuk port: kalau nilainya salah baru
+  ketahuan *setelah* restart, servis akan gagal start berulang-ulang (systemd
+  `Restart=always`) tanpa ada dashboard tersisa untuk memperbaikinya — beda dari toggle
+  Terminal yang tidak punya cara gagal seburuk itu. Setelah berhasil disimpan dan servis
+  restart, alamat dashboard di browser otomatis diarahkan ke port yang baru (bukan sekadar
+  reload halaman yang sama — origin lama sudah tidak ada yang dengar sama sekali begitu
+  servis pindah port), lalu diminta login ulang seperti biasa karena sesi cookie tidak ikut
+  pindah lintas port (port berbeda dihitung origin berbeda oleh browser).
 - Ganti password admin, konfigurasi interval polling, root direktori file explorer, daftar
   unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
   [10-roadmap.md](10-roadmap.md) Fase 6.
