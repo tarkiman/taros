@@ -1267,6 +1267,70 @@ makin banyak yang pake."
   dalam blok `if [[ "$HAS_SYSTEMD" -eq 1 ]]` identik dengan versi sebelum perubahan ini, cuma
   dibungkus kondisional.
 
+### File Explorer: pemutaran video berkelanjutan per folder (playlist)
+
+Permintaan langsung dari user: "kadang butuh hiburan... ingin memutar video untuk hiburan...
+bisa memainkan video secara berkelanjutan di dalam folder". Didiskusikan dulu scope-nya
+sebelum dikerjakan — pilihan antara (a) playlist otomatis berbasis folder (murah, memakai
+ulang pola galeri gambar yang sudah ada) vs (b) playlist kurasi manual lintas-folder dengan
+UI build/simpan/reorder (jauh lebih besar, perlu keputusan soal penyimpanan). User setuju
+mulai dari (a) sebagai MVP.
+
+- **Generalisasi konsep galeri gambar yang sudah ada jadi "playlist"**: `FilePreviewOverlay.vue`
+  sebelumnya cuma punya navigasi sebelumnya/berikutnya untuk gambar (`images` prop). Sekarang
+  ada computed `playlist` yang memilih list yang relevan sesuai tipe file aktif (`images` untuk
+  gambar, `videos` prop baru untuk video) — index, hasPrev/hasNext, navigasi panah/keyboard
+  semua jalan di atas satu computed yang sama, bukan logic terpisah per tipe.
+  `FilesView.vue` menghitung `previewVideos` (filter folder aktif ke file video) persis
+  seperti `previewImages` yang sudah ada, dioper sebagai prop baru.
+- **Indikator posisi** "X / Y" ditambahkan di bilah judul overlay (untuk gambar maupun video)
+  — item kecil tapi berguna untuk tahu "masih berapa lagi di folder ini", ditampilkan cuma
+  kalau foldernya punya lebih dari 1 item sejenis.
+- **Auto-advance + lanjut memutar otomatis**: saat video berakhir (event `ended` dari Plyr),
+  otomatis pindah ke video berikutnya di folder (kalau ada — berhenti di video terakhir,
+  tidak berputar balik ke awal). Video yang dituju lanjut memutar otomatis tanpa perlu klik
+  play lagi. Video **pertama** yang dibuka dari daftar file tetap butuh klik manual (tidak
+  pernah autoplay dari klik file biasa) — pembeda ini dilakukan lewat parameter `autoplay`
+  yang cuma `true` saat `setupPlayer` dipanggil dari watcher perubahan `entry` (hasil
+  navigasi/auto-advance), bukan dari `onMounted` (pembukaan pertama).
+- **Tiga percobaan implementasi sampai jalan benar** — dicatat di komentar source karena
+  bukan pilihan sepele:
+  1. *Destroy + recreate Plyr tiap ganti track*: race dengan update reaktif Vue di atribut
+     `:src` elemen `<video>` — video diam-diam tetap di track sebelumnya walau UI (nama
+     file, indikator posisi) sudah update benar (itu didorong langsung dari `props.entry`,
+     bukan dari state video itu sendiri).
+  2. *`player.source = {...}`* (API resmi Plyr untuk ganti sumber): reuse instance-nya
+     sudah benar, tapi observasi menunjukkan Plyr sempat melewati placeholder
+     `blank.mp4` internal yang tidak pernah lanjut ke track sebenarnya.
+  3. **Solusi yang jalan**: instance Plyr dipakai ulang lintas track (dibuat sekali per jenis
+     video/audio, bukan per track), tapi ganti track dilakukan dengan set `el.src` +
+     `el.load()` langsung di elemen `<video>`/`<audio>` native, bukan lewat API Plyr sama
+     sekali — Plyr cuma mendengarkan event native (play/pause/ended/dst) jadi tidak perlu
+     "tahu" soal pergantian sumber lewat API-nya sendiri. Listener `ended` dipasang sekali
+     per masa hidup instance player (bukan per track) memakai `.on()` bukan `.once()`,
+     supaya tidak menumpuk listener basi yang bisa memicu `goNext()` berkali-kali sekaligus
+     kalau beberapa track dilewati tanpa video-nya sempat benar-benar berakhir.
+- **Jebakan saat pengujian yang hampir menyesatkan analisis**: dua percobaan implementasi
+  pertama tadinya kelihatan gagal dengan gejala identik lewat testing manual berulang —
+  ternyata bukan karena logic-nya salah, tapi karena proses server uji lokal tidak pernah
+  benar-benar di-restart antar percobaan (`pkill -f` dengan pola path absolut tidak match
+  proses yang dijalankan lewat path relatif `./taros`, jadi tiap `go build -o` ulang cuma
+  mengganti file binary di disk sementara proses lama—dengan binary lama yang sudah
+  ter-unlink—tetap jalan melayani port yang sama). Ketahuan lewat `/proc/<pid>/exe` yang
+  menunjukkan binary `(deleted)` dan checksum berbeda dari file di disk. Setelah proses lama
+  benar-benar dimatikan by PID dan instance baru diverifikasi (checksum + string debug di
+  binary yang jalan), percobaan solusi ke-3 di atas terbukti berhasil di percobaan pertama
+  yang sebenarnya diuji dengan benar — dua percobaan sebelumnya tidak pernah benar-benar
+  tereksekusi ulang di server uji sama sekali.
+- **Diuji end-to-end** dengan 3 klip video pendek asli (3 detik masing-masing, dibuat lewat
+  `ffmpeg`, bukan file kosong) di sebuah folder: buka klip pertama, klik play manual, biarkan
+  berakhir → auto-advance + lanjut memutar otomatis ke klip kedua tanpa klik apa pun,
+  berulang ke klip ketiga, berhenti di klip terakhir (tidak berputar balik), navigasi manual
+  panah sebelumnya berfungsi, overlay tutup bersih lewat `Esc`. Dikonfirmasi juga tidak ada
+  regresi ke mode galeri gambar maupun pratinjau audio (kode `setupPlayer`/`destroyPlayer`
+  dipakai bersama ketiganya). Review visual di tema dark dan viewport mobile, nol error
+  console di sepanjang pengujian.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

@@ -40,7 +40,7 @@ import {
 import AppShell from '../layouts/AppShell.vue'
 import FileTree from '../components/files/FileTree.vue'
 import FilePreviewOverlay from '../components/files/FilePreviewOverlay.vue'
-import { isImage, isPreviewable, iconFor } from '../components/files/filetypes'
+import { isImage, isVideo, isPreviewable, iconFor } from '../components/files/filetypes'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
 import { ApiError } from '../api/client'
@@ -176,6 +176,10 @@ function openEntry(ev: MouseEvent, entry: Entry) {
 // other images, same "gallery" convention as most file managers. ---
 const previewEntry = ref<Entry | null>(null)
 const previewImages = computed(() => visibleEntries.value.filter((e) => !e.isDir && isImage(e.name)))
+// Lets the preview overlay play through every other video in this folder
+// continuously (auto-advance on end + prev/next) instead of one clip at a
+// time — see components/files/FilePreviewOverlay.vue.
+const previewVideos = computed(() => visibleEntries.value.filter((e) => !e.isDir && isVideo(e.name)))
 function toggleChecked(name: string) {
   const i = checkedKeys.value.indexOf(name)
   if (i === -1) checkedKeys.value.push(name)
@@ -582,6 +586,7 @@ onUnmounted(() => stopWatch?.())
       v-if="previewEntry"
       :entry="previewEntry"
       :images="previewImages"
+      :videos="previewVideos"
       :full-path="fullPath"
       @close="previewEntry = null"
       @navigate="(e) => (previewEntry = e)"

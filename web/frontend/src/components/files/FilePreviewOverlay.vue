@@ -12,6 +12,7 @@ import { isImage, isVideo, isAudio, isPdf } from './filetypes'
 const props = defineProps<{
   entry: Entry
   images: Entry[]
+  videos: Entry[]
   fullPath: (name: string) => string
 }>()
 const emit = defineEmits<{ close: []; navigate: [entry: Entry] }>()
@@ -26,16 +27,26 @@ const kind = computed(() => {
 const src = computed(() => filesApi.previewUrl(props.fullPath(props.entry.name)))
 const downloadHref = computed(() => filesApi.downloadUrl(props.fullPath(props.entry.name)))
 
-// Prev/next only make sense for images — a folder full of photos is the
-// case this is for (browsing a gallery without closing/reopening each one).
-const imageIndex = computed(() => props.images.findIndex((e) => e.name === props.entry.name))
-const hasPrev = computed(() => kind.value === 'image' && imageIndex.value > 0)
-const hasNext = computed(() => kind.value === 'image' && imageIndex.value >= 0 && imageIndex.value < props.images.length - 1)
+// Prev/next/auto-advance: images get a gallery, videos get a "keep playing
+// through the folder" playlist (the actual ask — continuous viewing for a
+// folder of clips, not just one-off previews). Audio/PDF don't get this;
+// no one asked for it and it'd be unused complexity.
+const playlist = computed<Entry[]>(() => {
+  if (kind.value === 'image') return props.images
+  if (kind.value === 'video') return props.videos
+  return []
+})
+const playlistIndex = computed(() => playlist.value.findIndex((e) => e.name === props.entry.name))
+const hasPrev = computed(() => playlistIndex.value > 0)
+const hasNext = computed(() => playlistIndex.value >= 0 && playlistIndex.value < playlist.value.length - 1)
+const playlistPosition = computed(() =>
+  playlist.value.length > 1 ? `${playlistIndex.value + 1} / ${playlist.value.length}` : '',
+)
 function goPrev() {
-  if (hasPrev.value) emit('navigate', props.images[imageIndex.value - 1])
+  if (hasPrev.value) emit('navigate', playlist.value[playlistIndex.value - 1])
 }
 function goNext() {
-  if (hasNext.value) emit('navigate', props.images[imageIndex.value + 1])
+  if (hasNext.value) emit('navigate', playlist.value[playlistIndex.value + 1])
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -46,22 +57,79 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => document.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
-// --- Plyr lifecycle for video/audio — re-created whenever entry changes
-// (not just mounted once), since navigating between preview items reuses
-// this same component instance rather than remounting it. ---
+// --- Plyr lifecycle for video/audio ---
+// The player instance is created once per kind and *reused* across track
+// changes — the track itself is swapped by setting the native element's
+// .src directly and calling .load(), NOT via Plyr's own `player.source`
+// setter. Two approaches were tried before landing here:
+//   1. Destroy + recreate Plyr on every entry change: raced against Vue's
+//      reactive :src update on the <video> element — the element silently
+//      kept playing the *previous* track after "advancing" (UI/filename
+//      updated correctly since that's driven by props.entry directly, the
+//      actual video just never loaded the new file).
+//   2. player.source = {...} (Plyr's documented API for this exact case):
+//      observed Plyr internally routing through an intermediate
+//      "blank.mp4" placeholder that never resolved to the real next
+//      track — reusing the instance was right, but Plyr's own source
+//      swap has DOM management that didn't play well with how this
+//      element is wired up here.
+// Setting .src/.load() directly on the native element sidesteps both:
+// Plyr just reflects whatever the underlying <video>/<audio> element does
+// (play/pause/progress/etc are native events it listens to), so it never
+// needs to "know" about the swap through its own API.
 const mediaEl = ref<HTMLVideoElement | HTMLAudioElement | null>(null)
 let player: Plyr | null = null
+let playerKind: 'video' | 'audio' | null = null
 
-function setupPlayer() {
+function destroyPlayer() {
   player?.destroy()
   player = null
-  if ((kind.value === 'video' || kind.value === 'audio') && mediaEl.value) {
-    player = new Plyr(mediaEl.value, { settings: ['speed'] })
+  playerKind = null
+}
+
+// autoplay=true only for videos reached via next/prev/auto-advance within
+// an already-open session — the *first* video opened from the file list
+// still requires a manual play click, same as before (never autoplay
+// audio/video the instant someone clicks a file). Continuing playback
+// after that first click is a normal, allowed autoplay case in every
+// browser that matters here — it's a continuation of media the user
+// already started, not an unsolicited one.
+function setupPlayer(autoplay: boolean) {
+  if (kind.value !== 'video' && kind.value !== 'audio') {
+    destroyPlayer()
+    return
+  }
+  const el = mediaEl.value
+  if (!el) return
+
+  if (!player || playerKind !== kind.value) {
+    destroyPlayer()
+    player = new Plyr(el, { settings: ['speed'] })
+    playerKind = kind.value
+    // Attached once per player lifetime (not per track) — goNext() reads
+    // hasNext/playlistIndex fresh every time it's called, so this single
+    // persistent listener stays correct across every track without
+    // needing to be re-bound, and can't stack up duplicate firings the
+    // way re-attaching a new `once` listener on every track change would.
+    if (kind.value === 'video') {
+      player.on('ended', () => {
+        if (hasNext.value) goNext()
+      })
+    }
+  }
+
+  el.src = src.value
+  el.load()
+
+  if (autoplay) {
+    // Native element directly, not player.play() — same reasoning as
+    // above, avoids depending on Plyr's own readiness timing.
+    Promise.resolve(el.play()).catch(() => {})
   }
 }
-onMounted(() => nextTick(setupPlayer))
-watch(() => props.entry, () => nextTick(setupPlayer))
-onBeforeUnmount(() => player?.destroy())
+onMounted(() => nextTick(() => setupPlayer(false)))
+watch(() => props.entry, () => nextTick(() => setupPlayer(true)))
+onBeforeUnmount(destroyPlayer)
 </script>
 
 <template>
@@ -71,6 +139,7 @@ onBeforeUnmount(() => player?.destroy())
         <div class="preview-title">
           <span class="preview-name">{{ entry.name }}</span>
           <span class="preview-size">{{ formatBytes(entry.sizeBytes) }}</span>
+          <span v-if="playlistPosition" class="preview-position">{{ playlistPosition }}</span>
         </div>
         <div class="preview-bar-actions">
           <a class="preview-btn" :href="downloadHref" title="Unduh" aria-label="Unduh"><NIcon :component="Download" size="18" /></a>
@@ -78,10 +147,10 @@ onBeforeUnmount(() => player?.destroy())
         </div>
       </div>
 
-      <button v-if="hasPrev" type="button" class="preview-nav preview-nav--prev" title="Sebelumnya" aria-label="Gambar sebelumnya" @click.stop="goPrev">
+      <button v-if="hasPrev" type="button" class="preview-nav preview-nav--prev" title="Sebelumnya" aria-label="Sebelumnya" @click.stop="goPrev">
         <NIcon :component="ChevronLeft" size="26" />
       </button>
-      <button v-if="hasNext" type="button" class="preview-nav preview-nav--next" title="Berikutnya" aria-label="Gambar berikutnya" @click.stop="goNext">
+      <button v-if="hasNext" type="button" class="preview-nav preview-nav--next" title="Berikutnya" aria-label="Berikutnya" @click.stop="goNext">
         <NIcon :component="ChevronRight" size="26" />
       </button>
 
@@ -89,11 +158,11 @@ onBeforeUnmount(() => player?.destroy())
         <img v-if="kind === 'image'" :src="src" :alt="entry.name" class="preview-image" @click.stop />
 
         <div v-else-if="kind === 'video'" class="preview-media-container preview-media-container--video" @click.stop>
-          <video ref="mediaEl" :src="src" playsinline controls />
+          <video ref="mediaEl" playsinline controls />
         </div>
 
         <div v-else-if="kind === 'audio'" class="preview-media-container preview-media-container--audio" @click.stop>
-          <audio ref="mediaEl" :src="src" controls />
+          <audio ref="mediaEl" controls />
         </div>
 
         <div v-else-if="kind === 'pdf'" class="preview-pdf-wrap" @click.stop>
@@ -158,6 +227,12 @@ onBeforeUnmount(() => player?.destroy())
 .preview-size {
   color: rgba(255, 255, 255, 0.55);
   font-size: 0.82rem;
+  flex-shrink: 0;
+}
+.preview-position {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
   flex-shrink: 0;
 }
 
