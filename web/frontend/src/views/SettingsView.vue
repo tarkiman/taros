@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { NCard, NSpace, NSwitch, NInput, NButton, NAlert, NSpin, NIcon, useMessage } from 'naive-ui'
+import { computed, onMounted, ref } from 'vue'
+import { NCard, NSpace, NSwitch, NInput, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
+import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import { terminalApi } from '../api/terminal'
 import { settingsApi } from '../api/settings'
+import { totpApi } from '../api/totp'
 import { ApiError } from '../api/client'
 
 const message = useMessage()
@@ -24,7 +26,10 @@ async function loadStatus() {
     loading.value = false
   }
 }
-onMounted(loadStatus)
+onMounted(() => {
+  loadStatus()
+  loadTotpStatus()
+})
 
 // --- toggle flow: switch never applies directly, always goes through a
 // password-confirm step first — this flips the app's highest-risk
@@ -84,6 +89,100 @@ async function waitForRestartThenReload() {
   }
   location.reload()
 }
+
+// --- TOTP (2FA) ---
+type TotpFlow = 'idle' | 'setup' | 'backupCodes' | 'disableConfirm' | 'applying' | 'error'
+const totpEnabled = ref(false)
+const totpRemaining = ref(0)
+const totpFlow = ref<TotpFlow>('idle')
+const totpError = ref('')
+const totpSecret = ref('')
+const totpOtpauthUrl = ref('')
+const totpCode = ref('')
+const totpPassword = ref('')
+const totpBackupCodes = ref<string[]>([])
+
+const totpQrSvg = computed(() => {
+  if (!totpOtpauthUrl.value) return ''
+  const qr = qrcode(0, 'M')
+  qr.addData(totpOtpauthUrl.value)
+  qr.make()
+  return qr.createSvgTag({ cellSize: 4, margin: 2 })
+})
+
+async function loadTotpStatus() {
+  try {
+    const res = await totpApi.status()
+    totpEnabled.value = res.enabled
+    totpRemaining.value = res.remainingBackupCodes ?? 0
+  } catch {
+    message.error('Gagal membaca status TOTP.')
+  }
+}
+
+async function startTotpSetup() {
+  totpFlow.value = 'applying'
+  totpError.value = ''
+  try {
+    const res = await totpApi.setup()
+    totpSecret.value = res.secret
+    totpOtpauthUrl.value = res.otpauthUrl
+    totpCode.value = ''
+    totpFlow.value = 'setup'
+  } catch (e) {
+    totpError.value = e instanceof Error ? e.message : 'Gagal memulai setup TOTP.'
+    totpFlow.value = 'error'
+  }
+}
+
+async function confirmTotpSetup() {
+  if (!totpCode.value) return
+  totpFlow.value = 'applying'
+  totpError.value = ''
+  try {
+    const res = await totpApi.confirm(totpSecret.value, totpCode.value)
+    totpBackupCodes.value = res.backupCodes
+    totpFlow.value = 'backupCodes'
+    await loadTotpStatus()
+  } catch (e) {
+    totpError.value = e instanceof ApiError ? e.message : 'Gagal mengkonfirmasi kode.'
+    totpFlow.value = 'setup' // back to the code-entry step, not a dead-end error screen
+  }
+}
+
+function finishBackupCodes() {
+  totpFlow.value = 'idle'
+  totpBackupCodes.value = []
+}
+
+function requestTotpDisable() {
+  totpPassword.value = ''
+  totpError.value = ''
+  totpFlow.value = 'disableConfirm'
+}
+
+async function confirmTotpDisable() {
+  if (!totpPassword.value) return
+  totpFlow.value = 'applying'
+  totpError.value = ''
+  try {
+    await totpApi.disable(totpPassword.value)
+    totpFlow.value = 'idle'
+    await loadTotpStatus()
+  } catch (e) {
+    totpError.value = e instanceof ApiError && e.status === 403 ? 'Password salah.' : 'Gagal menonaktifkan TOTP.'
+    totpFlow.value = 'error'
+  }
+}
+
+function cancelTotpFlow() {
+  totpFlow.value = 'idle'
+  totpSecret.value = ''
+  totpOtpauthUrl.value = ''
+  totpCode.value = ''
+  totpPassword.value = ''
+  totpError.value = ''
+}
 </script>
 
 <template>
@@ -142,6 +241,87 @@ async function waitForRestartThenReload() {
             </p>
           </NSpace>
         </NCard>
+
+        <NCard embedded size="small" title="Autentikasi Dua Faktor (TOTP)" style="margin-top: 16px">
+          <NSpace vertical :size="12">
+            <template v-if="totpFlow === 'idle'">
+              <NSpace align="center" justify="space-between">
+                <span>
+                  Kode 6 digit dari aplikasi authenticator (Google Authenticator, Aegis, dst) saat login
+                  <NTag v-if="totpEnabled" size="small" type="success" style="margin-left: 8px">Aktif</NTag>
+                </span>
+                <NButton v-if="!totpEnabled" size="small" type="primary" @click="startTotpSetup">Aktifkan</NButton>
+                <NButton v-else size="small" type="error" ghost @click="requestTotpDisable">Nonaktifkan</NButton>
+              </NSpace>
+              <p v-if="totpEnabled" class="text-muted">
+                {{ totpRemaining }} kode cadangan tersisa — dipakai kalau kamu kehilangan akses ke aplikasi
+                authenticator. Nonaktifkan lalu aktifkan lagi untuk membuat set baru.
+              </p>
+            </template>
+
+            <template v-else-if="totpFlow === 'setup'">
+              <NSpace vertical :size="10">
+                <span>Scan QR ini dengan aplikasi authenticator, lalu masukkan kode 6 digit yang muncul:</span>
+                <div class="qr-wrap" v-html="totpQrSvg"></div>
+                <p class="text-muted">Atau masukkan manual: <code>{{ totpSecret }}</code></p>
+                <NInput
+                  v-model:value="totpCode"
+                  autofocus
+                  placeholder="123456"
+                  @keyup.enter="confirmTotpSetup"
+                />
+                <NAlert v-if="totpError" type="error" :show-icon="false">{{ totpError }}</NAlert>
+                <NSpace>
+                  <NButton size="small" @click="cancelTotpFlow">Batal</NButton>
+                  <NButton size="small" type="primary" :disabled="!totpCode" @click="confirmTotpSetup">Konfirmasi</NButton>
+                </NSpace>
+              </NSpace>
+            </template>
+
+            <template v-else-if="totpFlow === 'backupCodes'">
+              <NAlert type="warning" title="Simpan kode cadangan ini sekarang" :show-icon="false">
+                <NSpace vertical :size="10">
+                  <span>Tidak akan ditampilkan lagi. Setiap kode cuma bisa dipakai sekali.</span>
+                  <div class="backup-codes">
+                    <code v-for="c in totpBackupCodes" :key="c">{{ c }}</code>
+                  </div>
+                  <NButton size="small" type="primary" @click="finishBackupCodes">Sudah saya simpan</NButton>
+                </NSpace>
+              </NAlert>
+            </template>
+
+            <template v-else-if="totpFlow === 'disableConfirm'">
+              <NAlert type="warning" :show-icon="false">
+                <NSpace vertical :size="10">
+                  <span>Menonaktifkan TOTP menghapus kode cadangan yang tersisa. Masukkan password dashboard:</span>
+                  <NInput
+                    v-model:value="totpPassword"
+                    type="password"
+                    show-password-on="click"
+                    placeholder="Password dashboard"
+                    autocomplete="current-password"
+                    @keyup.enter="confirmTotpDisable"
+                  />
+                  <NSpace>
+                    <NButton size="small" @click="cancelTotpFlow">Batal</NButton>
+                    <NButton size="small" type="primary" :disabled="!totpPassword" @click="confirmTotpDisable">Nonaktifkan</NButton>
+                  </NSpace>
+                </NSpace>
+              </NAlert>
+            </template>
+
+            <div v-else-if="totpFlow === 'applying'" class="flow-row">
+              <NSpin size="small" /> <span>Memproses…</span>
+            </div>
+
+            <NAlert v-else-if="totpFlow === 'error'" type="error" :show-icon="false">
+              <NSpace vertical :size="10">
+                <span><NIcon :component="TriangleAlert" size="14" /> {{ totpError }}</span>
+                <NButton size="small" @click="cancelTotpFlow">Tutup</NButton>
+              </NSpace>
+            </NAlert>
+          </NSpace>
+        </NCard>
       </template>
     </NCard>
   </AppShell>
@@ -163,5 +343,26 @@ async function waitForRestartThenReload() {
   color: var(--text-muted);
   font-size: 0.8rem;
   margin: 0;
+}
+.qr-wrap {
+  /* Always a white card regardless of app theme — QR scanners rely on
+     dark-on-light contrast, inverting for dark mode is unreliable across
+     real authenticator apps. */
+  background: #fff;
+  padding: 12px;
+  border-radius: 8px;
+  width: fit-content;
+}
+.qr-wrap :deep(svg) {
+  display: block;
+  width: 160px;
+  height: 160px;
+}
+.backup-codes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 16px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.88rem;
 }
 </style>

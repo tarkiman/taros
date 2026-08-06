@@ -61,6 +61,13 @@ type Deps struct {
 	// service user in the first place (same reasoning as /opt/taros/ for
 	// self-update — see internal/selfupdate).
 	ConfigPath string
+
+	// CredentialsPath is cfg.Auth.CredentialsFile — needed at request time
+	// (not just at startup) for TOTP setup/disable and backup-code
+	// consumption, all of which persist an update to the same file
+	// *Credentials was originally loaded from. See internal/auth
+	// (credentials.go, totp.go) and docs/07-security.md §7.1.
+	CredentialsPath string
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -139,6 +146,15 @@ func (s *Server) Handler() http.Handler {
 	// session alone isn't enough, same as the docker-group/root-mode
 	// install-time prompts require a conscious "yes", not a default.
 	mux.HandleFunc("POST /api/settings/terminal", s.requireAuth(s.handleSettingsTerminal))
+
+	// TOTP (2FA) settings — see internal/auth/totp.go and
+	// docs/07-security.md §7.1. Setup/confirm only ever *add* protection
+	// (no password re-check needed, see handlers_totp.go); disable
+	// removes it, so it's gated the same way as the terminal toggle.
+	mux.HandleFunc("GET /api/settings/totp/status", s.requireAuth(s.handleSettingsTOTPStatus))
+	mux.HandleFunc("POST /api/settings/totp/setup", s.requireAuth(s.handleSettingsTOTPSetup))
+	mux.HandleFunc("POST /api/settings/totp/confirm", s.requireAuth(s.handleSettingsTOTPConfirm))
+	mux.HandleFunc("POST /api/settings/totp/disable", s.requireAuth(s.handleSettingsTOTPDisable))
 
 	// /api/update/check always registered (same "show a clear disabled
 	// state" reasoning as terminal/status above); /apply checks

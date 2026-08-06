@@ -12,6 +12,11 @@ import (
 type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	// TOTPCode is only needed when the account has 2FA enabled — see the
+	// two-step flow in handleAuthLogin. Omitted entirely on the first
+	// request of a 2FA account; the client resubmits with it once the
+	// user enters a code, in the same shape.
+	TOTPCode string `json:"totpCode,omitempty"`
 }
 
 // sessionResponse is what the Vue app hydrates its auth store from — both
@@ -19,9 +24,16 @@ type loginRequest struct {
 // than a readable cookie since it's only ever needed by JS that already
 // has an authenticated fetch call to attach it to.
 type sessionResponse struct {
-	Authenticated bool   `json:"authenticated"`
-	Username      string `json:"username,omitempty"`
-	CSRFToken     string `json:"csrfToken,omitempty"`
+	Authenticated bool `json:"authenticated"`
+	// TOTPRequired means username+password were correct but no session
+	// was created yet — the client re-submits the same request with
+	// totpCode filled in. Deliberately stateless (no server-side pending-
+	// auth token): both checks land in one final request, which is
+	// exactly what "prove you have the password AND the 2FA device"
+	// means — see docs/07-security.md §7.1.
+	TOTPRequired bool   `json:"totpRequired,omitempty"`
+	Username     string `json:"username,omitempty"`
+	CSRFToken    string `json:"csrfToken,omitempty"`
 }
 
 // handleAuthLogin is the JSON counterpart of the old form-post login —
@@ -45,6 +57,26 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		s.deps.RateLimiter.RecordFailure(ip)
 		writeJSONError(w, http.StatusUnauthorized, "Username atau password salah.")
 		return
+	}
+
+	if s.deps.Creds.TOTPEnabled() {
+		if req.TOTPCode == "" {
+			// Password alone was correct, but that's only half of what
+			// this account needs — don't count it as a failure (it
+			// isn't one) and don't create a session yet.
+			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, TOTPRequired: true})
+			return
+		}
+		ok, err := s.deps.Creds.VerifyTOTPOrBackupCode(s.deps.CredentialsPath, req.TOTPCode, time.Now())
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "Gagal memverifikasi kode TOTP.")
+			return
+		}
+		if !ok {
+			s.deps.RateLimiter.RecordFailure(ip)
+			writeJSONError(w, http.StatusUnauthorized, "Kode TOTP salah.")
+			return
+		}
 	}
 	s.deps.RateLimiter.RecordSuccess(ip)
 

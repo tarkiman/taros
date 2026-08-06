@@ -544,6 +544,24 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
   baru benar-benar terpakai. Mengedit `config.yaml` di sisi server dengan **line-level
   targeted edit**, bukan parse-ulang-lalu-tulis-ulang seluruh file — supaya komentar &
   format yang sudah ada di file (mis. dari `deploy/config.example.yaml`) tidak ikut hilang.
+- **Autentikasi dua faktor (TOTP)**, opsional, aktif/nonaktif dari halaman Pengaturan yang
+  sama — diminta langsung oleh user setelah toggle Terminal di atas. Alur setup: klik
+  "Aktifkan" → server generate secret baru (belum disimpan) → tampilkan QR code (di-render
+  di klien, `qrcode-generator`, tanpa dependency gambar/canvas di server) + kunci manual →
+  user scan dengan aplikasi authenticator (Google Authenticator, Aegis, dst — standar RFC
+  6238, kompatibel dengan aplikasi authenticator mana pun) → masukkan kode 6 digit untuk
+  konfirmasi. Secret **baru benar-benar tersimpan setelah kode itu tervalidasi** — generate
+  lalu lupa konfirmasi tidak berefek apa pun ke login, jadi langkah generate sendiri tidak
+  perlu password ulang (beda dari nonaktifkan, yang memang mengurangi keamanan dan **selalu**
+  minta password dashboard). Begitu aktif, login butuh dua langkah: password dulu, lalu
+  layar kedua minta kode 6 digit — **10 kode cadangan** sekali pakai juga dibuat saat itu,
+  ditampilkan **satu kali saja**, untuk dipakai kalau ponsel/aplikasi authenticator hilang.
+  Implementasi TOTP murni pakai Go stdlib (`crypto/hmac`+`crypto/sha1`, bukan library
+  pihak ketiga — algoritmanya kecil & stabil sejak 2011, konsisten dengan alasan "kenapa
+  tidak gopsutil" di [03-tech-stack.md](03-tech-stack.md)), diverifikasi lewat vector resmi
+  RFC 6238 dan silang-cek terhadap `pyotp` (implementasi independen) sebelum dipakai di jalur
+  login sungguhan. Sesi yang sedang login **tidak terpengaruh** aktif/nonaktifnya TOTP —
+  cuma login berikutnya yang kena aturan baru.
 - Ganti password admin, konfigurasi interval polling, root direktori file explorer, daftar
   unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
   [10-roadmap.md](10-roadmap.md) Fase 6.

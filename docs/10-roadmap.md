@@ -1076,9 +1076,58 @@ terpisah di bawah, belum dikerjakan).
   (konfirmasi file config balik persis seperti semula, byte-per-byte, setelah dua kali
   toggle), dan nav Terminal muncul/hilang sesuai state setelah tiap restart.
 
-**Dicatat untuk nanti (belum dikerjakan)**: user secara eksplisit menyebut mau menambah
-**TOTP/2FA** untuk login dashboard supaya lebih aman — dicatat di sini sebagai permintaan
-nyata, bukan cuma ide dari [Fase 6](10-roadmap.md) yang generik.
+Waktu itu user menyebut mau menambah **TOTP/2FA** untuk login dashboard supaya lebih aman —
+dikerjakan tak lama setelahnya, lihat entri di bawah.
+
+### TOTP (2FA), opsional dari Pengaturan
+
+- **Implementasi RFC 6238 langsung dari Go stdlib** (`internal/auth/totp.go`:
+  `crypto/hmac`+`crypto/sha1`+`crypto/subtle`), bukan library pihak ketiga — keputusan
+  sadar konsisten dengan "kenapa tidak gopsutil" ([03-tech-stack.md](03-tech-stack.md)):
+  algoritmanya kecil & stabil sejak 2011, jadi hand-roll masuk akal, beda dengan sesuatu
+  yang genuinely kompleks/gampang salah (WebSocket framing di `ws_terminal.go` tetap pakai
+  library). **Diverifikasi ketat sebelum menyentuh jalur login sungguhan**: unit test
+  terhadap vector resmi RFC 6238 Appendix B (5 test case, HMAC-SHA1, dipangkas dari 8 digit
+  RFC ke 6 digit yang benar-benar dipakai), plus cross-check manual terhadap `pyotp`
+  (implementasi Python independen yang banyak dipakai) — generate kode lewat `pyotp` untuk
+  beberapa secret+waktu acak, konfirmasi implementasi Go ini menerimanya sebagai valid, dan
+  sebaliknya.
+- **Backend**: `Credentials` (`internal/auth/credentials.go`) dapat field baru
+  `TOTPSecret`/`TOTPBackupCodes` (`omitempty`, jadi akun tanpa 2FA tidak berubah sama
+  sekali di `credentials.yaml`) plus `sync.Mutex` (sebelumnya tidak ada — sekarang genuinely
+  dibutuhkan karena beberapa endpoint saling menulis struct in-memory yang sama: login,
+  toggle Terminal via settings, setup/disable TOTP, semuanya bisa bersamaan meski ini
+  dashboard single-admin, dua tab saja cukup). Endpoint baru: `GET /api/settings/totp/status`,
+  `POST /api/settings/totp/setup` (generate secret, **belum disimpan**), `POST
+  /api/settings/totp/confirm` (validasi kode dulu baru simpan + generate 10 kode cadangan),
+  `POST /api/settings/totp/disable` (password wajib, status 403 bukan 401 — alasan sama
+  seperti toggle Terminal). Login (`handleAuthLogin`) diperluas jadi dua langkah stateless:
+  request pertama tanpa `totpCode` → kalau akun punya 2FA, balas `{totpRequired:true}` tanpa
+  bikin sesi; klien kirim ulang persis request yang sama plus `totpCode` terisi.
+- **Frontend**: kartu baru di halaman Pengaturan (Aktifkan → tampilkan QR code, di-render
+  klien pakai `qrcode-generator`, dependency npm nol-transitive-deps yang sengaja dipilih
+  dibanding alternatif populer `qrcode` yang bawa 3 dependency tambahan — konsisten dengan
+  filosofi dependency minimal proyek ini — → konfirmasi kode → tampilkan 10 kode cadangan
+  satu kali). `LoginView.vue` dapat langkah kedua kalau server minta (field kode 6-digit
+  atau kode cadangan, keduanya diterima field yang sama karena backend yang membedakan).
+- **Diuji end-to-end secara menyeluruh** (bukan cuma unit test algoritma) lewat kombinasi
+  browser automation + `curl` langsung: alur setup penuh (QR muncul, kode salah ditolak
+  dengan tetap di layar setup — bukan dead-end, kode benar tersimpan + kode cadangan
+  tampil), login dua-langkah (password saja → diminta kode → kode salah ditolak tetap di
+  `/login` → kode benar berhasil), login pakai kode cadangan (berhasil sekali, dipakai lagi
+  gagal — single-use terverifikasi), nonaktifkan (password salah → 403 tetap di halaman
+  Pengaturan bukan ke-redirect `/login`; password benar → berhasil), dan **sesi yang sudah
+  login sebelum toggle apa pun tetap valid sesudahnya** (dicek langsung: cookie sesi lama
+  masih `authenticated:true` setelah TOTP diaktifkan maupun dinonaktifkan lewat sesi lain).
+- **Bug ditemukan & diperbaiki selama testing — di test-nya sendiri, bukan di kode
+  produknya**: script Puppeteer awal gagal berulang kali mengisi ulang field kode setelah
+  percobaan gagal, karena `element.value = ''` lewat `page.evaluate()` mengubah DOM tapi
+  tidak memicu event `input` yang didengarkan Vue — `totpCode` di reactive state Vue tetap
+  memegang nilai lama, jadi kode baru numpuk di belakang kode lama alih-alih menggantikannya
+  (`"000000" + "587219"` bukan `"587219"`). Diverifikasi dulu lewat `curl` langsung (yang
+  membuktikan backend-nya sudah benar) sebelum menyimpulkan ini bug test, bukan bug produk —
+  baru diperbaiki dengan klik+select-all+backspace asli via `page.keyboard`, bukan manipulasi
+  DOM langsung.
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
@@ -1094,11 +1143,10 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
   dipertimbangkan lagi kalau kebutuhannya berkembang jadi multi-user administrasi penuh.
 - Log viewer streaming (bukan tail on-demand) untuk container & systemd unit.
 - Multi-user dengan role-based access.
-- **TOTP/2FA untuk login dashboard** — diminta langsung oleh user (lihat entri "Halaman
-  Pengaturan (awal)" di atas) sebagai lapisan keamanan tambahan di luar password tunggal.
 - Halaman Pengaturan lengkap — ganti password admin, interval polling, root direktori file
-  explorer, daftar unit systemd "terproteksi". Toggle Terminal saja yang sudah ada (lihat
-  entri "Halaman Pengaturan (awal)" di atas).
+  explorer, daftar unit systemd "terproteksi". Toggle Terminal dan TOTP (2FA) sudah ada
+  (lihat entri "Halaman Pengaturan (awal)" dan "TOTP (2FA), opsional dari Pengaturan" di
+  atas) — sisanya belum.
 
 ## Definisi "Selesai" per Fase
 
