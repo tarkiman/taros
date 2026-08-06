@@ -115,6 +115,7 @@ if [[ -z "$BINARY_PATH" ]]; then
     case "$(uname -m)" in
       aarch64) BINARY_PATH="$REPO_DIR/dist/taros-arm64" ;;
       armv7l) BINARY_PATH="$REPO_DIR/dist/taros-armv7" ;;
+      x86_64) BINARY_PATH="$REPO_DIR/dist/taros-amd64" ;;
     esac
   fi
 fi
@@ -271,10 +272,24 @@ chmod 0644 /etc/taros/config.yaml
 chown "$SERVICE_USER" /etc/taros/config.yaml
 
 # --- 6. Systemd unit ---
-log "Memasang systemd unit (/etc/systemd/system/taros.service)"
-sed -e "s/^User=.*/User=$SERVICE_USER/" -e "s/^Group=.*/Group=$SERVICE_USER/" \
-  "$REPO_DIR/deploy/systemd/taros.service" > /etc/systemd/system/taros.service
-systemctl daemon-reload
+# WSL2 doesn't run systemd unless the user opted in via /etc/wsl.conf's
+# [boot] systemd=true (not the default) — detect that up front so this
+# step (and step 8 below) degrade gracefully instead of dying partway
+# through on a raw "System has not been booted with systemd" error.
+# /run/systemd/system only exists once systemd is actually PID 1 and
+# fully booted — a distro merely having systemd *installed* isn't enough,
+# so this is the same check systemd's own tooling relies on internally.
+HAS_SYSTEMD=0
+[[ -d /run/systemd/system ]] && HAS_SYSTEMD=1
+
+if [[ "$HAS_SYSTEMD" -eq 1 ]]; then
+  log "Memasang systemd unit (/etc/systemd/system/taros.service)"
+  sed -e "s/^User=.*/User=$SERVICE_USER/" -e "s/^Group=.*/Group=$SERVICE_USER/" \
+    "$REPO_DIR/deploy/systemd/taros.service" > /etc/systemd/system/taros.service
+  systemctl daemon-reload
+else
+  log "systemd tidak terdeteksi aktif (umum di WSL2 default) — lewati langkah unit systemd"
+fi
 
 # --- 7. Kredensial admin ---
 CREDS_FILE="/etc/taros/credentials.yaml"
@@ -299,21 +314,44 @@ fi
 # already-running old process untouched indefinitely. `restart` actually
 # reloads the new binary either way: on a fresh install there's nothing
 # running yet, so it behaves exactly like start.
-log "Mengaktifkan servis taros"
-systemctl enable --quiet taros
-log "Merestart servis taros (memuat binary baru kalau ini update)"
-systemctl restart taros
+if [[ "$HAS_SYSTEMD" -eq 1 ]]; then
+  log "Mengaktifkan servis taros"
+  systemctl enable --quiet taros
+  log "Merestart servis taros (memuat binary baru kalau ini update)"
+  systemctl restart taros
 
-if [[ -n "$OLD_VERSION" && "$OLD_VERSION" != "$NEW_VERSION" ]]; then
-  log "Diupdate: $OLD_VERSION -> $NEW_VERSION"
-elif [[ -n "$OLD_VERSION" ]]; then
-  log "Sudah di versi $NEW_VERSION, tidak ada perubahan versi"
+  if [[ -n "$OLD_VERSION" && "$OLD_VERSION" != "$NEW_VERSION" ]]; then
+    log "Diupdate: $OLD_VERSION -> $NEW_VERSION"
+  elif [[ -n "$OLD_VERSION" ]]; then
+    log "Sudah di versi $NEW_VERSION, tidak ada perubahan versi"
+  fi
+
+  log ""
+  log "Selesai. Cek status: systemctl status taros"
+  log "Dashboard: http://<alamat-perangkat>:${LISTEN_ADDR##*:}"
+  log ""
+else
+  log ""
+  log "Binary, config, dan kredensial sudah siap, tapi servis TIDAK di-start otomatis"
+  log "(tidak ada systemd aktif di sistem ini)."
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    log "Terdeteksi WSL. Dua opsi:"
+    log "  1) Aktifkan systemd di WSL (direkomendasikan — servis auto-start/auto-restart"
+    log "     seperti biasa setelahnya). Tambahkan ke /etc/wsl.conf:"
+    log "       [boot]"
+    log "       systemd=true"
+    log "     lalu dari PowerShell/CMD Windows: wsl --shutdown, buka ulang terminal WSL,"
+    log "     lalu jalankan ulang installer ini."
+    log "  2) Jalankan manual tanpa systemd (tidak auto-restart kalau crash/tutup terminal):"
+    log "       sudo -u $SERVICE_USER /opt/taros/taros --config /etc/taros/config.yaml &"
+  else
+    log "Jalankan manual:"
+    log "  sudo -u $SERVICE_USER /opt/taros/taros --config /etc/taros/config.yaml &"
+  fi
+  log "Dashboard setelah jalan: http://<alamat-perangkat>:${LISTEN_ADDR##*:}"
+  log ""
 fi
 
-log ""
-log "Selesai. Cek status: systemctl status taros"
-log "Dashboard: http://<alamat-perangkat>:${LISTEN_ADDR##*:}"
-log ""
 if [[ "$SERVICE_USER" == "root" ]]; then
   log "Servis jalan sebagai root (Opsi C) — tidak ada langkah privilege tambahan yang"
   log "perlu di-setup manual (Docker, File Explorer, mode sudo semuanya otomatis penuh)."

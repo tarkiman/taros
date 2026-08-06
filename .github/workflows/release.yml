@@ -39,10 +39,13 @@ jobs:
           mkdir -p dist
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-arm64 ./cmd/taros
           GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-armv7 ./cmd/taros
+          # amd64: not a real TarOS device, but covers WSL2/x86 Linux/CI/dev
+          # VMs — see docs/09-deployment.md §9.1.
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-amd64 ./cmd/taros
 
       - name: Package release tarballs
         run: |
-          for arch in arm64 armv7; do
+          for arch in arm64 armv7 amd64; do
             pkg="taros-${GITHUB_REF_NAME}-${arch}"
             mkdir -p "$pkg/deploy/systemd"
             cp "dist/taros-${arch}" "$pkg/taros"

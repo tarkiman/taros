@@ -33,9 +33,17 @@ esac
 case "$(uname -m)" in
   aarch64|arm64) ARCH="arm64" ;;
   armv7l|armv6l) ARCH="armv7" ;;
+  # Bukan target device utama TarOS (STB/Raspberry Pi), tapi dibuild juga
+  # supaya bisa dicoba di WSL2/Linux x86 biasa — lihat docs/09-deployment.md
+  # §9.1 dan §9.2 "WSL2 (Windows)".
+  x86_64) ARCH="amd64" ;;
   *) die "arsitektur '$(uname -m)' tidak punya binary siap pakai — build manual sesuai docs/09-deployment.md §9.1 (cross-compile) lalu pakai scripts/install.sh --binary <path>" ;;
 esac
 log "Arsitektur terdeteksi: $ARCH"
+
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  log "WSL terdeteksi — lihat docs/09-deployment.md §9.2 'WSL2 (Windows)' soal requirement systemd."
+fi
 
 log "Mencari rilis terbaru..."
 RELEASE_JSON="$(curl -sSL "$API_URL")"
