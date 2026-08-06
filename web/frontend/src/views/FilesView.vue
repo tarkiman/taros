@@ -40,7 +40,8 @@ import {
 import AppShell from '../layouts/AppShell.vue'
 import FileTree from '../components/files/FileTree.vue'
 import FilePreviewOverlay from '../components/files/FilePreviewOverlay.vue'
-import { isImage, isVideo, isPreviewable, iconFor } from '../components/files/filetypes'
+import { isImage, isVideo, isAudio, isPreviewable, iconFor } from '../components/files/filetypes'
+import { usePlayerStore } from '../stores/player'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
 import { ApiError } from '../api/client'
@@ -51,6 +52,7 @@ const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const csrfToken = getCsrfToken()
+const playerStore = usePlayerStore()
 
 // route.query.path is the *request* value (often empty — e.g. on first
 // load before we know the jail root's real absolute path). resolvedPath
@@ -164,6 +166,15 @@ function openEntry(ev: MouseEvent, entry: Entry) {
   }
   if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return // let ctrl/middle-click open in a new tab normally
   ev.preventDefault()
+  // Audio goes to the global mini-player (App.vue, survives navigating away
+  // from this page entirely) instead of the in-page preview overlay — see
+  // stores/player.ts for why music specifically needs that and video/images
+  // don't.
+  if (isAudio(entry.name)) {
+    const queue = visibleEntries.value.filter((e) => !e.isDir && isAudio(e.name))
+    playerStore.playFolder(queue, queue.findIndex((e) => e.name === entry.name), resolvedPath.value)
+    return
+  }
   if (isPreviewable(entry.name)) {
     previewEntry.value = entry
     return
@@ -171,9 +182,10 @@ function openEntry(ev: MouseEvent, entry: Entry) {
   router.push({ path: '/files/edit', query: { path: fullPath(entry.name) } })
 }
 
-// --- preview overlay (image/video/audio/pdf), opened in place instead of
+// --- preview overlay (image/video/pdf), opened in place instead of
 // navigating away — images support prev/next across the current folder's
-// other images, same "gallery" convention as most file managers. ---
+// other images, same "gallery" convention as most file managers. Audio
+// doesn't go through this overlay at all (see openEntry above). ---
 const previewEntry = ref<Entry | null>(null)
 const previewImages = computed(() => visibleEntries.value.filter((e) => !e.isDir && isImage(e.name)))
 // Lets the preview overlay play through every other video in this folder
@@ -569,7 +581,7 @@ onUnmounted(() => stopWatch?.())
       <NInput v-model:value="promptValue" @keyup.enter="confirmPrompt" autofocus />
     </NModal>
 
-    <div v-if="activeJob" class="job-panel">
+    <div v-if="activeJob" class="job-panel" :class="{ 'job-panel--player-active': playerStore.current }">
       <NCard size="small" :title="activeJob.kind === 'move' ? 'Memindahkan…' : 'Menyalin…'">
         <NProgress type="line" :percentage="Math.round(activeJob.percentDone)" :status="activeJob.status === 'failed' ? 'error' : 'default'" />
         <p class="job-detail">
@@ -833,6 +845,13 @@ onUnmounted(() => stopWatch?.())
   bottom: 24px;
   width: 320px;
   z-index: 100;
+  transition: bottom var(--transition-base);
+}
+/* Mini-player (App.vue) is a 72px bar fixed at the very bottom — shift this
+   panel up above it so a big copy/move job and music playing at the same
+   time don't overlap. */
+.job-panel--player-active {
+  bottom: 96px;
 }
 
 .job-detail {

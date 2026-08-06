@@ -5,12 +5,14 @@ import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin
 import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
+import { usePlayerStore } from '../stores/player'
 import { useThemeMode, type ThemeMode } from '../composables/useTheme'
 import { updateApi } from '../api/update'
 import type { UpdateStatus } from '../types/update'
 
 const auth = useAuthStore()
 const terminal = useTerminalStore()
+const player = usePlayerStore()
 const router = useRouter()
 const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
 
@@ -210,7 +212,7 @@ async function waitForRestartThenReload() {
         <span class="hide-narrow">Keluar</span>
       </NButton>
     </NLayoutHeader>
-    <NLayoutContent class="content">
+    <NLayoutContent class="content" :class="{ 'content--player-active': player.current }">
       <slot />
       <footer class="app-foot">TarOS — dibuat oleh Tarkiman</footer>
     </NLayoutContent>
@@ -352,6 +354,13 @@ async function waitForRestartThenReload() {
   padding: var(--space-5);
   height: calc(100vh - 56px);
   overflow: auto;
+  transition: padding-bottom var(--transition-base);
+}
+/* Mini-player (App.vue, mounted outside AppShell so it survives
+   navigation — see stores/player.ts) is a 72px bar fixed at the bottom —
+   without this the last bit of content/the footer would sit behind it. */
+.content--player-active {
+  padding-bottom: calc(var(--space-5) + 72px);
 }
 
 .app-foot {

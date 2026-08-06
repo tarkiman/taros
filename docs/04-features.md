@@ -298,9 +298,10 @@ bukan error 500.
   nama/hapus) muncul saat hover/dipilih — operasi massal (salin/potong/hapus banyak
   sekaligus) tetap sama seperti mode List, berbagi state seleksi yang sama.
 - **Pratinjau file** (`components/files/FilePreviewOverlay.vue`) — klik file gambar, PDF,
-  video, atau audio membuka overlay pratinjau penuh layar di tempat (bukan pindah ke
-  editor kode/binary-alert seperti file lain), dengan tombol unduh dan tutup, serta
-  navigasi keyboard (`Esc` tutup).
+  atau video membuka overlay pratinjau penuh layar di tempat (bukan pindah ke editor
+  kode/binary-alert seperti file lain), dengan tombol unduh dan tutup, serta navigasi
+  keyboard (`Esc` tutup). File audio **tidak** lewat overlay ini — lihat "Music Mini-Player"
+  di bawah.
   - **Gambar**: ditampilkan langsung, dengan navigasi sebelumnya/berikutnya (panah di layar
     + tombol panah kiri/kanan keyboard) di antara gambar lain dalam folder yang sama — mode
     galeri, bukan harus tutup-buka satu-satu.
@@ -309,10 +310,10 @@ bukan error 500.
     dari `attachment` ke `inline` khusus untuk kebutuhan ini (`<img>`/`<video>`/`<audio>`
     tidak terpengaruh header ini, cuma `<iframe>` yang butuh), dengan link "Buka di tab
     baru" sebagai fallback kalau browser tidak punya viewer PDF bawaan.
-  - **Video & audio**: pakai [Plyr](https://plyr.io) (dipilih atas native `<video>`/`<audio>`
-    supaya tampilan kontrol konsisten lintas browser dan bisa ditema persis warna aksen
-    TarOS lewat CSS variable Plyr, bukan skin bawaan tiap browser), dibungkus dalam overlay
-    bergaya "theater" gelap. Seek/scrub jalan langsung tanpa kerja tambahan di backend —
+  - **Video**: pakai [Plyr](https://plyr.io) (dipilih atas native `<video>` supaya tampilan
+    kontrol konsisten lintas browser dan bisa ditema persis warna aksen TarOS lewat CSS
+    variable Plyr, bukan skin bawaan tiap browser), dibungkus dalam overlay bergaya
+    "theater" gelap. Seek/scrub jalan langsung tanpa kerja tambahan di backend —
     `handleFilesDownload` sudah pakai `http.ServeFile` yang otomatis mendukung HTTP Range
     request.
   - **Video: pemutaran berkelanjutan (playlist per folder)** — sama seperti mode galeri
@@ -330,6 +331,38 @@ bukan error 500.
     `player.source` API bawaan Plyr) sempat dicoba dan sama-sama gagal menjaga pemutaran
     tetap jalan mulus saat berpindah track, baca komentar di source
     `FilePreviewOverlay.vue` untuk detail kenapa.
+- **Music Mini-Player** (`components/MiniPlayer.vue` + `stores/player.ts`) — klik file mp3
+  (atau format audio lain, lihat daftar ekstensi di `components/files/filetypes.ts`) **tidak**
+  membuka overlay pratinjau, tapi langsung memutar lewat bar pemutar kecil yang menempel di
+  bagian bawah aplikasi. Bedanya dari pratinjau video/gambar: bar ini **tetap ada dan tetap
+  memutar walau pindah halaman** (buka Dashboard, Docker, dll — musik tidak berhenti),
+  cocok untuk didengarkan sambil kerja, bukan cuma pratinjau sesaat.
+  - **Playlist otomatis per folder**: sama seperti video, membuka satu file audio menjadikan
+    file audio lain di folder yang sama sebagai antrean — indikator posisi "X / Y", navigasi
+    sebelumnya/berikutnya, auto-advance + lanjut memutar otomatis saat satu lagu selesai,
+    berhenti di lagu terakhir folder (tidak berputar balik).
+  - **Bar pemutar persisten lintas halaman lewat arsitektur khusus**: `AppShell.vue`
+    di-*instansiasi ulang* setiap kali pindah halaman (tiap view membungkus dirinya sendiri
+    dengan `<AppShell>` — lihat catatan di `stores/terminal.ts`), jadi elemen `<audio>` tidak
+    bisa ditaruh di situ atau ikut ter-reset tiap navigasi. `MiniPlayer.vue` malah dipasang
+    di `App.vue`, sejajar `<router-view>` — satu-satunya titik yang benar-benar tidak pernah
+    unmount selama aplikasi berjalan. State antrean/lagu aktif disimpan di Pinia store
+    (`stores/player.ts`), yang juga hidup di level root sehingga survive navigasi. Sesi
+    berakhir (logout) otomatis menghentikan musik (`auth.ts`'s `clear()` action).
+  - **Kontrol dibuat manual, bukan Plyr**: berbeda dari pratinjau video/audio, bar ini pakai
+    elemen `<audio>` native murni dengan progress bar + volume buatan sendiri, bukan Plyr.
+    Plyr sempat dipakai di sini juga, tapi menyebabkan bug nyata: tombol play/pause kustom
+    di bar ini perlu sinkron dua arah dengan elemen (klik tombol → panggil play()/pause();
+    event native play/pause dari elemen → update ikon tombol) — kombinasi itu dengan
+    penanganan event internal Plyr saling memicu berulang, ratusan kali per detik (dibuktikan
+    lewat instrumentasi langsung ke elemen: >2000 event play/pause dalam 8 detik tanpa ada
+    yang secara sah memanggil sesering itu). Perbaikannya bukan sekadar melepas Plyr (itu
+    saja belum cukup — bug yang sama masih terjadi tanpa Plyr, sampai alurnya benar-benar
+    dibuat satu arah: elemen `<audio>` jadi satu-satunya sumber kebenaran, tombol UI
+    langsung memanggil `el.play()`/`el.pause()`, dan `store.playing` cuma cerminan pasif
+    untuk menentukan ikon mana yang ditampilkan — tidak ada lagi yang "menulis balik" ke
+    elemen berdasarkan event yang berasal dari elemen itu sendiri. Detail lengkap ada di
+    komentar source `MiniPlayer.vue`.
 
 ### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
 

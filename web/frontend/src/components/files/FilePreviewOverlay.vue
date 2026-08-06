@@ -7,7 +7,7 @@ import { X, ChevronLeft, ChevronRight, Download, FileText } from '@lucide/vue'
 import { filesApi } from '../../api/files'
 import type { Entry } from '../../types/files'
 import { formatBytes } from '../../utils/format'
-import { isImage, isVideo, isAudio, isPdf } from './filetypes'
+import { isImage, isVideo, isPdf } from './filetypes'
 
 const props = defineProps<{
   entry: Entry
@@ -17,10 +17,13 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: []; navigate: [entry: Entry] }>()
 
+// Audio isn't handled here at all — it goes straight to the global
+// mini-player (components/MiniPlayer.vue) instead, see FilesView.vue's
+// openEntry(). 'unsupported' is the fallback if one somehow ends up here
+// anyway (defensive, not an expected path).
 const kind = computed(() => {
   if (isImage(props.entry.name)) return 'image'
   if (isVideo(props.entry.name)) return 'video'
-  if (isAudio(props.entry.name)) return 'audio'
   if (isPdf(props.entry.name)) return 'pdf'
   return 'unsupported'
 })
@@ -57,11 +60,11 @@ function onKeydown(e: KeyboardEvent) {
 onMounted(() => document.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 
-// --- Plyr lifecycle for video/audio ---
-// The player instance is created once per kind and *reused* across track
-// changes — the track itself is swapped by setting the native element's
-// .src directly and calling .load(), NOT via Plyr's own `player.source`
-// setter. Two approaches were tried before landing here:
+// --- Plyr lifecycle for video ---
+// The player instance is created once and *reused* across track changes —
+// the track itself is swapped by setting the native element's .src
+// directly and calling .load(), NOT via Plyr's own `player.source` setter.
+// Two approaches were tried before landing here:
 //   1. Destroy + recreate Plyr on every entry change: raced against Vue's
 //      reactive :src update on the <video> element — the element silently
 //      kept playing the *previous* track after "advancing" (UI/filename
@@ -74,48 +77,42 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
 //      swap has DOM management that didn't play well with how this
 //      element is wired up here.
 // Setting .src/.load() directly on the native element sidesteps both:
-// Plyr just reflects whatever the underlying <video>/<audio> element does
+// Plyr just reflects whatever the underlying <video> element does
 // (play/pause/progress/etc are native events it listens to), so it never
 // needs to "know" about the swap through its own API.
-const mediaEl = ref<HTMLVideoElement | HTMLAudioElement | null>(null)
+const mediaEl = ref<HTMLVideoElement | null>(null)
 let player: Plyr | null = null
-let playerKind: 'video' | 'audio' | null = null
 
 function destroyPlayer() {
   player?.destroy()
   player = null
-  playerKind = null
 }
 
 // autoplay=true only for videos reached via next/prev/auto-advance within
 // an already-open session — the *first* video opened from the file list
 // still requires a manual play click, same as before (never autoplay
-// audio/video the instant someone clicks a file). Continuing playback
-// after that first click is a normal, allowed autoplay case in every
-// browser that matters here — it's a continuation of media the user
-// already started, not an unsolicited one.
+// video the instant someone clicks a file). Continuing playback after
+// that first click is a normal, allowed autoplay case in every browser
+// that matters here — it's a continuation of media the user already
+// started, not an unsolicited one.
 function setupPlayer(autoplay: boolean) {
-  if (kind.value !== 'video' && kind.value !== 'audio') {
+  if (kind.value !== 'video') {
     destroyPlayer()
     return
   }
   const el = mediaEl.value
   if (!el) return
 
-  if (!player || playerKind !== kind.value) {
-    destroyPlayer()
+  if (!player) {
     player = new Plyr(el, { settings: ['speed'] })
-    playerKind = kind.value
     // Attached once per player lifetime (not per track) — goNext() reads
     // hasNext/playlistIndex fresh every time it's called, so this single
     // persistent listener stays correct across every track without
     // needing to be re-bound, and can't stack up duplicate firings the
     // way re-attaching a new `once` listener on every track change would.
-    if (kind.value === 'video') {
-      player.on('ended', () => {
-        if (hasNext.value) goNext()
-      })
-    }
+    player.on('ended', () => {
+      if (hasNext.value) goNext()
+    })
   }
 
   el.src = src.value
@@ -161,10 +158,6 @@ onBeforeUnmount(destroyPlayer)
           <video ref="mediaEl" playsinline controls />
         </div>
 
-        <div v-else-if="kind === 'audio'" class="preview-media-container preview-media-container--audio" @click.stop>
-          <audio ref="mediaEl" controls />
-        </div>
-
         <div v-else-if="kind === 'pdf'" class="preview-pdf-wrap" @click.stop>
           <iframe :src="src" class="preview-pdf" title="Pratinjau PDF" />
           <a :href="src" target="_blank" rel="noopener" class="preview-pdf-fallback">Buka di tab baru</a>
@@ -198,8 +191,6 @@ onBeforeUnmount(destroyPlayer)
   --plyr-menu-color: var(--text);
   --plyr-tooltip-background: var(--surface-raised);
   --plyr-tooltip-color: var(--text);
-  --plyr-audio-controls-background: var(--surface-raised);
-  --plyr-audio-control-color: var(--text);
 }
 
 .preview-bar {
@@ -281,9 +272,6 @@ onBeforeUnmount(destroyPlayer)
 }
 .preview-media-container--video {
   max-width: 1100px;
-}
-.preview-media-container--audio {
-  max-width: 480px;
 }
 
 .preview-pdf-wrap {

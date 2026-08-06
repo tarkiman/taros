@@ -1331,6 +1331,102 @@ mulai dari (a) sebagai MVP.
   dipakai bersama ketiganya). Review visual di tema dark dan viewport mobile, nol error
   console di sepanjang pengujian.
 
+### Music Mini-Player: pemutaran musik persisten lintas halaman
+
+Permintaan langsung dari user: pemutar mp3 yang otomatis memutar playlist/folder, "interface
+menarik, tapi masih jalan dan menyatu dengan aplikasi ini" — didiskusikan dulu scope-nya
+sebelum dikerjakan karena ini beda kebutuhan dari video: video cukup berhenti begitu overlay
+ditutup/pindah halaman (nonton itu aktivitas fokus), tapi musik biasanya didengarkan
+*sambil* melakukan hal lain di aplikasi. Dua opsi dibahas: (a) pakai ulang persis pola
+overlay video (murah, tapi berhenti begitu pindah halaman) vs (b) mini-player persisten
+yang tetap jalan lintas navigasi (lebih besar, menyentuh `AppShell.vue` yang dipakai semua
+halaman). User pilih (b).
+
+- **Temuan arsitektur penting sebelum mulai coding**: asumsi awal "taruh mini-player di
+  `AppShell.vue`" ternyata salah — `AppShell.vue` di-**instansiasi ulang setiap pindah
+  halaman** (tiap view membungkus dirinya sendiri dengan `<AppShell>`, bukan satu layout
+  tunggal di level atas; ini sudah didokumentasikan di komentar `stores/terminal.ts` dari
+  fitur sebelumnya, cuma belum pernah jadi masalah nyata sampai sekarang). Komponen apa pun
+  yang dipasang di dalam `AppShell.vue` akan ikut unmount/remount tiap navigasi — elemen
+  `<audio>` di dalamnya akan ter-reset, gagal total memenuhi "tetap jalan". Solusinya:
+  `MiniPlayer.vue` dipasang di `App.vue`, **sejajar** `<router-view>` (bukan di dalamnya) —
+  satu-satunya titik di seluruh aplikasi yang benar-benar tidak pernah unmount selama SPA
+  hidup. State antrean/lagu aktif (`stores/player.ts`, Pinia) otomatis ikut persisten karena
+  Pinia store hidup di root app instance, tidak terikat siklus hidup komponen manapun —
+  cuma elemen `<audio>` fisiknya yang butuh penempatan khusus.
+- **Playlist folder otomatis + auto-advance**, generalisasi dari pola video: `FilePreviewOverlay.vue`
+  sebelumnya cuma tahu soal `images`/`videos`; sekarang `FilesView.vue`'s `openEntry()`
+  mencegat klik file audio SEBELUM masuk logic pratinjau biasa, langsung memanggil
+  `playerStore.playFolder(daftarAudioDiFolder, index, folderPath)` — audio tidak pernah
+  membuka `FilePreviewOverlay.vue` sama sekali (jalur 'audio' yang sebelumnya ada di situ
+  jadi dead code, dibersihkan).
+- **Klik file = izin autoplay**, beda dengan video: overlay video sengaja TIDAK autoplay
+  saat pertama dibuka (dibuka pasif, autoplay akan mengejutkan), tapi memilih lagu dari
+  daftar file adalah aksi eksplisit "putar ini" — jadi mini-player autoplay dari klik
+  pertama, tidak perlu klik play manual sekali lagi.
+- **Bug play/pause "storm" — perjalanan debugging paling rumit sejauh ini**: implementasi
+  pertama pakai [Plyr](https://plyr.io) lagi (konsisten dengan video/pratinjau audio lama),
+  dengan tombol play/pause/prev/next kustom sendiri (Plyr cuma dipakai untuk progress
+  bar/waktu/volume). Testing awal (Puppeteer, cek `.paused` sesaat setelah auto-advance)
+  menunjukkan hasil **tidak konsisten** — kadang `true` kadang `false` di titik pengecekan
+  yang sama, kelihatan seperti race condition kecil di waktu. Investigasi lebih dalam
+  (instrumentasi `addEventListener('play'/'pause', ...)` langsung ke elemen, bukan cuma cek
+  `.paused` sesaat) mengungkap yang sebenarnya terjadi: **lebih dari 2000 event play/pause
+  dalam 8 detik**, jauh dari wajar. `currentTime` tetap naik mulus (audio sebenarnya main
+  terus tanpa putus), tapi elemen di-pause/di-play ulang berkali-kali per detik.
+  - Hipotesis pertama: Plyr biang keroknya. Dites dengan menghilangkan `new Plyr(...)` sama
+    sekali (audio native polos) — storm hilang total dalam window pengujian singkat (3
+    detik). **Kesimpulan ini keliru** — cuma kebetulan window pengujian terlalu pendek,
+    belum sempat melewati siklus auto-advance yang jadi pemicu sebenarnya.
+  - Tanpa Plyr, dites lagi dengan window lebih panjang (9 detik, melewati beberapa
+    auto-advance) — storm **tetap muncul**, 2700+ event, membuktikan Plyr bukan penyebab
+    tunggal.
+  - Instrumentasi lebih detail (log tiap kali watcher `store.playing` terpicu + nilai yang
+    diterima) menemukan akar masalah sebenarnya: watcher **dua arah** — tombol UI mengubah
+    `store.playing`, sebuah `watch()` terpisah mendengarkan `store.playing` lalu memanggil
+    `el.play()`/`el.pause()`, SEKALIGUS elemen native juga listen event `play`/`pause`
+    miliknya sendiri untuk mengubah balik `store.playing` — kombinasi ini jadi feedback
+    loop: panggil `play()` → event native `play` fired → update state → watcher terpicu
+    lagi → panggil ulang → dst, jadi ratusan siklus per detik.
+  - **Perbaikan final**: alur dibuat **satu arah**. Elemen `<audio>` jadi satu-satunya
+    sumber kebenaran; `store.playing` cuma cerminan pasif (diupdate oleh
+    `onNativePlay`/`onNativePause`, tidak pernah "menulis balik" ke elemen). Tombol
+    play/pause di UI memanggil fungsi lokal yang bicara **langsung** ke elemen
+    (`el.paused ? el.play() : el.pause()`), bukan lewat store/watcher. Setelah perbaikan
+    ini: 5 event dalam 10 detik dengan 3x auto-advance — angka yang benar-benar masuk akal
+    (satu play/pause wajar per transisi track), bukan ribuan.
+  - **Keputusan turunan**: karena watcher dua arah adalah akar masalah — bukan spesifik ke
+    Plyr — dan Plyr di sini cuma dipakai untuk progress bar/volume (bukan tombol play/pause
+    sendiri, yang justru sudah dibuat manual), Plyr **dilepas sepenuhnya** dari
+    `MiniPlayer.vue`. Progress bar dan volume dibuat sendiri lewat `<input type="range">`
+    native yang disambungkan langsung ke elemen `<audio>` — lebih sedikit dependency di
+    komponen yang paling sering ter-render di seluruh aplikasi (muncul di setiap halaman
+    selama ada musik diputar), dan tidak ada lagi lapisan pihak ketiga yang bisa
+    menciptakan feedback loop serupa. Video/pratinjau audio di `FilePreviewOverlay.vue`
+    tidak kena masalah ini karena arsitekturnya beda: cuma satu jalur yang memanggil
+    `play()` (dari watcher perubahan track), tidak ada tombol UI kustom terpisah yang perlu
+    sinkron dua arah balik ke Plyr.
+  - **Pelajaran metodologis yang dicatat eksplisit**: jangan simpulkan penyebab dari
+    pengujian dengan window waktu pendek pada bug yang sifatnya intermiten/periodik — window
+    3 detik pertama (kebetulan pas durasi track uji) memberi kesimpulan yang salah arah
+    sepenuhnya.
+- **Sesi logout otomatis menghentikan musik** (`stores/auth.ts`'s `clear()` action memanggil
+  `usePlayerStore().close()`) — musik tidak nyangkut lintas sesi/tidak muncul di halaman
+  login setelah logout.
+- **Layout**: `job-panel` (progress copy/paste, `FilesView.vue`) dan `.content`'s
+  padding-bottom (`AppShell.vue`) sama-sama disesuaikan kondisional saat mini-player aktif,
+  supaya tidak saling tumpang tindih dengan bar 72px yang menempel di bawah.
+- **Diuji end-to-end** dengan 3 file mp3 pendek asli (3 detik, `ffmpeg`) di sebuah folder:
+  klik file pertama langsung main tanpa klik play manual, **pindah ke halaman
+  Dashboard sambil musik tetap terdengar dan mini-player tetap tampil** (pengujian utama
+  yang membuktikan requirement "menyatu dengan aplikasi"), auto-advance + lanjut memutar
+  otomatis SAAT masih di halaman Dashboard (bukan di File Explorer), navigasi manual
+  berikutnya, toggle play/pause manual (jeda lalu lanjut lagi), tombol tutup menghentikan
+  pemutaran. Review visual tema dark/light dan viewport mobile (progress bar/tombol/info
+  track menyesuaikan lebar layar bertingkat — waktu & volume disembunyikan duluan sebelum
+  elemen lain di layar sempit). Nol error console di seluruh pengujian setelah perbaikan
+  storm di atas.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
