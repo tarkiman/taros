@@ -287,7 +287,9 @@ bukan error 500.
   sempit (< 860px) supaya tidak mendorong daftar file ke bawah di HP, default **terbuka** di
   desktop; sekali diubah manual, preferensi itu yang dipakai terlepas dari lebar layar.
   Tidak ada endpoint backend baru — tree memakai ulang `GET /api/files/list` yang sama,
-  difilter ke folder saja di sisi klien.
+  difilter ke folder saja di sisi klien. Toolbar (breadcrumb + tombol aksi) ada di atas,
+  membentang penuh, dengan panel tree dan panel daftar file sama-sama dimulai tepat di
+  bawahnya — supaya keduanya rata sejajar, bukan tree dimulai lebih tinggi dari isi tabel.
 - **Mode tampilan List / Grid**, toggle di toolbar (preferensi `localStorage`, sama pola
   dengan toggle file tersembunyi). Grid menampilkan tiap item sebagai kartu: **thumbnail
   gambar asli** untuk file gambar (lazy-load lewat endpoint download yang sama, fallback
@@ -295,6 +297,24 @@ bukan error 500.
   arsip, kode, dokumen, folder), nama di bawahnya. Checkbox seleksi dan aksi (unduh/ganti
   nama/hapus) muncul saat hover/dipilih — operasi massal (salin/potong/hapus banyak
   sekaligus) tetap sama seperti mode List, berbagi state seleksi yang sama.
+- **Pratinjau file** (`components/files/FilePreviewOverlay.vue`) — klik file gambar, PDF,
+  video, atau audio membuka overlay pratinjau penuh layar di tempat (bukan pindah ke
+  editor kode/binary-alert seperti file lain), dengan tombol unduh dan tutup, serta
+  navigasi keyboard (`Esc` tutup).
+  - **Gambar**: ditampilkan langsung, dengan navigasi sebelumnya/berikutnya (panah di layar
+    + tombol panah kiri/kanan keyboard) di antara gambar lain dalam folder yang sama — mode
+    galeri, bukan harus tutup-buka satu-satu.
+  - **PDF**: dirender inline via `<iframe>` memakai viewer bawaan browser — endpoint
+    download mendukung parameter `?inline=1` yang mengganti header `Content-Disposition`
+    dari `attachment` ke `inline` khusus untuk kebutuhan ini (`<img>`/`<video>`/`<audio>`
+    tidak terpengaruh header ini, cuma `<iframe>` yang butuh), dengan link "Buka di tab
+    baru" sebagai fallback kalau browser tidak punya viewer PDF bawaan.
+  - **Video & audio**: pakai [Plyr](https://plyr.io) (dipilih atas native `<video>`/`<audio>`
+    supaya tampilan kontrol konsisten lintas browser dan bisa ditema persis warna aksen
+    TarOS lewat CSS variable Plyr, bukan skin bawaan tiap browser), dibungkus dalam overlay
+    bergaya "theater" gelap. Seek/scrub jalan langsung tanpa kerja tambahan di backend —
+    `handleFilesDownload` sudah pakai `http.ServeFile` yang otomatis mendukung HTTP Range
+    request.
 
 ### Catatan Implementasi Fase 3a (inti) vs 3b (streaming/job)
 

@@ -19,6 +19,12 @@ export const filesApi = {
   paste: (path: string) => api.post<{ jobId: string }>('/api/files/op', { action: 'paste', path }),
   cancelJob: (jobId: string) => api.post<{ ok: boolean }>(`/api/files/op/${encodeURIComponent(jobId)}/cancel`),
   downloadUrl: (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`,
+  // Same endpoint, but Content-Disposition: inline instead of attachment —
+  // used as the <img>/<video>/<audio>/<iframe> src in the preview overlay
+  // so a PDF renders in the browser's built-in viewer instead of triggering
+  // a download (images/video/audio ignore Content-Disposition either way,
+  // but it's one URL builder for all four rather than special-casing PDF).
+  previewUrl: (path: string) => `/api/files/download?path=${encodeURIComponent(path)}&inline=1`,
 }
 
 // Upload itself goes through Naive UI's <NUpload> (action=/api/files/upload,
