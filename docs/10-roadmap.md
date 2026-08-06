@@ -1227,6 +1227,46 @@ alert "ini biner" untuk tipe file tersebut).
   Layout sejajar sidebar/konten dan seluruh alur pratinjau dicek di tema dark, light, dan
   viewport mobile, nol error console di sepanjang pengujian.
 
+### Dukungan instalasi amd64 / WSL2 (Windows)
+
+Permintaan langsung dari user setelah mencoba `quick-install.sh` di WSL Windows dan gagal di
+langkah paling awal: deteksi arsitektur cuma kenal ARM64/ARMv7 (target device asli TarOS —
+STB/Raspberry Pi), jadi `x86_64` (arsitektur WSL2) langsung ditolak dengan error sebelum
+sempat coba apa pun. Motivasi eksplisit dari user: "makin banyak yang support/compatible maka
+makin banyak yang pake."
+
+- **Build `amd64` ditambahkan ke pipeline rilis** (`.github/workflows/release.yml`) — cross-
+  compile ketiga di samping `arm64`/`armv7`, dipublish sebagai `taros-<versi>-amd64.tar.gz`
+  di setiap rilis GitHub, jalur yang sama persis dengan dua arsitektur lain (tidak ada
+  percabangan proses rilis).
+- **`scripts/quick-install.sh`** dan **`scripts/install.sh`** dapat entri `x86_64) ARCH=amd64`
+  di deteksi arsitekturnya masing-masing.
+- **Masalah kedua yang ditemukan sebelum sempat dilaporkan user**: WSL2 secara default
+  **tidak menjalankan systemd**, sementara `install.sh` sebelumnya memanggil
+  `systemctl daemon-reload`/`enable`/`restart` tanpa syarat — di WSL tanpa systemd ini akan
+  gagal keras di tengah instalasi ("System has not been booted with systemd") setelah semua
+  langkah sebelumnya (binary, user servis, config, kredensial) sudah berhasil, pengalaman
+  yang membingungkan (instalasi kelihatan gagal padahal sebagian besar sudah beres). Ditambah
+  deteksi `[[ -d /run/systemd/system ]]` (satu-satunya cara yang reliable — distro yang cuma
+  *terpasang* systemd tapi tidak jadi PID 1 tidak cukup) sebelum langkah unit systemd maupun
+  enable/restart; kalau tidak ada, instalasi tetap selesai sukses (binary/config/kredensial
+  semuanya siap) dan mencetak instruksi fallback — termasuk instruksi spesifik WSL (aktifkan
+  `systemd=true` di `/etc/wsl.conf` + `wsl --shutdown`) kalau `/proc/version` mengandung
+  string "microsoft" (penanda kernel WSL), atau instruksi generik "jalankan manual" kalau
+  bukan WSL.
+- **Diuji langsung**, bukan cuma dibaca ulang: binary `amd64` dicross-compile & diverifikasi
+  header ELF-nya benar (`x86_64`) — tidak bisa dieksekusi langsung di mesin dev (ARM64, tanpa
+  emulasi qemu/binfmt_misc untuk x86 tersedia), jadi logic `install.sh` (deteksi systemd +
+  jalur fallback) diuji terpisah dengan menjalankan skrip yang sama persis di kontainer Ubuntu
+  polos (Docker, tanpa systemd sebagai PID 1 — kondisi yang realistis merepresentasikan WSL2
+  default) memakai binary native arm64 supaya benar-benar bisa dieksekusi untuk memvalidasi
+  alur kontrolnya — instalasi selesai sukses, langkah systemd dilewati dengan pesan yang
+  benar, exit code 0. Pola deteksi WSL (`grep -qi microsoft`) diverifikasi terpisah lewat
+  string versi kernel WSL2 asli vs. kernel Linux biasa. Jalur systemd normal (host dev ini
+  sendiri, yang memang punya systemd aktif) dikonfirmasi tidak berubah perilakunya — kode di
+  dalam blok `if [[ "$HAS_SYSTEMD" -eq 1 ]]` identik dengan versi sebelum perubahan ini, cuma
+  dibungkus kondisional.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

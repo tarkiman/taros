@@ -5,8 +5,8 @@
 **Kebanyakan orang tidak perlu melakukan ini secara manual** — lihat §9.2 "Jalur tercepat" untuk
 instalasi satu perintah yang mengunduh binary dari [GitHub Releases](https://github.com/tarkiman/taros/releases)
 (dibuild otomatis, lihat `.github/workflows/release.yml`). Bagian ini relevan kalau memang mau
-build sendiri (arsitektur di luar ARM64/ARMv7, ingin memverifikasi build dari source, atau
-berkontribusi ke proyek).
+build sendiri (arsitektur di luar ARM64/ARMv7/x86_64, ingin memverifikasi build dari source,
+atau berkontribusi ke proyek).
 
 Go native cross-compile, tanpa CGO (menghindari kebutuhan toolchain C untuk ARM di mesin dev):
 
@@ -16,6 +16,11 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-ar
 
 # Fallback untuk revisi STB yang ternyata 32-bit (jaga-jaga, verifikasi dulu dengan `uname -m`)
 GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/taros-armv7 ./cmd/taros
+
+# Bukan target device utama TarOS (bukan STB/Raspberry Pi), tapi dibuild & dirilis juga —
+# Linux x86_64 biasa, dan WSL2 (Windows) yang kernelnya juga Linux x86_64. Lihat §9.2
+# "WSL2 (Windows)" soal requirement systemd di jalur WSL.
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-amd64 ./cmd/taros
 ```
 
 - `-ldflags="-s -w"`: strip debug symbols & DWARF info → mengecilkan ukuran binary
@@ -40,11 +45,12 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 
 ### Jalur tercepat: satu perintah, tanpa build sama sekali
 
-Untuk perangkat ARM64/ARMv7 (Raspberry Pi, kebanyakan STB Android), **tidak perlu Go, Node,
-atau clone repo di perangkat target sama sekali** — `scripts/quick-install.sh` mendeteksi
-arsitektur, mengunduh binary siap pakai dari [GitHub Releases](https://github.com/tarkiman/taros/releases)
-(dibuild otomatis oleh `.github/workflows/release.yml` tiap tag `v*` di-push), lalu menjalankan
-`install.sh` (lihat di bawah) untuknya:
+Untuk perangkat ARM64/ARMv7 (Raspberry Pi, kebanyakan STB Android) maupun Linux x86_64/WSL2,
+**tidak perlu Go, Node, atau clone repo di perangkat target sama sekali** —
+`scripts/quick-install.sh` mendeteksi arsitektur, mengunduh binary siap pakai dari
+[GitHub Releases](https://github.com/tarkiman/taros/releases) (dibuild otomatis oleh
+`.github/workflows/release.yml` tiap tag `v*` di-push), lalu menjalankan `install.sh` (lihat di
+bawah) untuknya:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | sudo bash
@@ -61,8 +67,33 @@ curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-in
 Prompt username/password admin (langkah 6 di bawah) tetap muncul normal meski dijalankan lewat
 `curl | bash` — script secara eksplisit membaca ulang dari `/dev/tty` (terminal asli) untuk
 bagian ini, bukan dari pipe `curl` yang sudah habis terpakai untuk mengirim script itu sendiri.
-Kalau arsitektur perangkat bukan ARM64/ARMv7, atau memang mau build dari source, lanjut ke opsi
-di bawah.
+Kalau arsitektur perangkat bukan ARM64/ARMv7/x86_64, atau memang mau build dari source, lanjut
+ke opsi di bawah.
+
+### WSL2 (Windows)
+
+TarOS bukan dibuat untuk WSL — target aslinya STB/Raspberry Pi (lihat
+[01-overview.md](01-overview.md)) — tapi kernel WSL2 adalah Linux x86_64 sungguhan, jadi
+binary `amd64` di atas jalan apa adanya di sana. Satu perbedaan penting dari device ARM biasa:
+**WSL2 tidak menjalankan systemd secara default.** `scripts/install.sh` mendeteksi ini
+(`/run/systemd/system` tidak ada) dan otomatis melewati langkah pemasangan/aktivasi unit
+systemd alih-alih gagal di tengah jalan dengan error mentah — instalasi tetap selesai (binary,
+config, kredensial admin semua terpasang), cuma servisnya tidak di-start otomatis. Dua opsi
+yang dicetak di akhir output:
+
+1. **Aktifkan systemd di WSL** (direkomendasikan — servis auto-start/auto-restart seperti
+   biasa setelahnya, termasuk untuk fitur self-update di §9.5). Tambahkan ke `/etc/wsl.conf`:
+   ```ini
+   [boot]
+   systemd=true
+   ```
+   Lalu dari PowerShell/CMD di sisi Windows: `wsl --shutdown`, buka ulang terminal WSL, dan
+   jalankan ulang installer.
+2. **Jalankan manual tanpa systemd** (tidak auto-restart kalau crash atau terminal WSL
+   ditutup):
+   ```bash
+   sudo -u taros /opt/taros/taros --config /etc/taros/config.yaml &
+   ```
 
 ### Build dari source + `install.sh`
 
