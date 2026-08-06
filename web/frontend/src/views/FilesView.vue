@@ -20,14 +20,6 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns, UploadFileInfo } from 'naive-ui'
 import {
-  Folder,
-  File as FileIcon,
-  FileText,
-  FileCode,
-  FileArchive,
-  Image as ImageIcon,
-  Video as VideoIcon,
-  Music as MusicIcon,
   FolderPlus,
   FilePlus,
   Upload as UploadIcon,
@@ -47,6 +39,8 @@ import {
 } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import FileTree from '../components/files/FileTree.vue'
+import FilePreviewOverlay from '../components/files/FilePreviewOverlay.vue'
+import { isImage, isPreviewable, iconFor } from '../components/files/filetypes'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
 import { ApiError } from '../api/client'
@@ -154,6 +148,14 @@ function fullPath(name: string) {
 function editorHref(entry: Entry) {
   return `/files/edit?path=${encodeURIComponent(fullPath(entry.name))}`
 }
+// Previewable files (image/video/audio/pdf) link straight to their raw
+// content — mainly so ctrl/middle-click opens the actual file in a new tab
+// instead of the code editor's "this looks binary" fallback.
+function entryHref(entry: Entry) {
+  if (entry.isDir) return '#'
+  if (isPreviewable(entry.name)) return filesApi.downloadUrl(fullPath(entry.name))
+  return editorHref(entry)
+}
 function openEntry(ev: MouseEvent, entry: Entry) {
   if (entry.isDir) {
     ev.preventDefault()
@@ -162,8 +164,18 @@ function openEntry(ev: MouseEvent, entry: Entry) {
   }
   if (ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.button !== 0) return // let ctrl/middle-click open in a new tab normally
   ev.preventDefault()
+  if (isPreviewable(entry.name)) {
+    previewEntry.value = entry
+    return
+  }
   router.push({ path: '/files/edit', query: { path: fullPath(entry.name) } })
 }
+
+// --- preview overlay (image/video/audio/pdf), opened in place instead of
+// navigating away — images support prev/next across the current folder's
+// other images, same "gallery" convention as most file managers. ---
+const previewEntry = ref<Entry | null>(null)
+const previewImages = computed(() => visibleEntries.value.filter((e) => !e.isDir && isImage(e.name)))
 function toggleChecked(name: string) {
   const i = checkedKeys.value.indexOf(name)
   if (i === -1) checkedKeys.value.push(name)
@@ -312,32 +324,8 @@ async function onDrop(e: DragEvent) {
   }
 }
 
-// --- file-type icon mapping + image thumbnails (grid view) ---
-const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico'])
-const VIDEO_EXTS = new Set(['mp4', 'mkv', 'webm', 'mov', 'avi', 'flv', 'm4v'])
-const AUDIO_EXTS = new Set(['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac'])
-const ARCHIVE_EXTS = new Set(['zip', 'tar', 'gz', 'bz2', 'xz', '7z', 'rar', 'tgz'])
-const CODE_EXTS = new Set(['js', 'ts', 'jsx', 'tsx', 'go', 'py', 'json', 'yaml', 'yml', 'sh', 'vue', 'html', 'css', 'c', 'cpp', 'h', 'rs', 'java', 'sql'])
-const DOC_EXTS = new Set(['txt', 'md', 'pdf', 'doc', 'docx', 'log', 'csv'])
-
-function extOf(name: string) {
-  const i = name.lastIndexOf('.')
-  return i > 0 ? name.slice(i + 1).toLowerCase() : ''
-}
-function isImage(name: string) {
-  return IMAGE_EXTS.has(extOf(name))
-}
-function iconFor(entry: Entry) {
-  if (entry.isDir) return Folder
-  const ext = extOf(entry.name)
-  if (IMAGE_EXTS.has(ext)) return ImageIcon
-  if (VIDEO_EXTS.has(ext)) return VideoIcon
-  if (AUDIO_EXTS.has(ext)) return MusicIcon
-  if (ARCHIVE_EXTS.has(ext)) return FileArchive
-  if (CODE_EXTS.has(ext)) return FileCode
-  if (DOC_EXTS.has(ext)) return FileText
-  return FileIcon
-}
+// --- image thumbnails (grid view); icon/extension classification lives in
+// components/files/filetypes.ts, shared with FilePreviewOverlay.vue ---
 // Reactive Set so v-if in the template updates when a thumbnail 404s/
 // errors — falls back to the type icon instead of a broken-image glyph.
 const thumbFailed = reactive(new Set<string>())
@@ -355,7 +343,7 @@ const columns: DataTableColumns<Entry> = [
       return h(
         'a',
         {
-          href: row.isDir ? '#' : editorHref(row),
+          href: entryHref(row),
           class: 'entry-link',
           onClick: (ev: MouseEvent) => openEntry(ev, row),
         },
@@ -416,78 +404,78 @@ onUnmounted(() => stopWatch?.())
 
 <template>
   <AppShell>
+    <div class="files-toolbar">
+      <NSpace align="center" :size="8">
+        <button type="button" class="sidebar-toggle" :title="sidebarOpen ? 'Sembunyikan panel folder' : 'Tampilkan panel folder'" @click="toggleSidebar">
+          <NIcon :component="sidebarOpen ? PanelLeftClose : PanelLeftOpen" size="17" />
+        </button>
+        <NBreadcrumb>
+          <NBreadcrumbItem v-for="b in breadcrumbs" :key="b.path" @click="navigateTo(b.path)">{{ b.name }}</NBreadcrumbItem>
+        </NBreadcrumb>
+      </NSpace>
+      <NSpace align="center" :size="8" style="margin-top: 8px">
+        <NButton v-if="parentPath" size="small" @click="navigateTo(parentPath)">
+          <template #icon><NIcon :component="ArrowUp" /></template>
+          Naik
+        </NButton>
+        <NInput v-model:value="searchQuery" placeholder="Cari di folder ini…" clearable style="width: 220px" />
+        <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>Folder Baru</NButton>
+        <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>File Baru</NButton>
+        <NUpload
+          :action="uploadUrl"
+          :headers="{ 'X-CSRF-Token': csrfToken }"
+          name="file"
+          multiple
+          :show-file-list="true"
+          @finish="onUploadFinish"
+          @error="onUploadError"
+        >
+          <NButton size="small"><template #icon><NIcon :component="UploadIcon" /></template>Upload</NButton>
+        </NUpload>
+        <NButton v-if="clipboardSize > 0" size="small" type="primary" ghost @click="paste">
+          <template #icon><NIcon :component="ClipboardPaste" /></template>
+          Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
+        </NButton>
+        <NButton
+          size="small"
+          :type="showHidden ? 'primary' : 'default'"
+          :ghost="showHidden"
+          :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+          :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+          @click="toggleShowHidden"
+        >
+          <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
+          File Tersembunyi
+        </NButton>
+        <span class="spacer" />
+        <div class="view-toggle" role="group" aria-label="Mode tampilan">
+          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'list' }" title="Tampilan daftar" @click="setViewMode('list')">
+            <NIcon :component="ListIcon" size="16" />
+          </button>
+          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'grid' }" title="Tampilan ikon" @click="setViewMode('grid')">
+            <NIcon :component="LayoutGrid" size="16" />
+          </button>
+        </div>
+      </NSpace>
+      <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
+        <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
+        <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>Salin</NButton>
+        <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>Potong</NButton>
+        <NPopconfirm @positive-click="removeSelected">
+          <template #trigger>
+            <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>Hapus</NButton>
+          </template>
+          Hapus {{ checkedKeys.length }} item terpilih?
+        </NPopconfirm>
+      </NSpace>
+    </div>
+
     <div class="files-shell" :class="{ 'sidebar-collapsed': !sidebarOpen }">
       <aside class="files-sidebar" v-show="sidebarOpen">
         <FileTree :active-path="resolvedPath" @navigate="navigateTo" />
       </aside>
 
       <div class="files-main">
-        <div class="files-toolbar">
-          <NSpace align="center" :size="8">
-            <button type="button" class="sidebar-toggle" :title="sidebarOpen ? 'Sembunyikan panel folder' : 'Tampilkan panel folder'" @click="toggleSidebar">
-              <NIcon :component="sidebarOpen ? PanelLeftClose : PanelLeftOpen" size="17" />
-            </button>
-            <NBreadcrumb>
-              <NBreadcrumbItem v-for="b in breadcrumbs" :key="b.path" @click="navigateTo(b.path)">{{ b.name }}</NBreadcrumbItem>
-            </NBreadcrumb>
-          </NSpace>
-          <NSpace align="center" :size="8" style="margin-top: 8px">
-            <NButton v-if="parentPath" size="small" @click="navigateTo(parentPath)">
-              <template #icon><NIcon :component="ArrowUp" /></template>
-              Naik
-            </NButton>
-            <NInput v-model:value="searchQuery" placeholder="Cari di folder ini…" clearable style="width: 220px" />
-            <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>Folder Baru</NButton>
-            <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>File Baru</NButton>
-            <NUpload
-              :action="uploadUrl"
-              :headers="{ 'X-CSRF-Token': csrfToken }"
-              name="file"
-              multiple
-              :show-file-list="true"
-              @finish="onUploadFinish"
-              @error="onUploadError"
-            >
-              <NButton size="small"><template #icon><NIcon :component="UploadIcon" /></template>Upload</NButton>
-            </NUpload>
-            <NButton v-if="clipboardSize > 0" size="small" type="primary" ghost @click="paste">
-              <template #icon><NIcon :component="ClipboardPaste" /></template>
-              Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
-            </NButton>
-            <NButton
-              size="small"
-              :type="showHidden ? 'primary' : 'default'"
-              :ghost="showHidden"
-              :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
-              :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
-              @click="toggleShowHidden"
-            >
-              <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
-              File Tersembunyi
-            </NButton>
-            <span class="spacer" />
-            <div class="view-toggle" role="group" aria-label="Mode tampilan">
-              <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'list' }" title="Tampilan daftar" @click="setViewMode('list')">
-                <NIcon :component="ListIcon" size="16" />
-              </button>
-              <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'grid' }" title="Tampilan ikon" @click="setViewMode('grid')">
-                <NIcon :component="LayoutGrid" size="16" />
-              </button>
-            </div>
-          </NSpace>
-          <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
-            <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
-            <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>Salin</NButton>
-            <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>Potong</NButton>
-            <NPopconfirm @positive-click="removeSelected">
-              <template #trigger>
-                <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>Hapus</NButton>
-              </template>
-              Hapus {{ checkedKeys.length }} item terpilih?
-            </NPopconfirm>
-          </NSpace>
-        </div>
-
         <NCard
           class="files-drop-zone"
           :class="{ 'files-drop-zone--active': dragActive }"
@@ -530,7 +518,7 @@ onUnmounted(() => stopWatch?.())
               />
               <a
                 class="grid-open"
-                :href="entry.isDir ? '#' : editorHref(entry)"
+                :href="entryHref(entry)"
                 :title="entry.name"
                 @click="openEntry($event, entry)"
               >
@@ -589,6 +577,15 @@ onUnmounted(() => stopWatch?.())
         <NButton v-if="activeJob.status === 'running'" size="small" @click="cancelJob">Batalkan</NButton>
       </NCard>
     </div>
+
+    <FilePreviewOverlay
+      v-if="previewEntry"
+      :entry="previewEntry"
+      :images="previewImages"
+      :full-path="fullPath"
+      @close="previewEntry = null"
+      @navigate="(e) => (previewEntry = e)"
+    />
   </AppShell>
 </template>
 
@@ -603,7 +600,10 @@ onUnmounted(() => stopWatch?.())
 .files-sidebar {
   flex: 0 0 220px;
   width: 220px;
-  max-height: calc(100vh - 140px);
+  /* Sidebar sits below the (now full-width) toolbar — see files-toolbar
+     below — so its cap needs to account for that height too, not just
+     the AppShell header/padding, or it'd run taller than the viewport. */
+  max-height: calc(100vh - 230px);
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);

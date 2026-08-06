@@ -1177,6 +1177,56 @@ besar ke halaman yang sudah berfungsi penuh.
   kedua tema (dark — default aplikasi ini — dan light) plus viewport mobile, dikonfirmasi
   lewat screenshot nyata bukan cuma asersi otomatis.
 
+### File Explorer: perbaikan layout tree + pratinjau gambar/PDF/video/audio
+
+Permintaan langsung dari user setelah mencoba fitur tree/grid di atas: sidebar tree dan
+konten (tabel/grid) terlihat tidak rata sejajar, dan file gambar/PDF/video tidak bisa
+dilihat langsung dari File Explorer (klik file selalu lempar ke editor kode yang menampilkan
+alert "ini biner" untuk tipe file tersebut).
+
+- **Perbaikan layout**: sebelumnya toolbar (breadcrumb + tombol aksi) ada **di dalam** panel
+  konten, jadi sidebar tree (mulai dari atas panel) dan tabel/grid file (mulai setelah
+  toolbar) punya titik mulai vertikal berbeda — persis yang dikeluhkan user lewat
+  screenshot. Diperbaiki dengan memindahkan toolbar ke atas, membentang penuh lebar
+  halaman, di luar `.files-shell` — sidebar dan panel konten jadi sama-sama anak langsung
+  dari satu baris flex di bawah toolbar, keduanya mulai di titik y yang sama persis
+  (dikonfirmasi lewat `getBoundingClientRect()` di test Puppeteer: sidebar top dan card top
+  keduanya `171.39px`). Cap tinggi maksimum sidebar (`max-height`) disesuaikan juga karena
+  sekarang harus memperhitungkan tinggi toolbar yang dipindah ke atas.
+- **Pratinjau gambar**: overlay lightbox custom (bukan komponen pihak ketiga) dengan navigasi
+  sebelumnya/berikutnya antar gambar lain dalam folder yang sama (mode galeri) — panah di
+  layar dan tombol panah kiri/kanan keyboard, `Esc` untuk tutup.
+- **Pratinjau PDF**: dirender inline lewat `<iframe>` memakai viewer PDF bawaan browser.
+  Ini butuh **satu perubahan backend**: endpoint download (`handleFilesDownload`) sebelumnya
+  selalu mengirim `Content-Disposition: attachment`, yang membuat `<iframe>` memicu unduhan
+  alih-alih merender inline (beda dari `<img>`/`<video>`/`<audio>` yang mengabaikan header
+  ini sepenuhnya — itu sebabnya thumbnail gambar sebelumnya sudah bekerja tanpa perubahan
+  ini). Ditambahkan parameter opsional `?inline=1` yang mengganti disposisi jadi `inline`,
+  dipakai khusus oleh overlay pratinjau lewat `filesApi.previewUrl()` — perilaku default
+  endpoint (tombol "Unduh" biasa) tidak berubah.
+- **Pratinjau video & audio**: memilih antara native `<video>`/`<audio>` bawaan browser vs.
+  menambah dependency player — dikonsultasikan ke user lewat pertanyaan langsung karena ini
+  trade-off nyata (footprint bundle vs. konsistensi tampilan kontrol lintas browser). User
+  memilih [Plyr](https://plyr.io) (~11KB gzip): kontrolnya bisa ditema persis mengikuti
+  design token TarOS lewat CSS custom property Plyr sendiri (`--plyr-color-main` dst,
+  otomatis ikut warna aksen & permukaan sesuai tema aktif — termasuk berbeda otomatis antara
+  dark/light karena variable-nya mewarisi dari token global, dikonfirmasi lewat
+  `getComputedStyle` di kedua tema saat testing). Seek/scrub video langsung berfungsi tanpa
+  perubahan backend tambahan — `handleFilesDownload` sudah memakai `http.ServeFile` yang
+  otomatis mendukung HTTP Range request.
+- **Diuji lewat instance nyata** dengan file media asli (dibuat langsung, bukan file
+  kosong/placeholder): PNG asli, PDF valid satu halaman (dibangun manual lewat struktur
+  objek PDF, bukan library), video MP4 & audio MP3 nyata via `ffmpeg`. Dikonfirmasi lewat
+  Puppeteer + review visual: pratinjau gambar/PDF/video/audio semuanya terbuka dengan benar,
+  navigasi galeri gambar (next/prev via klik dan keyboard) berpindah ke file yang tepat,
+  Plyr terinisialisasi sebagai video player dan audio player masing-masing, video punya
+  durasi valid (metadata Range-load bekerja), endpoint `?inline=1` mengembalikan
+  `Content-Type`/`Content-Disposition`/ukuran byte yang benar saat dicek langsung (dark PDF
+  di screenshot headless adalah keterbatasan Chromium headless yang tidak punya plugin
+  viewer PDF, bukan bug — sudah diverifikasi terpisah bahwa response backend-nya benar).
+  Layout sejajar sidebar/konten dan seluruh alur pratinjau dicek di tema dark, light, dan
+  viewport mobile, nol error console di sepanjang pengujian.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

@@ -371,6 +371,14 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(path)+`"`)
+	// ?inline=1 is used by the File Explorer's preview overlay (image/video/
+	// audio/PDF) — <img>/<video>/<audio> ignore Content-Disposition either
+	// way, but an <iframe> pointed at a PDF honors it, so without this a PDF
+	// preview would just trigger a download instead of rendering inline.
+	disposition := "attachment"
+	if r.URL.Query().Get("inline") == "1" {
+		disposition = "inline"
+	}
+	w.Header().Set("Content-Disposition", disposition+`; filename="`+filepath.Base(path)+`"`)
 	http.ServeFile(w, r, path)
 }
