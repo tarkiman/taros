@@ -88,6 +88,12 @@ if [[ "$IS_DARWIN" -eq 1 ]]; then
   cp "$EXTRACTED_DIR/taros" "$DEST/taros"
   if [[ ! -f "$DEST/config.yaml" ]]; then
     cp "$EXTRACTED_DIR/config.example.yaml" "$DEST/config.yaml"
+    # config.example.yaml hardcodes /etc/taros/credentials.yaml — correct for
+    # the Linux systemd path (install.sh creates /etc/taros with the right
+    # ownership), but there's no such setup here and no sudo/root to make
+    # one. Point it at this install's own directory instead, same sed-based
+    # customization pattern install.sh already uses for listen/rootDir.
+    sed -i '' "s|^  credentialsFile:.*|  credentialsFile: \"$DEST/credentials.yaml\"|" "$DEST/config.yaml"
   fi
   log "Selesai. Binary ada di $DEST/taros."
   log ""
