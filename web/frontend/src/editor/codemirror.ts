@@ -39,6 +39,8 @@ import { properties } from '@codemirror/legacy-modes/mode/properties'
 
 import { load as yamlLoad } from 'js-yaml'
 
+import { i18n } from '../i18n'
+
 // --- language selection by extension — see docs/04-features.md §4.4 ---
 const EXT_LANG: Record<string, () => LanguageSupport | Extension> = {
   yaml: () => yaml(),
@@ -76,7 +78,7 @@ function yamlLinter() {
       if (!err.mark) return []
       const line = view.state.doc.line(Math.min(err.mark.line + 1, view.state.doc.lines))
       const from = line.from + Math.min(err.mark.column, line.length)
-      return [{ from, to: Math.min(from + 1, line.to), severity: 'error' as const, message: err.reason || err.message || 'YAML tidak valid' }]
+      return [{ from, to: Math.min(from + 1, line.to), severity: 'error' as const, message: err.reason || err.message || i18n.global.t('editor.invalidYaml') }]
     }
   })
 }

@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NCard, NForm, NFormItem, NInput, NButton, NAlert } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { ApiError } from '../api/client'
+import LocaleSwitcher from '../components/LocaleSwitcher.vue'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
@@ -37,15 +40,15 @@ async function handleSubmit() {
       needsTotp.value = true
       return
     }
-    error.value = 'Username atau password salah.'
+    error.value = t('login.wrongCredentials')
   } catch (e) {
     if (e instanceof ApiError && e.status === 429) {
-      error.value = 'Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.'
+      error.value = t('login.tooManyAttempts')
     } else if (needsTotp.value) {
-      error.value = 'Kode salah — coba lagi, atau pakai salah satu kode cadangan.'
+      error.value = t('login.wrongTotp')
       totpCode.value = ''
     } else {
-      error.value = 'Username atau password salah.'
+      error.value = t('login.wrongCredentials')
     }
   } finally {
     loading.value = false
@@ -66,6 +69,7 @@ function backToPassword() {
       <div class="app-blob b"></div>
       <div class="app-blob c"></div>
     </div>
+    <LocaleSwitcher class="locale-switcher" />
     <NCard class="auth-card" title="TarOS">
       <NForm @submit.prevent="handleSubmit">
         <NAlert v-if="error" type="error" :show-icon="false" style="margin-bottom: 16px">
@@ -73,10 +77,10 @@ function backToPassword() {
         </NAlert>
 
         <template v-if="!needsTotp">
-          <NFormItem label="Username">
+          <NFormItem :label="t('login.username')">
             <NInput v-model:value="username" autofocus autocomplete="username" @keyup.enter="handleSubmit" />
           </NFormItem>
-          <NFormItem label="Password">
+          <NFormItem :label="t('login.password')">
             <NInput
               v-model:value="password"
               type="password"
@@ -85,22 +89,22 @@ function backToPassword() {
               @keyup.enter="handleSubmit"
             />
           </NFormItem>
-          <NButton type="primary" block :loading="loading" @click="handleSubmit">Masuk</NButton>
+          <NButton type="primary" block :loading="loading" @click="handleSubmit">{{ t('login.signIn') }}</NButton>
         </template>
 
         <template v-else>
-          <p class="totp-hint">Masukkan kode dari aplikasi authenticator, atau salah satu kode cadangan.</p>
-          <NFormItem label="Kode">
+          <p class="totp-hint">{{ t('login.totpHint') }}</p>
+          <NFormItem :label="t('login.code')">
             <NInput
               v-model:value="totpCode"
               autofocus
               autocomplete="one-time-code"
-              placeholder="123456 atau XXXX-XXXX"
+              :placeholder="t('login.codePlaceholder')"
               @keyup.enter="handleSubmit"
             />
           </NFormItem>
-          <NButton type="primary" block :loading="loading" @click="handleSubmit">Lanjutkan</NButton>
-          <NButton text block style="margin-top: 8px" @click="backToPassword">← Kembali</NButton>
+          <NButton type="primary" block :loading="loading" @click="handleSubmit">{{ t('login.continueBtn') }}</NButton>
+          <NButton text block style="margin-top: 8px" @click="backToPassword">{{ t('login.back') }}</NButton>
         </template>
       </NForm>
     </NCard>
@@ -119,6 +123,13 @@ function backToPassword() {
   position: relative;
   z-index: 1;
   width: min(360px, 90vw);
+}
+
+.locale-switcher {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 2;
 }
 
 .totp-hint {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   NCard,
   NSpace,
@@ -48,6 +49,7 @@ import { ApiError } from '../api/client'
 import type { Entry, Breadcrumb, JobSnapshot } from '../types/files'
 import { formatBytes, formatDate } from '../utils/format'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
@@ -129,7 +131,7 @@ async function loadList() {
     clipboardCut.value = res.clipboardCut
     checkedKeys.value = []
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : 'Gagal membaca direktori.')
+    message.error(e instanceof ApiError ? e.message : t('files.listFailed'))
   } finally {
     loading.value = false
   }
@@ -218,32 +220,32 @@ function confirmPrompt() {
 }
 
 function newFolder() {
-  openPrompt('Folder baru', '', async (name) => {
+  openPrompt(t('files.newFolderTitle'), '', async (name) => {
     try {
       await filesApi.mkdir(fullPath(name))
       loadList()
     } catch (e) {
-      message.error(e instanceof ApiError ? e.message : 'Gagal membuat folder.')
+      message.error(e instanceof ApiError ? e.message : t('files.mkdirFailed'))
     }
   })
 }
 function newFile() {
-  openPrompt('File baru', '', async (name) => {
+  openPrompt(t('files.newFileTitle'), '', async (name) => {
     try {
       await filesApi.createFile(fullPath(name))
       loadList()
     } catch (e) {
-      message.error(e instanceof ApiError ? e.message : 'Gagal membuat file.')
+      message.error(e instanceof ApiError ? e.message : t('files.createFileFailed'))
     }
   })
 }
 function renameEntry(entry: Entry) {
-  openPrompt(`Ganti nama "${entry.name}"`, entry.name, async (newName) => {
+  openPrompt(t('files.renameTitle', { name: entry.name }), entry.name, async (newName) => {
     try {
       await filesApi.rename(fullPath(entry.name), fullPath(newName))
       loadList()
     } catch (e) {
-      message.error(e instanceof ApiError ? e.message : 'Gagal mengganti nama.')
+      message.error(e instanceof ApiError ? e.message : t('files.renameFailed'))
     }
   })
 }
@@ -253,7 +255,7 @@ async function removeEntry(entry: Entry) {
     await filesApi.remove(fullPath(entry.name))
     loadList()
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : `Gagal menghapus "${entry.name}".`)
+    message.error(e instanceof ApiError ? e.message : t('files.deleteFailed', { name: entry.name }))
   }
 }
 
@@ -264,7 +266,7 @@ async function removeSelected() {
     try {
       await filesApi.remove(fullPath(name))
     } catch (e) {
-      message.error(e instanceof ApiError ? e.message : `Gagal menghapus "${name}".`)
+      message.error(e instanceof ApiError ? e.message : t('files.deleteFailed', { name }))
     }
   }
   loadList()
@@ -278,7 +280,7 @@ async function copySelected(cut: boolean) {
     checkedKeys.value = []
     loadList()
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : 'Gagal menyalin.')
+    message.error(e instanceof ApiError ? e.message : t('files.copyFailed'))
   }
 }
 
@@ -301,7 +303,7 @@ async function paste() {
       }
     })
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : 'Gagal menempel.')
+    message.error(e instanceof ApiError ? e.message : t('files.pasteFailed'))
   }
 }
 function cancelJob() {
@@ -315,7 +317,7 @@ function onUploadFinish({ file }: { file: UploadFileInfo }) {
   return file
 }
 function onUploadError() {
-  message.error('Upload gagal.')
+  message.error(t('files.uploadFailed'))
 }
 
 // --- lightweight whole-panel drag & drop, on top of NUpload's click path ---
@@ -327,16 +329,16 @@ async function onDrop(e: DragEvent) {
   if (!files || files.length === 0) return
   const form = new FormData()
   for (const f of Array.from(files)) form.append('file', f)
-  const loadingMsg = message.loading(`Mengupload ${files.length} file…`, { duration: 0 })
+  const loadingMsg = message.loading(t('files.uploading', { count: files.length }), { duration: 0 })
   try {
     const res = await fetch(uploadUrl.value, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: form })
-    if (!res.ok) throw new Error(`upload gagal: ${res.status}`)
+    if (!res.ok) throw new Error(t('files.uploadFailedStatus', { status: res.status }))
     loadingMsg.destroy()
-    message.success('Upload selesai.')
+    message.success(t('files.uploadDone'))
     loadList()
   } catch (err) {
     loadingMsg.destroy()
-    message.error(err instanceof Error ? err.message : 'Upload gagal.')
+    message.error(err instanceof Error ? err.message : t('files.uploadFailed'))
   }
 }
 
@@ -346,10 +348,10 @@ async function onDrop(e: DragEvent) {
 // errors — falls back to the type icon instead of a broken-image glyph.
 const thumbFailed = reactive(new Set<string>())
 
-const columns: DataTableColumns<Entry> = [
+const columns = computed<DataTableColumns<Entry>>(() => [
   { type: 'selection' },
   {
-    title: 'Nama',
+    title: t('common.name'),
     key: 'name',
     minWidth: 180,
     ellipsis: { tooltip: true },
@@ -368,16 +370,16 @@ const columns: DataTableColumns<Entry> = [
     },
   },
   {
-    title: 'Ukuran',
+    title: t('common.size'),
     key: 'sizeBytes',
     width: 110,
     sorter: (a, b) => a.sizeBytes - b.sizeBytes,
     render: (row) => (row.isDir ? '—' : formatBytes(row.sizeBytes)),
   },
-  { title: 'Pemilik', key: 'owner', width: 120, sorter: (a, b) => a.owner.localeCompare(b.owner) },
-  { title: 'Diubah', key: 'modTime', width: 150, sorter: (a, b) => Date.parse(a.modTime) - Date.parse(b.modTime), render: (row) => formatDate(row.modTime) },
+  { title: t('files.owner'), key: 'owner', width: 120, sorter: (a, b) => a.owner.localeCompare(b.owner) },
+  { title: t('files.modified'), key: 'modTime', width: 150, sorter: (a, b) => Date.parse(a.modTime) - Date.parse(b.modTime), render: (row) => formatDate(row.modTime) },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 190,
     render: (row) =>
@@ -386,7 +388,7 @@ const columns: DataTableColumns<Entry> = [
           ? null
           : h(
               NButton,
-              { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)), title: 'Unduh', 'aria-label': `Unduh ${row.name}` },
+              { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)), title: t('files.download'), 'aria-label': t('files.downloadAria', { name: row.name }) },
               { icon: () => h(NIcon, { component: Download }) },
             ),
         row.isDir
@@ -394,7 +396,7 @@ const columns: DataTableColumns<Entry> = [
           : null,
         h(
           NButton,
-          { size: 'tiny', onClick: () => renameEntry(row), title: 'Ganti nama', 'aria-label': `Ganti nama ${row.name}` },
+          { size: 'tiny', onClick: () => renameEntry(row), title: t('files.rename'), 'aria-label': t('files.renameAria', { name: row.name }) },
           { icon: () => h(NIcon, { component: Pencil }) },
         ),
         h(
@@ -404,15 +406,15 @@ const columns: DataTableColumns<Entry> = [
             trigger: () =>
               h(
                 NButton,
-                { size: 'tiny', type: 'error', ghost: true, title: 'Hapus', 'aria-label': `Hapus ${row.name}` },
+                { size: 'tiny', type: 'error', ghost: true, title: t('common.delete'), 'aria-label': t('files.deleteAria', { name: row.name }) },
                 { icon: () => h(NIcon, { component: Trash2 }) },
               ),
-            default: () => `Hapus "${row.name}"?`,
+            default: () => t('files.confirmDelete', { name: row.name }),
           },
         ),
       ]),
   },
-]
+])
 
 onMounted(loadList)
 onUnmounted(() => stopWatch?.())
@@ -422,7 +424,7 @@ onUnmounted(() => stopWatch?.())
   <AppShell>
     <div class="files-toolbar">
       <NSpace align="center" :size="8">
-        <button type="button" class="sidebar-toggle" :title="sidebarOpen ? 'Sembunyikan panel folder' : 'Tampilkan panel folder'" @click="toggleSidebar">
+        <button type="button" class="sidebar-toggle" :title="sidebarOpen ? t('files.hideSidebar') : t('files.showSidebar')" @click="toggleSidebar">
           <NIcon :component="sidebarOpen ? PanelLeftClose : PanelLeftOpen" size="17" />
         </button>
         <NBreadcrumb>
@@ -432,11 +434,11 @@ onUnmounted(() => stopWatch?.())
       <NSpace align="center" :size="8" style="margin-top: 8px">
         <NButton v-if="parentPath" size="small" @click="navigateTo(parentPath)">
           <template #icon><NIcon :component="ArrowUp" /></template>
-          Naik
+          {{ t('files.goUp') }}
         </NButton>
-        <NInput v-model:value="searchQuery" placeholder="Cari di folder ini…" clearable style="width: 220px" />
-        <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>Folder Baru</NButton>
-        <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>File Baru</NButton>
+        <NInput v-model:value="searchQuery" :placeholder="t('files.searchPlaceholder')" clearable style="width: 220px" />
+        <NButton size="small" @click="newFolder"><template #icon><NIcon :component="FolderPlus" /></template>{{ t('files.newFolder') }}</NButton>
+        <NButton size="small" @click="newFile"><template #icon><NIcon :component="FilePlus" /></template>{{ t('files.newFile') }}</NButton>
         <NUpload
           :action="uploadUrl"
           :headers="{ 'X-CSRF-Token': csrfToken }"
@@ -450,38 +452,38 @@ onUnmounted(() => stopWatch?.())
         </NUpload>
         <NButton v-if="clipboardSize > 0" size="small" type="primary" ghost @click="paste">
           <template #icon><NIcon :component="ClipboardPaste" /></template>
-          Tempel ({{ clipboardSize }}{{ clipboardCut ? ', pindah' : '' }})
+          {{ t('files.pasteButton', { count: clipboardSize }) }}{{ clipboardCut ? t('files.movedSuffix') : '' }}
         </NButton>
         <NButton
           size="small"
           :type="showHidden ? 'primary' : 'default'"
           :ghost="showHidden"
-          :title="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
-          :aria-label="showHidden ? 'Sembunyikan file tersembunyi' : 'Tampilkan file tersembunyi'"
+          :title="showHidden ? t('files.hideHidden') : t('files.showHidden')"
+          :aria-label="showHidden ? t('files.hideHidden') : t('files.showHidden')"
           @click="toggleShowHidden"
         >
           <template #icon><NIcon :component="showHidden ? EyeOff : Eye" /></template>
-          File Tersembunyi
+          {{ t('files.hiddenFilesLabel') }}
         </NButton>
         <span class="spacer" />
-        <div class="view-toggle" role="group" aria-label="Mode tampilan">
-          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'list' }" title="Tampilan daftar" @click="setViewMode('list')">
+        <div class="view-toggle" role="group" :aria-label="t('files.viewModeLabel')">
+          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'list' }" :title="t('files.listView')" @click="setViewMode('list')">
             <NIcon :component="ListIcon" size="16" />
           </button>
-          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'grid' }" title="Tampilan ikon" @click="setViewMode('grid')">
+          <button type="button" class="view-toggle-btn" :class="{ active: viewMode === 'grid' }" :title="t('files.gridView')" @click="setViewMode('grid')">
             <NIcon :component="LayoutGrid" size="16" />
           </button>
         </div>
       </NSpace>
       <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
-        <span class="text-muted">{{ checkedKeys.length }} dipilih</span>
-        <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>Salin</NButton>
-        <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>Potong</NButton>
+        <span class="text-muted">{{ t('files.selectedCount', { count: checkedKeys.length }) }}</span>
+        <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>{{ t('files.copy') }}</NButton>
+        <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>{{ t('files.cut') }}</NButton>
         <NPopconfirm @positive-click="removeSelected">
           <template #trigger>
-            <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>Hapus</NButton>
+            <NButton size="small" type="error" ghost><template #icon><NIcon :component="Trash2" /></template>{{ t('common.delete') }}</NButton>
           </template>
-          Hapus {{ checkedKeys.length }} item terpilih?
+          {{ t('files.confirmDeleteSelected', { count: checkedKeys.length }) }}
         </NPopconfirm>
       </NSpace>
     </div>
@@ -499,13 +501,13 @@ onUnmounted(() => stopWatch?.())
           @dragleave.prevent="dragActive = false"
           @drop="onDrop"
         >
-          <NEmpty v-if="!loading && entries.length === 0" description="Folder kosong." />
+          <NEmpty v-if="!loading && entries.length === 0" :description="t('files.emptyFolder')" />
           <NEmpty
             v-else-if="!loading && visibleEntries.length === 0"
-            description="Semua isi folder ini tersembunyi (diawali titik)."
+            :description="t('files.allHidden')"
           >
             <template #extra>
-              <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>Tampilkan File Tersembunyi</NButton>
+              <NButton size="small" @click="toggleShowHidden"><template #icon><NIcon :component="Eye" /></template>{{ t('files.showHiddenFilesBtn') }}</NButton>
             </template>
           </NEmpty>
 
@@ -556,19 +558,19 @@ onUnmounted(() => stopWatch?.())
                   v-if="!entry.isDir"
                   class="grid-action-btn"
                   :href="filesApi.downloadUrl(fullPath(entry.name))"
-                  title="Unduh"
-                  :aria-label="`Unduh ${entry.name}`"
+                  :title="t('files.download')"
+                  :aria-label="t('files.downloadAria', { name: entry.name })"
                 ><NIcon :component="Download" size="14" /></a>
-                <button type="button" class="grid-action-btn" title="Ganti nama" :aria-label="`Ganti nama ${entry.name}`" @click="renameEntry(entry)">
+                <button type="button" class="grid-action-btn" :title="t('files.rename')" :aria-label="t('files.renameAria', { name: entry.name })" @click="renameEntry(entry)">
                   <NIcon :component="Pencil" size="14" />
                 </button>
                 <NPopconfirm @positive-click="removeEntry(entry)">
                   <template #trigger>
-                    <button type="button" class="grid-action-btn grid-action-btn--danger" title="Hapus" :aria-label="`Hapus ${entry.name}`" @click.stop>
+                    <button type="button" class="grid-action-btn grid-action-btn--danger" :title="t('common.delete')" :aria-label="t('files.deleteAria', { name: entry.name })" @click.stop>
                       <NIcon :component="Trash2" size="14" />
                     </button>
                   </template>
-                  Hapus "{{ entry.name }}"?
+                  {{ t('files.confirmDelete', { name: entry.name }) }}
                 </NPopconfirm>
               </div>
             </div>
@@ -577,12 +579,12 @@ onUnmounted(() => stopWatch?.())
       </div>
     </div>
 
-    <NModal v-model:show="promptShow" preset="dialog" :title="promptTitle" positive-text="OK" negative-text="Batal" @positive-click="confirmPrompt">
+    <NModal v-model:show="promptShow" preset="dialog" :title="promptTitle" positive-text="OK" :negative-text="t('common.cancel')" @positive-click="confirmPrompt">
       <NInput v-model:value="promptValue" @keyup.enter="confirmPrompt" autofocus />
     </NModal>
 
     <div v-if="activeJob" class="job-panel" :class="{ 'job-panel--player-active': playerStore.current }">
-      <NCard size="small" :title="activeJob.kind === 'move' ? 'Memindahkan…' : 'Menyalin…'">
+      <NCard size="small" :title="activeJob.kind === 'move' ? t('files.moving') : t('files.copying')">
         <NProgress type="line" :percentage="Math.round(activeJob.percentDone)" :status="activeJob.status === 'failed' ? 'error' : 'default'" />
         <p class="job-detail">
           {{ formatBytes(activeJob.copiedBytes) }} / {{ formatBytes(activeJob.totalBytes) }}
@@ -590,7 +592,7 @@ onUnmounted(() => stopWatch?.())
         </p>
         <p class="job-detail" v-if="activeJob.currentFile">{{ activeJob.currentFile }}</p>
         <p class="job-detail" v-if="activeJob.error">{{ activeJob.error }}</p>
-        <NButton v-if="activeJob.status === 'running'" size="small" @click="cancelJob">Batalkan</NButton>
+        <NButton v-if="activeJob.status === 'running'" size="small" @click="cancelJob">{{ t('common.cancel') }}</NButton>
       </NCard>
     </div>
 

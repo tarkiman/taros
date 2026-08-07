@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Plyr from 'plyr'
 import 'plyr/dist/plyr.css'
+import { useI18n } from 'vue-i18n'
 import { NIcon } from 'naive-ui'
 import { X, ChevronLeft, ChevronRight, Download, FileText } from '@lucide/vue'
 import { filesApi } from '../../api/files'
@@ -9,6 +10,7 @@ import type { Entry } from '../../types/files'
 import { formatBytes } from '../../utils/format'
 import { isImage, isVideo, isPdf } from './filetypes'
 
+const { t } = useI18n()
 const props = defineProps<{
   entry: Entry
   images: Entry[]
@@ -139,15 +141,15 @@ onBeforeUnmount(destroyPlayer)
           <span v-if="playlistPosition" class="preview-position">{{ playlistPosition }}</span>
         </div>
         <div class="preview-bar-actions">
-          <a class="preview-btn" :href="downloadHref" title="Unduh" aria-label="Unduh"><NIcon :component="Download" size="18" /></a>
-          <button type="button" class="preview-btn" title="Tutup (Esc)" aria-label="Tutup" @click="emit('close')"><NIcon :component="X" size="20" /></button>
+          <a class="preview-btn" :href="downloadHref" :title="t('files.download')" :aria-label="t('files.download')"><NIcon :component="Download" size="18" /></a>
+          <button type="button" class="preview-btn" :title="t('filePreview.closeEsc')" :aria-label="t('filePreview.close')" @click="emit('close')"><NIcon :component="X" size="20" /></button>
         </div>
       </div>
 
-      <button v-if="hasPrev" type="button" class="preview-nav preview-nav--prev" title="Sebelumnya" aria-label="Sebelumnya" @click.stop="goPrev">
+      <button v-if="hasPrev" type="button" class="preview-nav preview-nav--prev" :title="t('miniPlayer.previous')" :aria-label="t('miniPlayer.previous')" @click.stop="goPrev">
         <NIcon :component="ChevronLeft" size="26" />
       </button>
-      <button v-if="hasNext" type="button" class="preview-nav preview-nav--next" title="Berikutnya" aria-label="Berikutnya" @click.stop="goNext">
+      <button v-if="hasNext" type="button" class="preview-nav preview-nav--next" :title="t('miniPlayer.next')" :aria-label="t('miniPlayer.next')" @click.stop="goNext">
         <NIcon :component="ChevronRight" size="26" />
       </button>
 
@@ -159,13 +161,13 @@ onBeforeUnmount(destroyPlayer)
         </div>
 
         <div v-else-if="kind === 'pdf'" class="preview-pdf-wrap" @click.stop>
-          <iframe :src="src" class="preview-pdf" title="Pratinjau PDF" />
-          <a :href="src" target="_blank" rel="noopener" class="preview-pdf-fallback">Buka di tab baru</a>
+          <iframe :src="src" class="preview-pdf" :title="t('filePreview.pdfPreviewTitle')" />
+          <a :href="src" target="_blank" rel="noopener" class="preview-pdf-fallback">{{ t('filePreview.openNewTab') }}</a>
         </div>
 
         <div v-else class="preview-unsupported" @click.stop>
           <NIcon :component="FileText" size="40" />
-          <p>Tidak bisa dipratinjau. Unduh untuk membuka.</p>
+          <p>{{ t('filePreview.unsupported') }}</p>
         </div>
       </div>
     </div>

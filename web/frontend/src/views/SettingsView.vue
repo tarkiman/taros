@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NCard, NSpace, NSwitch, NInput, NInputNumber, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
@@ -9,6 +10,7 @@ import { settingsApi } from '../api/settings'
 import { totpApi } from '../api/totp'
 import { ApiError } from '../api/client'
 
+const { t } = useI18n()
 const message = useMessage()
 
 // --- current state ---
@@ -21,7 +23,7 @@ async function loadStatus() {
     const res = await terminalApi.status()
     enabled.value = res.enabled
   } catch {
-    message.error('Gagal membaca status Terminal.')
+    message.error(t('settings.terminalStatusFailed'))
   } finally {
     loading.value = false
   }
@@ -66,7 +68,7 @@ async function confirmToggle() {
     flow.value = 'restarting'
     waitForRestartThenReload()
   } catch (e) {
-    flowError.value = e instanceof ApiError && e.status === 403 ? 'Password salah.' : e instanceof Error ? e.message : 'Gagal mengubah pengaturan.'
+    flowError.value = e instanceof ApiError && e.status === 403 ? t('common.wrongPassword') : e instanceof Error ? e.message : t('settings.saveSettingsFailed')
     flow.value = 'error'
   }
 }
@@ -109,7 +111,7 @@ async function loadPortStatus() {
     portListen.value = res.listen
     pendingPort.value = Number(currentPort.value) || null
   } catch {
-    message.error('Gagal membaca port saat ini.')
+    message.error(t('settings.portStatusFailed'))
   }
 }
 
@@ -140,10 +142,10 @@ async function confirmPortChange() {
   } catch (e) {
     portError.value =
       e instanceof ApiError && e.status === 403
-        ? 'Password salah.'
+        ? t('common.wrongPassword')
         : e instanceof ApiError
           ? e.message
-          : 'Gagal mengubah port.'
+          : t('settings.portChangeFailed')
     portFlow.value = 'error'
   }
 }
@@ -200,7 +202,7 @@ async function loadTotpStatus() {
     totpEnabled.value = res.enabled
     totpRemaining.value = res.remainingBackupCodes ?? 0
   } catch {
-    message.error('Gagal membaca status TOTP.')
+    message.error(t('settings.totpStatusFailed'))
   }
 }
 
@@ -214,7 +216,7 @@ async function startTotpSetup() {
     totpCode.value = ''
     totpFlow.value = 'setup'
   } catch (e) {
-    totpError.value = e instanceof Error ? e.message : 'Gagal memulai setup TOTP.'
+    totpError.value = e instanceof Error ? e.message : t('settings.totpSetupFailed')
     totpFlow.value = 'error'
   }
 }
@@ -229,7 +231,7 @@ async function confirmTotpSetup() {
     totpFlow.value = 'backupCodes'
     await loadTotpStatus()
   } catch (e) {
-    totpError.value = e instanceof ApiError ? e.message : 'Gagal mengkonfirmasi kode.'
+    totpError.value = e instanceof ApiError ? e.message : t('settings.totpConfirmFailed')
     totpFlow.value = 'setup' // back to the code-entry step, not a dead-end error screen
   }
 }
@@ -254,7 +256,7 @@ async function confirmTotpDisable() {
     totpFlow.value = 'idle'
     await loadTotpStatus()
   } catch (e) {
-    totpError.value = e instanceof ApiError && e.status === 403 ? 'Password salah.' : 'Gagal menonaktifkan TOTP.'
+    totpError.value = e instanceof ApiError && e.status === 403 ? t('common.wrongPassword') : t('settings.totpDisableFailed')
     totpFlow.value = 'error'
   }
 }
@@ -271,78 +273,70 @@ function cancelTotpFlow() {
 
 <template>
   <AppShell>
-    <NCard title="Pengaturan">
+    <NCard :title="t('settings.title')">
       <div v-if="loading" class="loading"><NSpin size="large" /></div>
       <template v-else>
         <NCard embedded size="small" title="Web Terminal">
           <NSpace vertical :size="12">
             <NSpace align="center" justify="space-between">
-              <span>Akses shell sungguhan lewat dashboard</span>
+              <span>{{ t('settings.terminalDesc') }}</span>
               <NSwitch :value="enabled" :disabled="flow !== 'idle'" @update:value="requestToggle" />
             </NSpace>
 
             <NAlert v-if="flow === 'confirm'" type="warning" :show-icon="false">
               <NSpace vertical :size="10">
                 <span>
-                  {{ pendingValue ? 'Mengaktifkan' : 'Menonaktifkan' }} Terminal akan me-restart servis
-                  (downtime singkat) dan kamu perlu login ulang setelahnya. Masukkan password dashboard
-                  untuk konfirmasi.
+                  {{ t('settings.toggleConfirmMsg', { action: pendingValue ? t('settings.enabling') : t('settings.disabling') }) }}
                 </span>
                 <NInput
                   v-model:value="password"
                   type="password"
                   show-password-on="click"
-                  placeholder="Password dashboard"
+                  :placeholder="t('common.dashboardPassword')"
                   autocomplete="current-password"
                   @keyup.enter="confirmToggle"
                 />
                 <NSpace>
-                  <NButton size="small" @click="cancelToggle">Batal</NButton>
+                  <NButton size="small" @click="cancelToggle">{{ t('common.cancel') }}</NButton>
                   <NButton size="small" type="primary" :disabled="!password" @click="confirmToggle">
-                    {{ pendingValue ? 'Aktifkan' : 'Nonaktifkan' }}
+                    {{ pendingValue ? t('settings.enable') : t('settings.disable') }}
                   </NButton>
                 </NSpace>
               </NSpace>
             </NAlert>
 
             <div v-else-if="flow === 'applying'" class="flow-row">
-              <NSpin size="small" /> <span>Menyimpan & me-restart servis…</span>
+              <NSpin size="small" /> <span>{{ t('settings.savingRestarting') }}</span>
             </div>
             <div v-else-if="flow === 'restarting'" class="flow-row">
-              <NSpin size="small" /> <span>Menunggu servis kembali… halaman akan dimuat ulang otomatis.</span>
+              <NSpin size="small" /> <span>{{ t('settings.waitingRestart') }}</span>
             </div>
             <NAlert v-else-if="flow === 'error'" type="error" :show-icon="false">
               <NSpace vertical :size="10">
                 <span><NIcon :component="TriangleAlert" size="14" /> {{ flowError }}</span>
-                <NButton size="small" @click="retryToggle">Coba lagi</NButton>
+                <NButton size="small" @click="retryToggle">{{ t('common.tryAgain') }}</NButton>
               </NSpace>
             </NAlert>
 
             <p class="text-muted">
-              Nonaktif secara default karena ini fitur dengan akses paling luas di aplikasi — lihat
-              docs/07-security.md §7.6 kalau baca dari repo. Setelah aktif, menu Terminal muncul di
-              topbar.
+              {{ t('settings.terminalHint') }}
             </p>
           </NSpace>
         </NCard>
 
-        <NCard embedded size="small" title="Port Aplikasi" style="margin-top: 16px">
+        <NCard embedded size="small" :title="t('settings.portAppTitle')" style="margin-top: 16px">
           <NSpace vertical :size="12">
             <template v-if="portFlow === 'idle'">
               <NSpace align="center" justify="space-between">
-                <span>Port dashboard ini diakses — saat ini <code>{{ currentPort }}</code></span>
-                <NButton size="small" @click="requestPortChange">Ganti Port</NButton>
+                <span>{{ t('settings.portAccessedAt') }} <code>{{ currentPort }}</code></span>
+                <NButton size="small" @click="requestPortChange">{{ t('settings.changePort') }}</NButton>
               </NSpace>
             </template>
 
             <NAlert v-else-if="portFlow === 'confirm'" type="warning" :show-icon="false">
               <NSpace vertical :size="10">
                 <span>
-                  Mengganti port akan me-restart servis (downtime singkat) dan alamat dashboard
-                  ini di browser akan berubah — kamu perlu buka ulang dengan port baru setelahnya.
-                  Salah pilih port (bentrok dengan servis lain, atau di bawah 1024 tanpa izin
-                  khusus) bisa membuat servis gagal start; nilai dicoba dulu sebelum disimpan,
-                  tapi tetap pastikan port yang dipilih benar.
+                  {{ t('settings.portConfirmMsg') }}
                 </span>
                 <NInputNumber
                   v-model:value="pendingPort"
@@ -357,59 +351,58 @@ function cancelTotpFlow() {
                   v-model:value="portPassword"
                   type="password"
                   show-password-on="click"
-                  placeholder="Password dashboard"
+                  :placeholder="t('common.dashboardPassword')"
                   autocomplete="current-password"
                   @keyup.enter="confirmPortChange"
                 />
                 <NSpace>
-                  <NButton size="small" @click="cancelPortChange">Batal</NButton>
+                  <NButton size="small" @click="cancelPortChange">{{ t('common.cancel') }}</NButton>
                   <NButton size="small" type="primary" :disabled="!portPassword || !pendingPort" @click="confirmPortChange">
-                    Ganti Port
+                    {{ t('settings.changePort') }}
                   </NButton>
                 </NSpace>
               </NSpace>
             </NAlert>
 
             <div v-else-if="portFlow === 'applying'" class="flow-row">
-              <NSpin size="small" /> <span>Menyimpan & me-restart servis…</span>
+              <NSpin size="small" /> <span>{{ t('settings.savingRestarting') }}</span>
             </div>
             <div v-else-if="portFlow === 'restarting'" class="flow-row">
               <NSpin size="small" />
-              <span>Menunggu servis kembali di port baru… akan diarahkan otomatis.</span>
+              <span>{{ t('settings.waitingRestartNewPort') }}</span>
             </div>
             <NAlert v-else-if="portFlow === 'error'" type="error" :show-icon="false">
               <NSpace vertical :size="10">
                 <span><NIcon :component="TriangleAlert" size="14" /> {{ portError }}</span>
-                <NButton size="small" @click="retryPortChange">Coba lagi</NButton>
+                <NButton size="small" @click="retryPortChange">{{ t('common.tryAgain') }}</NButton>
               </NSpace>
             </NAlert>
 
-            <p class="text-muted">Default: 8090. Berlaku untuk semua alamat IP perangkat ini.</p>
+            <p class="text-muted">{{ t('settings.portDefaultHint') }}</p>
           </NSpace>
         </NCard>
 
-        <NCard embedded size="small" title="Autentikasi Dua Faktor (TOTP)" style="margin-top: 16px">
+        <NCard embedded size="small" :title="t('settings.totpTitle')" style="margin-top: 16px">
           <NSpace vertical :size="12">
             <template v-if="totpFlow === 'idle'">
               <NSpace align="center" justify="space-between">
                 <span>
-                  Kode 6 digit dari aplikasi authenticator (Google Authenticator, Aegis, dst) saat login
-                  <NTag v-if="totpEnabled" size="small" type="success" style="margin-left: 8px">Aktif</NTag>
+                  {{ t('settings.totpDesc') }}
+                  <NTag v-if="totpEnabled" size="small" type="success" style="margin-left: 8px">{{ t('common.active') }}</NTag>
                 </span>
-                <NButton v-if="!totpEnabled" size="small" type="primary" @click="startTotpSetup">Aktifkan</NButton>
-                <NButton v-else size="small" type="error" ghost @click="requestTotpDisable">Nonaktifkan</NButton>
+                <NButton v-if="!totpEnabled" size="small" type="primary" @click="startTotpSetup">{{ t('settings.enable') }}</NButton>
+                <NButton v-else size="small" type="error" ghost @click="requestTotpDisable">{{ t('settings.disable') }}</NButton>
               </NSpace>
               <p v-if="totpEnabled" class="text-muted">
-                {{ totpRemaining }} kode cadangan tersisa — dipakai kalau kamu kehilangan akses ke aplikasi
-                authenticator. Nonaktifkan lalu aktifkan lagi untuk membuat set baru.
+                {{ t('settings.backupCodesRemaining', { count: totpRemaining }) }}
               </p>
             </template>
 
             <template v-else-if="totpFlow === 'setup'">
               <NSpace vertical :size="10">
-                <span>Scan QR ini dengan aplikasi authenticator, lalu masukkan kode 6 digit yang muncul:</span>
+                <span>{{ t('settings.scanQr') }}</span>
                 <div class="qr-wrap" v-html="totpQrSvg"></div>
-                <p class="text-muted">Atau masukkan manual: <code>{{ totpSecret }}</code></p>
+                <p class="text-muted">{{ t('settings.enterManually') }} <code>{{ totpSecret }}</code></p>
                 <NInput
                   v-model:value="totpCode"
                   autofocus
@@ -418,20 +411,20 @@ function cancelTotpFlow() {
                 />
                 <NAlert v-if="totpError" type="error" :show-icon="false">{{ totpError }}</NAlert>
                 <NSpace>
-                  <NButton size="small" @click="cancelTotpFlow">Batal</NButton>
-                  <NButton size="small" type="primary" :disabled="!totpCode" @click="confirmTotpSetup">Konfirmasi</NButton>
+                  <NButton size="small" @click="cancelTotpFlow">{{ t('common.cancel') }}</NButton>
+                  <NButton size="small" type="primary" :disabled="!totpCode" @click="confirmTotpSetup">{{ t('common.confirm') }}</NButton>
                 </NSpace>
               </NSpace>
             </template>
 
             <template v-else-if="totpFlow === 'backupCodes'">
-              <NAlert type="warning" title="Simpan kode cadangan ini sekarang" :show-icon="false">
+              <NAlert type="warning" :title="t('settings.saveBackupCodesTitle')" :show-icon="false">
                 <NSpace vertical :size="10">
-                  <span>Tidak akan ditampilkan lagi. Setiap kode cuma bisa dipakai sekali.</span>
+                  <span>{{ t('settings.backupCodesWarning') }}</span>
                   <div class="backup-codes">
                     <code v-for="c in totpBackupCodes" :key="c">{{ c }}</code>
                   </div>
-                  <NButton size="small" type="primary" @click="finishBackupCodes">Sudah saya simpan</NButton>
+                  <NButton size="small" type="primary" @click="finishBackupCodes">{{ t('settings.savedIt') }}</NButton>
                 </NSpace>
               </NAlert>
             </template>
@@ -439,31 +432,31 @@ function cancelTotpFlow() {
             <template v-else-if="totpFlow === 'disableConfirm'">
               <NAlert type="warning" :show-icon="false">
                 <NSpace vertical :size="10">
-                  <span>Menonaktifkan TOTP menghapus kode cadangan yang tersisa. Masukkan password dashboard:</span>
+                  <span>{{ t('settings.totpDisableWarning') }}</span>
                   <NInput
                     v-model:value="totpPassword"
                     type="password"
                     show-password-on="click"
-                    placeholder="Password dashboard"
+                    :placeholder="t('common.dashboardPassword')"
                     autocomplete="current-password"
                     @keyup.enter="confirmTotpDisable"
                   />
                   <NSpace>
-                    <NButton size="small" @click="cancelTotpFlow">Batal</NButton>
-                    <NButton size="small" type="primary" :disabled="!totpPassword" @click="confirmTotpDisable">Nonaktifkan</NButton>
+                    <NButton size="small" @click="cancelTotpFlow">{{ t('common.cancel') }}</NButton>
+                    <NButton size="small" type="primary" :disabled="!totpPassword" @click="confirmTotpDisable">{{ t('settings.disable') }}</NButton>
                   </NSpace>
                 </NSpace>
               </NAlert>
             </template>
 
             <div v-else-if="totpFlow === 'applying'" class="flow-row">
-              <NSpin size="small" /> <span>Memproses…</span>
+              <NSpin size="small" /> <span>{{ t('common.processing') }}</span>
             </div>
 
             <NAlert v-else-if="totpFlow === 'error'" type="error" :show-icon="false">
               <NSpace vertical :size="10">
                 <span><NIcon :component="TriangleAlert" size="14" /> {{ totpError }}</span>
-                <NButton size="small" @click="cancelTotpFlow">Tutup</NButton>
+                <NButton size="small" @click="cancelTotpFlow">{{ t('common.close') }}</NButton>
               </NSpace>
             </NAlert>
           </NSpace>

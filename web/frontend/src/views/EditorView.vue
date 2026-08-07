@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NButton, NCheckbox, NIcon, NAlert, NSpin, useDialog, useMessage } from 'naive-ui'
 import { ArrowLeft, Save } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
@@ -10,6 +11,7 @@ import { ApiError } from '../api/client'
 import { createEditor } from '../editor/codemirror'
 import { useTheme } from '../composables/useTheme'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const dialog = useDialog()
@@ -51,21 +53,21 @@ async function doSave(content: string, force = false) {
     expectedModTime = res.modTime
     setDirty(false)
     localStorage.removeItem(draftKey.value)
-    saveStatus.value = `Tersimpan ${new Date().toLocaleTimeString()}`
+    saveStatus.value = t('editor.saved', { time: new Date().toLocaleTimeString() })
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) {
       dialog.warning({
-        title: 'Konflik simpan',
-        content: 'File ini sudah berubah di disk sejak dibuka di editor. Timpa dengan isi editor ini, atau muat ulang untuk lihat versi terbaru?',
-        positiveText: 'Timpa',
-        negativeText: 'Muat ulang',
+        title: t('editor.saveConflictTitle'),
+        content: t('editor.saveConflictBody'),
+        positiveText: t('editor.overwrite'),
+        negativeText: t('editor.reload'),
         onPositiveClick: () => doSave(content, true),
         onNegativeClick: () => window.location.reload(),
       })
       return
     }
-    const msg = e instanceof ApiError ? e.message : 'Gagal menyimpan.'
-    saveStatus.value = `Gagal simpan: ${msg}`
+    const msg = e instanceof ApiError ? e.message : t('editor.saveFailed')
+    saveStatus.value = t('editor.saveFailedWithMsg', { msg })
     message.error(msg)
   }
 }
@@ -99,10 +101,10 @@ async function init() {
     if (draft !== null && draft !== res.content) {
       const useDraft = await new Promise<boolean>((resolve) => {
         dialog.info({
-          title: 'Draft tersimpan otomatis ditemukan',
-          content: 'Ada perubahan belum tersimpan dari sesi sebelumnya untuk file ini. Pakai draft itu, atau muat versi tersimpan di disk?',
-          positiveText: 'Pakai draft',
-          negativeText: 'Buang draft',
+          title: t('editor.draftFoundTitle'),
+          content: t('editor.draftFoundBody'),
+          positiveText: t('editor.useDraft'),
+          negativeText: t('editor.discardDraft'),
           onPositiveClick: () => resolve(true),
           onNegativeClick: () => resolve(false),
           onClose: () => resolve(false),
@@ -137,7 +139,7 @@ async function init() {
     }
   } catch (e) {
     loading.value = false
-    loadError.value = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: 'Gagal memuat file.' }
+    loadError.value = e instanceof ApiError ? { status: e.status, message: e.message } : { status: 0, message: t('editor.loadFailed') }
   }
 }
 
@@ -166,23 +168,23 @@ function goBack() {
       <div class="editor-toolbar">
         <NButton size="small" quaternary @click="goBack">
           <template #icon><NIcon :component="ArrowLeft" /></template>
-          Kembali
+          {{ t('common.back') }}
         </NButton>
         <span class="filename">{{ filename }}</span>
-        <span v-if="dirty" class="dirty-badge">belum disimpan</span>
+        <span v-if="dirty" class="dirty-badge">{{ t('editor.unsaved') }}</span>
         <span class="spacer" />
         <NCheckbox :checked="wordWrap" @update:checked="handleWordWrapChange">Word wrap</NCheckbox>
         <NButton size="small" type="primary" @click="handleSaveClick">
           <template #icon><NIcon :component="Save" /></template>
-          Simpan (Ctrl+S)
+          {{ t('editor.saveButton') }}
         </NButton>
       </div>
 
-      <NAlert v-if="loadError" type="warning" title="Tidak bisa membuka file">
-        {{ loadError.status === 413 ? 'File terlalu besar untuk diedit (>2MB).' : loadError.status === 415 ? 'File ini sepertinya biner, tidak bisa diedit sebagai teks.' : loadError.message }}
+      <NAlert v-if="loadError" type="warning" :title="t('editor.cannotOpenTitle')">
+        {{ loadError.status === 413 ? t('editor.tooLarge') : loadError.status === 415 ? t('editor.looksBinary') : loadError.message }}
         <template v-if="loadError.status === 413 || loadError.status === 415">
           <br />
-          <a :href="filesApi.downloadUrl(filePath)">Unduh file ini</a> untuk melihatnya di luar editor.
+          <a :href="filesApi.downloadUrl(filePath)">{{ t('editor.downloadThis') }}</a> {{ t('editor.viewOutside') }}
         </template>
       </NAlert>
       <div v-else-if="loading" class="editor-loading"><NSpin size="large" /></div>

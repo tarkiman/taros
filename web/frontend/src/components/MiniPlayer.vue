@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NIcon } from 'naive-ui'
 import { Music, Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X } from '@lucide/vue'
 import { filesApi } from '../api/files'
 import { usePlayerStore } from '../stores/player'
 
+const { t } = useI18n()
 const store = usePlayerStore()
 
 const trackSrc = computed(() => {
@@ -131,7 +133,7 @@ function toggleMute() {
       :value="currentTime"
       :style="{ '--fill': duration ? (currentTime / duration) * 100 : 0 }"
       :disabled="!duration"
-      aria-label="Posisi lagu"
+      :aria-label="t('miniPlayer.trackPosition')"
       @input="onSeek"
     />
 
@@ -145,26 +147,26 @@ function toggleMute() {
       </div>
 
       <div class="mini-player-transport">
-        <button type="button" class="mini-player-btn" :disabled="!store.hasPrev" title="Sebelumnya" aria-label="Sebelumnya" @click="store.prev()">
+        <button type="button" class="mini-player-btn" :disabled="!store.hasPrev" :title="t('miniPlayer.previous')" :aria-label="t('miniPlayer.previous')" @click="store.prev()">
           <NIcon :component="SkipBack" size="18" />
         </button>
         <button
           type="button"
           class="mini-player-btn mini-player-btn--play"
-          :title="store.playing ? 'Jeda' : 'Putar'"
-          :aria-label="store.playing ? 'Jeda' : 'Putar'"
+          :title="store.playing ? t('miniPlayer.pause') : t('miniPlayer.play')"
+          :aria-label="store.playing ? t('miniPlayer.pause') : t('miniPlayer.play')"
           @click="togglePlayback"
         >
           <NIcon :component="store.playing ? Pause : Play" size="20" />
         </button>
-        <button type="button" class="mini-player-btn" :disabled="!store.hasNext" title="Berikutnya" aria-label="Berikutnya" @click="store.next()">
+        <button type="button" class="mini-player-btn" :disabled="!store.hasNext" :title="t('miniPlayer.next')" :aria-label="t('miniPlayer.next')" @click="store.next()">
           <NIcon :component="SkipForward" size="18" />
         </button>
       </div>
 
       <div class="mini-player-end">
         <span class="mini-player-time">{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
-        <button type="button" class="mini-player-btn mini-player-volume-btn" title="Bisukan" aria-label="Bisukan" @click="toggleMute">
+        <button type="button" class="mini-player-btn mini-player-volume-btn" :title="t('miniPlayer.mute')" :aria-label="t('miniPlayer.mute')" @click="toggleMute">
           <NIcon :component="audioEl?.muted ? VolumeX : Volume2" size="16" />
         </button>
         <input
@@ -177,7 +179,7 @@ function toggleMute() {
           aria-label="Volume"
           @input="onVolumeInput"
         />
-        <button type="button" class="mini-player-btn mini-player-close" title="Tutup pemutar" aria-label="Tutup pemutar" @click="store.close()">
+        <button type="button" class="mini-player-btn mini-player-close" :title="t('miniPlayer.closePlayer')" :aria-label="t('miniPlayer.closePlayer')" @click="store.close()">
           <NIcon :component="X" size="18" />
         </button>
       </div>

@@ -1623,6 +1623,71 @@ icon — boleh URL gambar atau kode base64, termasuk lewat file picker.
     `waitForSelector` manual — pola yang sama harus dipakai untuk skrip Puppeteer lain yang
     me-reload halaman Dashboard ke depannya.
 
+### Dukungan Multi-Bahasa (Indonesia/English) — frontend, default English untuk instalasi baru
+
+Diminta langsung: TarOS mendukung Indonesia dan English, dengan **default English untuk
+instalasi baru**. Sebelum implementasi, dikonfirmasi eksplisit ke user (via pertanyaan
+pilihan): scope fase ini **frontend-only** atau **full-stack termasuk pesan error backend**.
+User pilih frontend-only — eksplorasi kode sempat menemukan ~40 pesan error unik Bahasa
+Indonesia yang dikirim backend Go langsung lewat field `error` JSON tanpa layer translasi
+(`internal/web/handlers_*.go` + beberapa package lain), dan menerjemahkan itu butuh sistem
+kode-error terpisah di Go — scope jauh lebih besar dari migrasi frontend, sengaja dideferred.
+
+- **Skala migrasi**: ~400-450 string hardcoded Bahasa Indonesia tersebar di 9 halaman
+  `views/`, `AppShell.vue`, dan beberapa komponen bersama (`MiniPlayer.vue`,
+  `FilePreviewOverlay.vue`, `FileTreeNode.vue`) — dikerjakan file demi file, masing-masing
+  di-`vue-tsc --noEmit` sebelum lanjut ke file berikutnya untuk menangkap kesalahan lebih awal
+  daripada menumpuk sampai akhir.
+- **Library**: `vue-i18n` — sempat pasang v10 dulu, ternyata sudah deprecated (pesan npm warn
+  eksplisit "please migrate to v11"), langsung ganti ke v11 sebelum lanjut, bukan lanjut pakai
+  versi yang sudah tidak di-maintain.
+- **Type safety key locale**: `id.ts` di-type `satisfies MessageSchema` (`MessageSchema = typeof en`
+  diekspor dari `en.ts`) — investasi kecil yang langsung terbukti berguna di skala ~500 key:
+  vue-tsc menangkap kalau ada key ketinggalan di salah satu locale saat build, bukan baru
+  ketahuan runtime sebagai teks kosong/`ns.key` mentah yang bocor ke UI.
+- **Bug type nyata ditemukan saat build** (bukan di skrip pengujian, di kode aplikasi sendiri):
+  `createI18n<[MessageSchema], Locale>({ legacy: false, ... })` lolos di `vue-tsc --noEmit`
+  tapi gagal di `vue-tsc -b` (mode yang sebenarnya dipakai `npm run build`) — `Legacy` generic
+  parameter tidak ter-infer `false` dari opsi runtime `legacy: false`, jadi `i18n.global.locale`
+  ke-resolve sebagai composer mode **legacy** (`locale` string biasa, bukan `Ref`). Fix:
+  eksplisit generic ketiga — `createI18n<[MessageSchema], Locale, false>(...)`. Ini pelajaran
+  penting: `--noEmit` dan `-b` bisa punya hasil type-check berbeda untuk kasus overload
+  resolution seperti ini, `npm run build` yang sebenarnya tetap wajib dijalankan sebelum
+  menganggap type-check "aman", tidak cukup cuma `--noEmit` di tengah proses migrasi.
+- **`Intl.DateTimeFormat` bawaan, bukan array terjemahan manual**: nama hari/bulan di jam
+  Dashboard (sebelumnya `DAYS`/`MONTHS` array hardcoded Indonesia) diganti
+  `new Intl.DateTimeFormat(locale === 'id' ? 'id-ID' : 'en-US', {...})` — localisasi tanggal
+  yang benar dari browser sendiri, tanpa perlu maintain terjemahan nama hari/bulan sendiri.
+  Jam di-update tiap 15 detik lewat timer, jadi ditambah `watch(locale, tickClock)` terpisah
+  supaya tanggal langsung ter-update instan saat switch bahasa, bukan nunggu tick berikutnya.
+- **`NDataTable` columns jadi reaktif**: beberapa halaman (`ServiceView`, `DockerView`,
+  `FilesView`) punya `const columns: DataTableColumns<T> = [...]` di scope modul — judul
+  kolom yang manggil `t()` di situ **tidak reaktif** kalau tetap `const` biasa (dievaluasi
+  sekali saja saat komponen di-setup, tidak re-run saat locale berubah). Diganti jadi
+  `computed<DataTableColumns<T>>(() => [...])` di semua tempat itu — pattern yang perlu
+  diingat untuk kolom tabel apa pun yang isinya bergantung locale ke depannya.
+- **Naive UI punya sistem locale sendiri, terpisah dari `vue-i18n`**: ditemukan saat
+  screenshot pengujian — placeholder default `NInput` yang tidak di-set eksplisit tetap
+  tampil "Please Input" (Inggris) meski sudah switch ke Indonesia. Naive UI ternyata sudah
+  menyediakan locale `idID`/`dateIdID` bawaan (`import { idID, dateIdID } from 'naive-ui'`) —
+  disambungkan lewat `NConfigProvider`'s `:locale`/`:date-locale` props di `App.vue`, mengikuti
+  `useLocale()` yang sama. Tanpa ini, sebagian kecil UI (placeholder, date-picker, dst) akan
+  tetap "nyangkut" Inggris walau seluruh app sudah di-switch — celah yang mudah terlewat kalau
+  cuma mengandalkan grep string literal (ini string internal library, bukan hardcode di kode
+  aplikasi).
+- **Preferensi disimpan**: `composables/useLocale.ts`, meniru persis pola `useTheme.ts` yang
+  sudah ada (module-level state, bukan Pinia store) — `localStorage` key `tk-locale`, default
+  `'en'` kalau belum ada. Switcher (`LocaleSwitcher.vue`) dipasang di topbar (`AppShell.vue`)
+  dan di halaman Login (bisa di-switch sebelum login).
+- **Diuji end-to-end** lewat instance nyata + Puppeteer, browser context terisolasi (bukan
+  cuma clear localStorage di tab yang sama) untuk memastikan simulasi "instalasi baru" benar
+  bersih: default English terkonfirmasi di semua label nav + eyebrow "Quick Access", switch ke
+  Indonesia instan tanpa reload (nav labels, "Akses Cepat", format tanggal jam
+  "Jumat, 7 Agustus 2026"), preferensi persist setelah reload halaman, 5 halaman lain
+  (Docker/Service/Proses/Files/Settings) dicek konsisten Bahasa Indonesia tanpa campur Inggris,
+  regex-scan teks halaman untuk pola `namespace.key` mentah yang bocor (indikasi key hilang) —
+  hasilnya kosong, nol console/page error di sepanjang pengujian.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NGrid, NGi, NCard, NSpin, NIcon, NAlert, NModal, NForm, NFormItem, NInput, NButton, NPopconfirm, useMessage } from 'naive-ui'
 import {
   ShieldCheck,
@@ -35,6 +36,7 @@ import type { ProcInfo } from '../types/processes'
 import type { QuickLink } from '../types/quicklinks'
 import { formatBytes } from '../utils/format'
 
+const { t, locale } = useI18n()
 const message = useMessage()
 
 const terminal = useTerminalStore()
@@ -73,8 +75,8 @@ watch(snapshot, (snap) => {
 
 const cpuSeries = computed<LineSeries[]>(() => [{ name: 'CPU', data: cpuHistory.value }])
 const diskSeries = computed<LineSeries[]>(() => [
-  { name: 'Baca', data: diskReadHistory.value },
-  { name: 'Tulis', data: diskWriteHistory.value },
+  { name: t('dashboard.read'), data: diskReadHistory.value },
+  { name: t('dashboard.write'), data: diskWriteHistory.value },
 ])
 
 const primaryDisk = computed(() => {
@@ -105,17 +107,19 @@ const netTotal = computed(() => {
   )
 })
 
-// --- live clock — purely cosmetic, no server round-trip ---
+// --- live clock — purely cosmetic, no server round-trip. Day/month names
+// come from Intl.DateTimeFormat rather than a hand-rolled translation
+// array, so the date is correctly localized for whichever locale is
+// active without needing to maintain DAYS/MONTHS lists per language. ---
 const clockTime = ref('')
 const clockDate = ref('')
-const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu']
-const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 let clockTimer: ReturnType<typeof setInterval> | undefined
 
 function tickClock() {
   const now = new Date()
   clockTime.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  clockDate.value = `${DAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}`
+  const intlLocale = locale.value === 'id' ? 'id-ID' : 'en-US'
+  clockDate.value = new Intl.DateTimeFormat(intlLocale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(now)
 }
 
 // --- Docker snapshot: reused for both the health banner and the "Container
@@ -208,11 +212,11 @@ async function loadServiceSummary() {
 const healthReady = computed(() => dockerChecked.value && serviceChecked.value)
 const healthLine = computed(() => {
   const parts: string[] = []
-  if (dockerAvailable.value) parts.push(`${runningCount.value}/${containers.value.length} container aktif`)
+  if (dockerAvailable.value) parts.push(t('dashboard.containersActive', { running: runningCount.value, total: containers.value.length }))
   if (serviceAvailable.value) {
-    parts.push(failedCount.value === 0 ? 'tidak ada unit gagal' : `${failedCount.value} unit systemd gagal`)
+    parts.push(failedCount.value === 0 ? t('dashboard.noFailedUnits') : t('dashboard.failedUnits', { count: failedCount.value }))
   }
-  if (parts.length === 0) return 'Docker dan systemd tidak tersedia untuk dipantau dari sini.'
+  if (parts.length === 0) return t('dashboard.monitoringUnavailable')
   return parts.join(' · ')
 })
 const hasWarning = computed(() => serviceAvailable.value && failedCount.value > 0)
@@ -221,6 +225,11 @@ const hasWarning = computed(() => serviceAvailable.value && failedCount.value > 
 // it always makes sense to point at Services; the failed filter is only
 // pre-applied when there's actually something to show for it.
 const bannerLink = computed(() => (hasWarning.value ? { path: '/services', query: { failed: '1' } } : { path: '/services' }))
+
+// Re-render the date immediately on a locale switch — tickClock() itself
+// only runs every 15s, which would otherwise leave the old language's
+// date visible for up to 15s after switching.
+watch(locale, tickClock)
 
 onMounted(async () => {
   tickClock()
@@ -241,13 +250,13 @@ onUnmounted(() => {
 
 const quickLinks = computed(() => {
   const links = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/docker', label: 'Docker', icon: Box },
-    { to: '/services', label: 'Service', icon: Server },
-    { to: '/processes', label: 'Proses', icon: Cpu },
-    { to: '/files', label: 'Files', icon: FolderOpen },
+    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { to: '/docker', label: t('nav.docker'), icon: Box },
+    { to: '/services', label: t('nav.service'), icon: Server },
+    { to: '/processes', label: t('nav.processes'), icon: Cpu },
+    { to: '/files', label: t('nav.files'), icon: FolderOpen },
   ]
-  if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
+  if (terminal.enabled) links.push({ to: '/terminal', label: t('nav.terminal'), icon: SquareTerminal })
   return links
 })
 
@@ -302,7 +311,7 @@ function onIconFile(e: Event) {
   input.value = '' // reset so picking the same file again still fires @change
   if (!file) return
   if (file.size > MAX_ICON_FILE_BYTES) {
-    linkFormError.value = `Gambar terlalu besar (maks ${Math.round(MAX_ICON_FILE_BYTES / 1024)}KB) — pakai icon yang lebih kecil`
+    linkFormError.value = t('dashboard.iconTooLarge', { maxKb: Math.round(MAX_ICON_FILE_BYTES / 1024) })
     return
   }
   const reader = new FileReader()
@@ -311,14 +320,14 @@ function onIconFile(e: Event) {
     linkFormError.value = ''
   }
   reader.onerror = () => {
-    linkFormError.value = 'Gagal membaca file gambar'
+    linkFormError.value = t('dashboard.iconReadFailed')
   }
   reader.readAsDataURL(file)
 }
 
 async function saveLink() {
   if (!linkForm.label.trim() || !linkForm.url.trim()) {
-    linkFormError.value = 'Nama dan URL wajib diisi'
+    linkFormError.value = t('dashboard.linkNameUrlRequired')
     return
   }
   linkSaving.value = true
@@ -333,7 +342,7 @@ async function saveLink() {
     linkModalShow.value = false
     await loadCustomLinks()
   } catch (e) {
-    linkFormError.value = e instanceof ApiError ? e.message : 'Gagal menyimpan quick link'
+    linkFormError.value = e instanceof ApiError ? e.message : t('dashboard.saveLinkFailed')
   } finally {
     linkSaving.value = false
   }
@@ -344,7 +353,7 @@ async function deleteLink(link: QuickLink) {
     await quickLinksApi.remove(link.id)
     await loadCustomLinks()
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : `Gagal menghapus "${link.label}"`)
+    message.error(e instanceof ApiError ? e.message : t('dashboard.deleteLinkFailed', { name: link.label }))
   }
 }
 
@@ -355,10 +364,8 @@ async function deleteLink(link: QuickLink) {
     <div class="dashboard">
       <div v-if="!monitoringStatusLoaded" class="loading"><NSpin size="large" /></div>
       <template v-else>
-        <NAlert v-if="!monitoringSupported" type="warning" title="Monitoring resource tidak didukung di OS ini" class="unsupported-alert">
-          Dashboard ini menampilkan data CPU/RAM/disk/network yang dibaca langsung dari
-          <code>/proc</code> — bagian khusus Linux yang tidak ada di OS ini. Docker, File
-          Explorer, dan Web Terminal tetap berfungsi normal lewat menu di atas.
+        <NAlert v-if="!monitoringSupported" type="warning" :title="t('dashboard.monitoringUnsupportedTitle')" class="unsupported-alert">
+          {{ t('dashboard.monitoringUnsupportedBefore') }} <code>/proc</code> {{ t('dashboard.monitoringUnsupportedAfter') }}
         </NAlert>
         <div v-if="monitoringSupported && !snapshot" class="loading"><NSpin size="large" /></div>
 
@@ -370,26 +377,26 @@ async function deleteLink(link: QuickLink) {
           </div>
           <RouterLink :to="bannerLink" class="glass-card banner-card banner-card--clickable">
             <div class="banner-copy">
-              <h2>{{ !healthReady ? 'Memeriksa status layanan…' : hasWarning ? 'Ada yang perlu diperiksa' : 'Semua layanan berjalan normal' }}</h2>
+              <h2>{{ !healthReady ? t('dashboard.checkingServices') : hasWarning ? t('dashboard.needsAttention') : t('dashboard.allNormal') }}</h2>
               <p>{{ healthLine }}</p>
             </div>
             <div class="banner-pill" :class="{ warn: hasWarning }">
               <NIcon :component="hasWarning ? TriangleAlert : ShieldCheck" size="15" />
-              {{ hasWarning ? 'Perlu perhatian' : 'Sehat' }}
+              {{ hasWarning ? t('dashboard.attentionBadge') : t('dashboard.healthyBadge') }}
             </div>
           </RouterLink>
         </div>
 
         <div class="main-grid">
           <NCard class="status-card">
-            <template #header>Ringkasan Sistem</template>
+            <template #header>{{ t('dashboard.systemSummary') }}</template>
             <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
               <NGi>
                 <button
                   type="button"
                   class="gauge-btn"
                   :class="{ active: metricSort === 'cpu' }"
-                  title="Lihat pemakai CPU teratas"
+                  :title="t('dashboard.viewTopCpu')"
                   @click="metricSort = 'cpu'"
                 >
                   <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
@@ -400,7 +407,7 @@ async function deleteLink(link: QuickLink) {
                   type="button"
                   class="gauge-btn"
                   :class="{ active: metricSort === 'mem' }"
-                  title="Lihat pemakai RAM teratas"
+                  :title="t('dashboard.viewTopRam')"
                   @click="metricSort = 'mem'"
                 >
                   <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" />
@@ -408,7 +415,7 @@ async function deleteLink(link: QuickLink) {
               </NGi>
               <NGi>
                 <GaugeChart v-if="primaryDisk" :value="primaryDisk.usedPercent" :label="primaryDisk.mountPoint" />
-                <div v-else class="text-muted empty-gauge">Tidak ada data disk</div>
+                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
               </NGi>
               <NGi>
                 <GaugeChart
@@ -419,7 +426,7 @@ async function deleteLink(link: QuickLink) {
                   :label="maxTemp.label"
                   :formatter="(v: number) => v.toFixed(0) + '°'"
                 />
-                <div v-else class="text-muted empty-gauge">Sensor suhu tidak tersedia</div>
+                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noTempSensor') }}</div>
               </NGi>
             </NGrid>
 
@@ -427,14 +434,14 @@ async function deleteLink(link: QuickLink) {
               <div class="io-tile">
                 <NIcon :component="HardDrive" size="18" />
                 <div>
-                  <div class="io-label">Disk I/O</div>
+                  <div class="io-label">{{ t('dashboard.diskIo') }}</div>
                   <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
                 </div>
               </div>
               <div class="io-tile">
                 <NIcon :component="Wifi" size="18" />
                 <div>
-                  <div class="io-label">Jaringan</div>
+                  <div class="io-label">{{ t('dashboard.network') }}</div>
                   <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
                 </div>
               </div>
@@ -445,18 +452,18 @@ async function deleteLink(link: QuickLink) {
             <NCard class="proc-card">
               <template #header>
                 <div class="proc-head">
-                  <span>Pemakai Teratas</span>
+                  <span>{{ t('dashboard.topUsers') }}</span>
                   <div class="tabs">
                     <button type="button" class="tab-btn" :class="{ active: resourceTab === 'container' }" @click="resourceTab = 'container'">
-                      Container
+                      {{ t('dashboard.tabContainer') }}
                     </button>
                     <button type="button" class="tab-btn" :class="{ active: resourceTab === 'proses' }" @click="resourceTab = 'proses'">
-                      Proses
+                      {{ t('dashboard.tabProcesses') }}
                     </button>
                   </div>
                 </div>
               </template>
-              <span class="sort-note">diurutkan berdasarkan {{ metricSort === 'cpu' ? 'CPU' : 'RAM' }}</span>
+              <span class="sort-note">{{ t('dashboard.sortedBy', { metric: metricSort === 'cpu' ? 'CPU' : 'RAM' }) }}</span>
 
               <template v-if="resourceTab === 'container'">
                 <ul v-if="topContainers.length > 0" class="proc-list">
@@ -467,7 +474,7 @@ async function deleteLink(link: QuickLink) {
                   </li>
                 </ul>
                 <p v-else class="text-muted empty-note">
-                  {{ dockerAvailable ? 'Belum ada container dengan statistik.' : 'Docker tidak tersedia.' }}
+                  {{ dockerAvailable ? t('dashboard.noContainerStats') : t('dashboard.dockerUnavailable') }}
                 </p>
               </template>
               <template v-else>
@@ -478,8 +485,8 @@ async function deleteLink(link: QuickLink) {
                     <span class="proc-pct">{{ metricSort === 'cpu' ? p.cpuPercent.toFixed(1) + '%' : formatBytes(p.memBytes) }}</span>
                   </li>
                 </ul>
-                <p v-else-if="!processesLoading" class="text-muted empty-note">Belum ada data proses.</p>
-                <RouterLink to="/processes" class="see-all-link">Lihat semua proses →</RouterLink>
+                <p v-else-if="!processesLoading" class="text-muted empty-note">{{ t('dashboard.noProcessData') }}</p>
+                <RouterLink to="/processes" class="see-all-link">{{ t('dashboard.seeAllProcesses') }}</RouterLink>
               </template>
             </NCard>
 
@@ -487,15 +494,15 @@ async function deleteLink(link: QuickLink) {
               <template #header>Docker</template>
               <template v-if="dockerAvailable">
                 <div class="docker-count">{{ runningCount }}</div>
-                <div class="docker-count-label">container aktif dari {{ containers.length }} total</div>
+                <div class="docker-count-label">{{ t('dashboard.containersOfTotal', { total: containers.length }) }}</div>
               </template>
-              <p v-else class="text-muted empty-note">Docker dinonaktifkan atau tidak terdeteksi.</p>
+              <p v-else class="text-muted empty-note">{{ t('dashboard.dockerDisabled') }}</p>
             </NCard>
           </div>
         </div>
         </template>
 
-        <p class="eyebrow section">Akses cepat</p>
+        <p class="eyebrow section">{{ t('dashboard.quickAccess') }}</p>
         <div class="quick-grid">
           <RouterLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="glass-card quick-tile">
             <span class="quick-icon"><NIcon :component="link.icon" size="20" /></span>
@@ -517,35 +524,35 @@ async function deleteLink(link: QuickLink) {
             </span>
             <span class="quick-name">{{ link.label }}</span>
             <span class="tile-actions">
-              <button type="button" class="tile-action-btn" title="Edit" @click.prevent.stop="openEditLinkModal(link)">
+              <button type="button" class="tile-action-btn" :title="t('common.edit')" @click.prevent.stop="openEditLinkModal(link)">
                 <NIcon :component="Pencil" size="13" />
               </button>
               <NPopconfirm @positive-click="deleteLink(link)">
                 <template #trigger>
-                  <button type="button" class="tile-action-btn tile-action-btn--danger" title="Hapus" @click.prevent.stop>
+                  <button type="button" class="tile-action-btn tile-action-btn--danger" :title="t('common.delete')" @click.prevent.stop>
                     <NIcon :component="Trash2" size="13" />
                   </button>
                 </template>
-                Hapus "{{ link.label }}"?
+                {{ t('dashboard.confirmDeleteLink', { name: link.label }) }}
               </NPopconfirm>
             </span>
           </a>
 
           <button type="button" class="glass-card quick-tile quick-tile--add" @click="openAddLinkModal">
             <span class="quick-icon quick-icon--add"><NIcon :component="Plus" size="20" /></span>
-            <span class="quick-name">Tambah</span>
+            <span class="quick-name">{{ t('common.add') }}</span>
           </button>
         </div>
 
         <template v-if="monitoringSupported && snapshot">
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>
-            <NCard title="CPU — 15 menit terakhir">
+            <NCard :title="t('dashboard.cpuChartTitle')">
               <LineChart :series="cpuSeries" unit="%" />
             </NCard>
           </NGi>
           <NGi>
-            <NCard title="Disk I/O — 15 menit terakhir">
+            <NCard :title="t('dashboard.diskChartTitle')">
               <LineChart :series="diskSeries" unit=" MB/s" />
             </NCard>
           </NGi>
@@ -553,7 +560,7 @@ async function deleteLink(link: QuickLink) {
 
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>
-            <NCard title="Penyimpanan">
+            <NCard :title="t('dashboard.storage')">
               <div v-if="snapshot.disks.length > 0" class="storage-list">
                 <div v-for="d in snapshot.disks" :key="d.mountPoint" class="storage-row">
                   <div class="storage-head">
@@ -568,16 +575,16 @@ async function deleteLink(link: QuickLink) {
                     ></div>
                   </div>
                   <div class="storage-meta">
-                    <span>{{ formatBytes(d.usedBytes) }} terpakai</span>
-                    <span>{{ formatBytes(d.freeBytes) }} tersisa · {{ formatBytes(d.totalBytes) }} total</span>
+                    <span>{{ formatBytes(d.usedBytes) }} {{ t('dashboard.usedSuffix') }}</span>
+                    <span>{{ formatBytes(d.freeBytes) }} {{ t('dashboard.freeSuffix') }} · {{ formatBytes(d.totalBytes) }} total</span>
                   </div>
                 </div>
               </div>
-              <p v-else class="text-muted empty-note">Tidak ada data disk.</p>
+              <p v-else class="text-muted empty-note">{{ t('dashboard.noDiskDataFull') }}</p>
             </NCard>
           </NGi>
           <NGi>
-            <NCard title="Jaringan">
+            <NCard :title="t('dashboard.network')">
               <table class="detail-table">
                 <tbody>
                   <tr v-for="n in snapshot.net" :key="n.name">
@@ -593,24 +600,24 @@ async function deleteLink(link: QuickLink) {
         </template>
       </template>
 
-      <NModal v-model:show="linkModalShow" preset="dialog" :title="editingLinkId ? 'Edit Akses Cepat' : 'Tambah Akses Cepat'" style="width: 440px">
+      <NModal v-model:show="linkModalShow" preset="dialog" :title="editingLinkId ? t('dashboard.editQuickLink') : t('dashboard.addQuickLink')" style="width: 440px">
         <NForm label-placement="top" style="margin-top: 4px">
-          <NFormItem label="Nama">
-            <NInput v-model:value="linkForm.label" placeholder="mis. Cloudflare" maxlength="40" show-count @keyup.enter="saveLink" />
+          <NFormItem :label="t('common.name')">
+            <NInput v-model:value="linkForm.label" :placeholder="t('dashboard.namePlaceholder')" maxlength="40" show-count @keyup.enter="saveLink" />
           </NFormItem>
           <NFormItem label="URL">
             <NInput v-model:value="linkForm.url" placeholder="https://dash.cloudflare.com" @keyup.enter="saveLink" />
           </NFormItem>
-          <NFormItem label="Icon (opsional)">
+          <NFormItem :label="t('dashboard.iconOptional')">
             <div class="icon-field">
               <div class="icon-preview">
                 <img v-if="linkForm.icon" :src="linkForm.icon" alt="" />
                 <NIcon v-else :component="ImagePlus" size="18" />
               </div>
               <div class="icon-controls">
-                <NInput v-model:value="linkForm.icon" placeholder="URL gambar, atau kode base64" size="small" />
+                <NInput v-model:value="linkForm.icon" :placeholder="t('dashboard.iconPlaceholder')" size="small" />
                 <label class="icon-upload-btn">
-                  Upload gambar
+                  {{ t('dashboard.uploadImage') }}
                   <input type="file" accept="image/*" hidden @change="onIconFile" />
                 </label>
               </div>
@@ -619,8 +626,8 @@ async function deleteLink(link: QuickLink) {
         </NForm>
         <NAlert v-if="linkFormError" type="error" :title="linkFormError" style="margin-top: 4px" />
         <template #action>
-          <NButton quaternary @click="linkModalShow = false">Batal</NButton>
-          <NButton type="primary" :loading="linkSaving" @click="saveLink">Simpan</NButton>
+          <NButton quaternary @click="linkModalShow = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="linkSaving" @click="saveLink">{{ t('common.save') }}</NButton>
         </template>
       </NModal>
     </div>

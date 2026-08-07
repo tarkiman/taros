@@ -3,11 +3,13 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NSpin } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import { terminalApi } from '../api/terminal'
 import { useTheme } from '../composables/useTheme'
 
+const { t } = useI18n()
 const prefersDark = useTheme()
 
 type Status = 'checking' | 'disabled' | 'connecting' | 'connected' | 'closed' | 'error'
@@ -87,7 +89,7 @@ function connect() {
   }
   socket.onerror = () => {
     status.value = 'error'
-    errorMessage.value = 'Koneksi terminal gagal atau ditolak.'
+    errorMessage.value = t('terminal.connectionFailed')
   }
 
   term.onData((data) => {
@@ -123,7 +125,7 @@ onMounted(async () => {
     connect()
   } catch {
     status.value = 'error'
-    errorMessage.value = 'Gagal memeriksa status terminal.'
+    errorMessage.value = t('terminal.statusCheckFailed')
   }
 })
 
@@ -133,27 +135,26 @@ onBeforeUnmount(teardown)
 <template>
   <AppShell>
     <div class="terminal-page">
-      <NAlert v-if="showWarning && status !== 'disabled'" type="warning" title="Akses shell sungguhan" closable @close="dismissWarning" class="warning-banner">
-        Ini terminal shell nyata ke perangkat, bukan sandbox/demo — perintah yang dijalankan di
-        sini benar-benar berjalan di sistem. Hati-hati kalau membagikan akses dashboard ke orang lain.
+      <NAlert v-if="showWarning && status !== 'disabled'" type="warning" :title="t('terminal.warningTitle')" closable @close="dismissWarning" class="warning-banner">
+        {{ t('terminal.warningBody') }}
       </NAlert>
 
-      <NAlert v-if="status === 'disabled'" type="info" title="Web Terminal tidak diaktifkan">
-        Fitur ini nonaktif di konfigurasi (<code>terminal.enabled: false</code>). Aktifkan di
-        <code>config.yaml</code> kalau memang ingin dipakai — lihat dokumentasi instalasi.
+      <NAlert v-if="status === 'disabled'" type="info" :title="t('terminal.disabledTitle')">
+        {{ t('terminal.disabledBodyBefore') }}<code>terminal.enabled: false</code>{{ t('terminal.disabledBodyMid') }}
+        <code>config.yaml</code> {{ t('terminal.disabledBodyAfter') }}
       </NAlert>
       <template v-else-if="status === 'error'">
-        <NAlert type="error" title="Gagal terhubung">{{ errorMessage }}</NAlert>
-        <NButton size="small" style="align-self: flex-start" @click="reconnect">Coba lagi</NButton>
+        <NAlert type="error" :title="t('terminal.connectFailedTitle')">{{ errorMessage }}</NAlert>
+        <NButton size="small" style="align-self: flex-start" @click="reconnect">{{ t('common.tryAgain') }}</NButton>
       </template>
       <div v-else class="terminal-wrap">
         <div class="terminal-toolbar">
           <span class="status-dot" :class="status"></span>
           <span class="status-text">
-            {{ status === 'connecting' ? 'Menghubungkan…' : status === 'connected' ? 'Terhubung' : status === 'closed' ? 'Sesi berakhir' : 'Memeriksa…' }}
+            {{ status === 'connecting' ? t('terminal.connecting') : status === 'connected' ? t('terminal.connected') : status === 'closed' ? t('terminal.sessionEnded') : t('terminal.checking') }}
           </span>
           <span class="spacer" />
-          <NButton v-if="status === 'closed'" size="small" @click="reconnect">Sesi Baru</NButton>
+          <NButton v-if="status === 'closed'" size="small" @click="reconnect">{{ t('terminal.newSession') }}</NButton>
         </div>
         <div v-if="status === 'checking' || status === 'connecting'" class="terminal-loading"><NSpin /></div>
         <div ref="containerEl" class="terminal-mount"></div>
