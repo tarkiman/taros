@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { NCard, NInput, NDataTable, NAlert } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
@@ -7,6 +8,8 @@ import { processesApi } from '../api/processes'
 import { ApiError } from '../api/client'
 import type { ProcInfo } from '../types/processes'
 import { formatBytes } from '../utils/format'
+
+const { t } = useI18n()
 
 // Fetches every process the server can see (backend caps at 1000, well
 // past real STB/RPi process counts) once per refresh, then all
@@ -33,7 +36,7 @@ async function loadProcesses() {
     // condition like "not supported on this OS" never resolves on its
     // own, so a toast would just repeat every few seconds forever. The
     // persistent NAlert below is enough.
-    unavailable.value = e instanceof ApiError ? e.message : 'Gagal membaca daftar proses.'
+    unavailable.value = e instanceof ApiError ? e.message : t('processes.listFailed')
   } finally {
     loading.value = false
   }
@@ -79,10 +82,10 @@ onUnmounted(() => {
 <template>
   <AppShell>
     <NCard>
-      <template #header>Proses ({{ filteredProcesses.length }})</template>
+      <template #header>{{ t('processes.title', { count: filteredProcesses.length }) }}</template>
       <NInput
         v-model:value="query"
-        placeholder="Cari nama, command, atau user…"
+        :placeholder="t('processes.searchPlaceholder')"
         clearable
         style="width: 320px; margin-bottom: 16px"
       />

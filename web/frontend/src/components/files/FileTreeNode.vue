@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { NIcon, NSpin } from 'naive-ui'
 import { ChevronRight, ChevronDown, Folder, FolderOpen } from '@lucide/vue'
 import type { TreeNode } from './tree'
 
 defineOptions({ name: 'FileTreeNode' })
+
+const { t } = useI18n()
 
 defineProps<{
   node: TreeNode
@@ -23,7 +26,7 @@ const emit = defineEmits<{
         type="button"
         class="tree-toggle"
         :style="{ marginLeft: `${depth * 14}px` }"
-        :aria-label="node.expanded ? 'Tutup folder' : 'Buka folder'"
+        :aria-label="node.expanded ? t('fileTree.collapseFolder') : t('fileTree.expandFolder')"
         @click="emit('toggle', node)"
       >
         <NSpin v-if="node.loading" :size="12" />
@@ -45,7 +48,7 @@ const emit = defineEmits<{
         @navigate="emit('navigate', $event)"
       />
       <p v-if="node.children.length === 0" class="tree-empty" :style="{ marginLeft: `${(depth + 1) * 14 + 22}px` }">
-        (kosong)
+        {{ t('fileTree.empty') }}
       </p>
     </div>
   </div>

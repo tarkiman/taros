@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   NTabs,
   NTabPane,
@@ -22,6 +23,7 @@ import { ApiError } from '../api/client'
 import type { Container, DockerUnavailable, Image, Network, Volume } from '../types/docker'
 import { formatBytes, formatDate } from '../utils/format'
 
+const { t } = useI18n()
 const message = useMessage()
 
 function isUnavailable(e: unknown): e is ApiError & { body: DockerUnavailable } {
@@ -81,12 +83,12 @@ async function containerAction(id: string, action: 'start' | 'stop' | 'restart' 
     const res = await dockerApi.containerAction(id, action)
     containers.value = res.containers
   } catch (e) {
-    reportActionError(e, `Aksi ${action} gagal`)
+    reportActionError(e, t('docker.actionFailed', { action }))
   }
 }
 
-const containerColumns: DataTableColumns<Container> = [
-  { title: 'Nama', key: 'name', width: 160, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
+const containerColumns = computed<DataTableColumns<Container>>(() => [
+  { title: t('common.name'), key: 'name', width: 160, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
   { title: 'Image', key: 'image', width: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.image.localeCompare(b.image) },
   {
     title: 'Status',
@@ -124,7 +126,7 @@ const containerColumns: DataTableColumns<Container> = [
   // 100+ mapped ports. Truncate with a tooltip for the full list instead.
   { title: 'Ports', key: 'ports', width: 220, ellipsis: { tooltip: true } },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 220,
     render: (row) =>
@@ -139,13 +141,13 @@ const containerColumns: DataTableColumns<Container> = [
           NPopconfirm,
           { onPositiveClick: () => containerAction(row.id, 'remove') },
           {
-            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => 'Hapus'),
-            default: () => `Hapus container "${row.name}"?`,
+            trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+            default: () => t('docker.confirmDeleteContainer', { name: row.name }),
           },
         ),
       ]),
   },
-]
+])
 
 // --- Images ---
 const images = ref<Image[]>([])
@@ -170,11 +172,11 @@ async function removeImage(id: string) {
     const res = await dockerApi.removeImage(id)
     images.value = res.images
   } catch (e) {
-    reportActionError(e, 'Hapus image gagal (mungkin masih dipakai container)')
+    reportActionError(e, t('docker.removeImageFailed'))
   }
 }
 
-const imageColumns: DataTableColumns<Image> = [
+const imageColumns = computed<DataTableColumns<Image>>(() => [
   {
     title: 'Tag',
     key: 'tag',
@@ -186,17 +188,17 @@ const imageColumns: DataTableColumns<Image> = [
         ? h(NSpace, { size: 'small', align: 'center' }, () => [row.tag, h(NTag, { size: 'small', type: 'warning' }, () => 'dangling')])
         : row.tag,
   },
-  { title: 'Ukuran', key: 'sizeBytes', width: 110, sorter: (a, b) => a.sizeBytes - b.sizeBytes, render: (row) => formatBytes(row.sizeBytes) },
+  { title: t('common.size'), key: 'sizeBytes', width: 110, sorter: (a, b) => a.sizeBytes - b.sizeBytes, render: (row) => formatBytes(row.sizeBytes) },
   {
-    title: 'Dipakai',
+    title: t('docker.usedColumn'),
     key: 'containers',
     width: 140,
     sorter: (a, b) => a.containers - b.containers,
-    render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? 'tidak dipakai' : `${row.containers} container`),
+    render: (row) => (row.containers < 0 ? '—' : row.containers === 0 ? t('docker.notUsed') : t('docker.containerCount', { count: row.containers })),
   },
-  { title: 'Dibuat', key: 'created', width: 150, sorter: (a, b) => Date.parse(a.created) - Date.parse(b.created), render: (row) => formatDate(row.created) },
+  { title: t('docker.created'), key: 'created', width: 150, sorter: (a, b) => Date.parse(a.created) - Date.parse(b.created), render: (row) => formatDate(row.created) },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 100,
     render: (row) =>
@@ -204,12 +206,12 @@ const imageColumns: DataTableColumns<Image> = [
         NPopconfirm,
         { onPositiveClick: () => removeImage(row.id) },
         {
-          trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => 'Hapus'),
-          default: () => `Hapus image "${row.tag}"?`,
+          trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+          default: () => t('docker.confirmDeleteImage', { tag: row.tag }),
         },
       ),
   },
-]
+])
 
 // --- Volumes ---
 const volumes = ref<Volume[]>([])
@@ -234,29 +236,29 @@ async function removeVolume(name: string) {
     const res = await dockerApi.removeVolume(name)
     volumes.value = res.volumes
   } catch (e) {
-    reportActionError(e, 'Hapus volume gagal (mungkin masih dipakai container)')
+    reportActionError(e, t('docker.removeVolumeFailed'))
   }
 }
 
-const volumeColumns: DataTableColumns<Volume> = [
-  { title: 'Nama', key: 'name', minWidth: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
+const volumeColumns = computed<DataTableColumns<Volume>>(() => [
+  { title: t('common.name'), key: 'name', minWidth: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
   { title: 'Driver', key: 'driver', width: 100, sorter: (a, b) => a.driver.localeCompare(b.driver) },
   {
-    title: 'Ukuran',
+    title: t('common.size'),
     key: 'sizeBytes',
     width: 110,
     sorter: (a, b) => a.sizeBytes - b.sizeBytes,
-    render: (row) => (row.sizeBytes < 0 ? 'tidak diketahui' : formatBytes(row.sizeBytes)),
+    render: (row) => (row.sizeBytes < 0 ? t('docker.unknown') : formatBytes(row.sizeBytes)),
   },
   {
     title: 'Status',
     key: 'inUse',
     width: 120,
     sorter: (a, b) => Number(a.inUse) - Number(b.inUse),
-    render: (row) => h(NTag, { size: 'small', type: row.inUse ? 'success' : 'default' }, () => (row.inUse ? 'dipakai' : 'tidak dipakai')),
+    render: (row) => h(NTag, { size: 'small', type: row.inUse ? 'success' : 'default' }, () => (row.inUse ? t('docker.used') : t('docker.notUsed'))),
   },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 100,
     render: (row) =>
@@ -264,12 +266,12 @@ const volumeColumns: DataTableColumns<Volume> = [
         NPopconfirm,
         { onPositiveClick: () => removeVolume(row.name) },
         {
-          trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => 'Hapus'),
-          default: () => `Hapus volume "${row.name}"?`,
+          trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+          default: () => t('docker.confirmDeleteVolume', { name: row.name }),
         },
       ),
   },
-]
+])
 
 // --- Networks ---
 const networks = ref<Network[]>([])
@@ -294,13 +296,13 @@ async function removeNetwork(id: string) {
     const res = await dockerApi.removeNetwork(id)
     networks.value = res.networks
   } catch (e) {
-    reportActionError(e, 'Hapus network gagal (mungkin builtin atau masih dipakai)')
+    reportActionError(e, t('docker.removeNetworkFailed'))
   }
 }
 
-const networkColumns: DataTableColumns<Network> = [
+const networkColumns = computed<DataTableColumns<Network>>(() => [
   {
-    title: 'Nama',
+    title: t('common.name'),
     key: 'name',
     minWidth: 160,
     ellipsis: { tooltip: true },
@@ -312,9 +314,9 @@ const networkColumns: DataTableColumns<Network> = [
   },
   { title: 'Driver', key: 'driver', width: 100, sorter: (a, b) => a.driver.localeCompare(b.driver) },
   { title: 'Subnet', key: 'subnet', width: 150, sorter: (a, b) => a.subnet.localeCompare(b.subnet), render: (row) => row.subnet || '—' },
-  { title: 'Container Terhubung', key: 'connectedCount', width: 170, sorter: (a, b) => a.connectedCount - b.connectedCount },
+  { title: t('docker.connectedContainers'), key: 'connectedCount', width: 170, sorter: (a, b) => a.connectedCount - b.connectedCount },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 100,
     render: (row) =>
@@ -324,12 +326,12 @@ const networkColumns: DataTableColumns<Network> = [
             NPopconfirm,
             { onPositiveClick: () => removeNetwork(row.id) },
             {
-              trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => 'Hapus'),
-              default: () => `Hapus network "${row.name}"?`,
+              trigger: () => h(NButton, { size: 'tiny', type: 'error', ghost: true }, () => t('common.delete')),
+              default: () => t('docker.confirmDeleteNetwork', { name: row.name }),
             },
           ),
   },
-]
+])
 
 // --- Settings ---
 const settings = ref<SettingsResponse | null>(null)
@@ -353,9 +355,9 @@ async function prune(kind: 'containers' | 'images' | 'volumes' | 'networks' | 'a
   pruning.value = kind
   try {
     settings.value = await dockerApi.prune(kind)
-    message.success('Cleanup selesai')
+    message.success(t('docker.cleanupDone'))
   } catch (e) {
-    reportActionError(e, `Cleanup gagal: ${kind}`)
+    reportActionError(e, t('docker.cleanupFailed', { kind }))
   } finally {
     pruning.value = null
   }
@@ -412,10 +414,10 @@ onUnmounted(() => {
       <NTabPane name="settings" tab="Settings">
         <NAlert v-if="settingsUnavailable" type="warning" :title="settingsUnavailable.error" />
         <div v-else-if="settingsLoading && !settings" class="tab-loading"><NSpin size="large" /></div>
-        <NEmpty v-else-if="!settings" description="Tidak ada data" />
+        <NEmpty v-else-if="!settings" :description="t('docker.noData')" />
         <NSpace v-else vertical :size="24">
-          <NDescriptions title="Info Daemon" :column="2" bordered label-placement="left">
-            <NDescriptionsItem label="Versi Server">{{ settings?.info.serverVersion }}</NDescriptionsItem>
+          <NDescriptions :title="t('docker.daemonInfo')" :column="2" bordered label-placement="left">
+            <NDescriptionsItem :label="t('docker.serverVersion')">{{ settings?.info.serverVersion }}</NDescriptionsItem>
             <NDescriptionsItem label="OS / Kernel">{{ settings?.info.operatingSystem }} / {{ settings?.info.kernelVersion }}</NDescriptionsItem>
             <NDescriptionsItem label="Storage Driver">{{ settings?.info.storageDriver }}</NDescriptionsItem>
             <NDescriptionsItem label="Root Dir">{{ settings?.info.dockerRootDir }}</NDescriptionsItem>
@@ -441,9 +443,9 @@ onUnmounted(() => {
           <NSpace>
             <NPopconfirm v-for="kind in (['containers', 'images', 'volumes', 'networks', 'all'] as const)" :key="kind" @positive-click="prune(kind)">
               <template #trigger>
-                <NButton size="small" :loading="pruning === kind">Bersihkan {{ kind }}</NButton>
+                <NButton size="small" :loading="pruning === kind">{{ t('docker.cleanup') }} {{ kind }}</NButton>
               </template>
-              Jalankan cleanup "{{ kind }}"? Tindakan ini tidak bisa dibatalkan.
+              {{ t('docker.confirmCleanup', { kind }) }}
             </NPopconfirm>
           </NSpace>
         </NSpace>

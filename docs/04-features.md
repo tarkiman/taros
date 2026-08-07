@@ -767,3 +767,39 @@ butuh sudo/root sama sekali**. Belum ada auto-restart/auto-start setara `launchd
 `KeepAlive` di fase ini (itu setara systemd `Restart=always` yang sudah dipakai fitur
 ganti-port/toggle-terminal di Linux) — sengaja ditunda, lihat [10-roadmap.md](10-roadmap.md)
 untuk kenapa dan apa yang dipertimbangkan untuk fase berikutnya kalau memang dibutuhkan.
+
+## 4.10 Multi-Bahasa (Indonesia/English)
+
+Seluruh UI Vue mendukung Indonesia dan English, dengan **default English untuk instalasi
+baru** — permintaan langsung dari user. Scope fase ini **frontend-only**: label/tombol/judul/
+menu/pesan di halaman Vue sepenuhnya dwibahasa, tapi pesan error yang datang dari backend Go
+(field `error` di response JSON — validasi form, kegagalan operasi, dst) **masih Bahasa
+Indonesia apa adanya**, belum ikut ter-translate. Keputusan scope sadar, bukan celah
+terlewat — backend butuh sistem kode-error terpisah untuk bisa dwibahasa juga, ukurannya jauh
+lebih besar dari migrasi frontend; dideferred ke fase berikutnya kalau memang dibutuhkan.
+
+- **Library**: `vue-i18n` v11, Composition API mode (`legacy: false`) — dipasang di
+  `web/frontend/src/i18n/index.ts`, dipakai tiap halaman/komponen lewat `useI18n()` (pola
+  standar, sama seperti `useMessage()`/`useDialog()` Naive UI yang sudah dipakai luas di
+  codebase ini).
+- **Struktur pesan**: `web/frontend/src/i18n/en.ts` (sumber tipe `MessageSchema`) dan `id.ts`
+  (di-type `satisfies MessageSchema`) — nested per domain (`common`, `nav`, `dashboard`,
+  `settings`, `files`, dst, satu namespace per halaman/komponen besar). Karena `id.ts`
+  di-type ketat terhadap bentuk `en.ts`, **vue-tsc menangkap kalau ada key yang lupa
+  ditambahkan di salah satu locale saat build** (`npm run build` sudah menjalankan `vue-tsc -b`
+  lebih dulu) — penting mengingat skala hampir 500 key di migrasi awal ini.
+- **Preferensi bahasa**: `web/frontend/src/composables/useLocale.ts`, pola persis meniru
+  `useTheme.ts` yang sudah ada (module-level state, bukan Pinia store) — `localStorage` key
+  `tk-locale`, default **`'en'`** kalau belum ada preferensi tersimpan (murni per-browser,
+  tidak ada konsep "instalasi" yang perlu dideteksi di server untuk dashboard single-user
+  self-hosted seperti ini).
+- **Switcher**: komponen `LocaleSwitcher.vue`, dipasang di topbar (`AppShell.vue`, sebelah
+  tombol tema) dan di halaman Login (pojok kanan-atas) — bisa di-switch bahkan sebelum login.
+  Klik langsung toggle 2 bahasa, tidak perlu reload halaman.
+- **Naive UI locale bawaan**: string internal Naive UI sendiri (placeholder default "Please
+  Input" pada `NInput` yang tidak di-set eksplisit, teks date-picker, dsb) punya sistem locale
+  terpisah dari `vue-i18n` — disinkronkan lewat `NConfigProvider`'s `:locale`/`:date-locale`
+  props di `App.vue`, mengikuti `useLocale()` yang sama, supaya tidak ada bagian UI yang
+  "ketinggalan" bahasa Inggris saat sudah di-switch ke Indonesia.
+- **Format tanggal/jam**: nama hari/bulan di jam Dashboard pakai `Intl.DateTimeFormat` bawaan
+  JS (`id-ID`/`en-US`) berdasarkan locale aktif, bukan array terjemahan manual.

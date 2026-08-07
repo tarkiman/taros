@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin } from 'naive-ui'
 import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
@@ -9,7 +10,9 @@ import { usePlayerStore } from '../stores/player'
 import { useThemeMode, type ThemeMode } from '../composables/useTheme'
 import { updateApi } from '../api/update'
 import type { UpdateStatus } from '../types/update'
+import LocaleSwitcher from '../components/LocaleSwitcher.vue'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const terminal = useTerminalStore()
 const player = usePlayerStore()
@@ -19,7 +22,7 @@ const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
 const THEME_CYCLE: ThemeMode[] = ['system', 'light', 'dark']
 const themeIcon = computed(() => ({ system: MonitorCog, light: Sun, dark: Moon })[themeMode.value])
 const themeLabel = computed(
-  () => ({ system: 'Tema: Mengikuti Sistem', light: 'Tema: Terang', dark: 'Tema: Gelap' })[themeMode.value],
+  () => ({ system: t('nav.themeSystem'), light: t('nav.themeLight'), dark: t('nav.themeDark') })[themeMode.value],
 )
 
 function cycleTheme() {
@@ -29,14 +32,14 @@ function cycleTheme() {
 
 const navLinks = computed(() => {
   const links = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/docker', label: 'Docker', icon: Box },
-    { to: '/services', label: 'Service', icon: Server },
-    { to: '/processes', label: 'Proses', icon: Cpu },
-    { to: '/files', label: 'Files', icon: FolderOpen },
+    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard },
+    { to: '/docker', label: t('nav.docker'), icon: Box },
+    { to: '/services', label: t('nav.service'), icon: Server },
+    { to: '/processes', label: t('nav.processes'), icon: Cpu },
+    { to: '/files', label: t('nav.files'), icon: FolderOpen },
   ]
-  if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
-  links.push({ to: '/settings', label: 'Pengaturan', icon: Settings })
+  if (terminal.enabled) links.push({ to: '/terminal', label: t('nav.terminal'), icon: SquareTerminal })
+  links.push({ to: '/settings', label: t('nav.settings'), icon: Settings })
   return links
 })
 
@@ -67,7 +70,7 @@ async function checkForUpdate() {
     updateStatus.value = await updateApi.check()
     checkState.value = 'checked'
   } catch (e) {
-    checkError.value = e instanceof Error ? e.message : 'Gagal memeriksa pembaruan.'
+    checkError.value = e instanceof Error ? e.message : t('nav.updateFailed')
     checkState.value = 'error'
   }
 }
@@ -91,7 +94,7 @@ async function applyUpdate() {
     applyState.value = 'restarting'
     waitForRestartThenReload()
   } catch (e) {
-    applyError.value = e instanceof Error ? e.message : 'Update gagal.'
+    applyError.value = e instanceof Error ? e.message : t('nav.applyFailed')
     applyState.value = 'error'
   }
 }
@@ -126,7 +129,7 @@ async function waitForRestartThenReload() {
   <NLayout style="height: 100vh; position: relative; z-index: 1">
     <NLayoutHeader bordered class="topbar">
       <RouterLink to="/" class="brand">TarOS</RouterLink>
-      <nav class="top-nav" aria-label="Navigasi utama">
+      <nav class="top-nav" :aria-label="t('nav.mainNav')">
         <RouterLink
           v-for="link in navLinks"
           :key="link.to"
@@ -141,80 +144,81 @@ async function waitForRestartThenReload() {
       <span class="spacer" />
       <NPopover trigger="click" placement="bottom-end" @update:show="onPopoverUpdate" style="max-width: 300px">
         <template #trigger>
-          <button type="button" class="version-btn" title="Versi & pembaruan">
+          <button type="button" class="version-btn" :title="t('nav.versionUpdate')">
             <NIcon :component="CloudDownload" size="15" />
-            <span class="hide-narrow">{{ updateStatus?.currentVersion || auth.version || 'versi' }}</span>
+            <span class="hide-narrow">{{ updateStatus?.currentVersion || auth.version || t('nav.versionFallback') }}</span>
           </button>
         </template>
 
         <div class="update-panel">
           <div v-if="checkState === 'checking'" class="update-row">
             <NSpin size="small" />
-            <span>Memeriksa pembaruan…</span>
+            <span>{{ t('nav.checkingUpdate') }}</span>
           </div>
 
           <div v-else-if="checkState === 'error'" class="update-row">
             <NIcon :component="CircleAlert" size="16" class="icon-danger" />
             <span>{{ checkError }}</span>
-            <NButton size="tiny" @click="checkForUpdate">Coba lagi</NButton>
+            <NButton size="tiny" @click="checkForUpdate">{{ t('common.tryAgain') }}</NButton>
           </div>
 
           <template v-else-if="checkState === 'checked' && updateStatus">
-            <p class="update-version">Versi saat ini: <strong>{{ updateStatus.currentVersion }}</strong></p>
+            <p class="update-version">{{ t('nav.currentVersion') }} <strong>{{ updateStatus.currentVersion }}</strong></p>
 
             <p v-if="!updateStatus.enabled" class="text-muted update-note">
-              Fitur update dinonaktifkan di config (<code>update.enabled</code>).
+              {{ t('nav.updateDisabled') }}
             </p>
 
             <template v-else-if="!updateStatus.updateAvailable">
               <div class="update-row">
                 <NIcon :component="CircleCheck" size="16" class="icon-success" />
-                <span>Sudah versi terbaru.</span>
+                <span>{{ t('nav.upToDate') }}</span>
               </div>
             </template>
 
             <template v-else>
-              <p class="update-note">Update tersedia: <strong>{{ updateStatus.latestVersion }}</strong></p>
+              <p class="update-note">{{ t('nav.updateAvailable') }} <strong>{{ updateStatus.latestVersion }}</strong></p>
 
               <div v-if="applyState === 'idle'">
-                <NButton size="small" type="primary" block @click="applyState = 'confirm'">Update Sekarang</NButton>
+                <NButton size="small" type="primary" block @click="applyState = 'confirm'">{{ t('nav.updateNow') }}</NButton>
               </div>
               <div v-else-if="applyState === 'confirm'" class="update-confirm">
-                <p class="update-note">Servis akan restart singkat (beberapa detik downtime), dan kamu perlu login ulang setelahnya. Lanjutkan?</p>
+                <p class="update-note">{{ t('nav.updateConfirm') }}</p>
                 <div class="update-confirm-actions">
-                  <NButton size="tiny" @click="applyState = 'idle'">Batal</NButton>
-                  <NButton size="tiny" type="primary" @click="applyUpdate">Ya, Update</NButton>
+                  <NButton size="tiny" @click="applyState = 'idle'">{{ t('common.cancel') }}</NButton>
+                  <NButton size="tiny" type="primary" @click="applyUpdate">{{ t('nav.yesUpdate') }}</NButton>
                 </div>
               </div>
               <div v-else-if="applyState === 'applying'" class="update-row">
                 <NSpin size="small" />
-                <span>Mengunduh &amp; memasang update…</span>
+                <span>{{ t('nav.applyingUpdate') }}</span>
               </div>
               <div v-else-if="applyState === 'restarting'" class="update-row">
                 <NSpin size="small" />
-                <span>Menunggu servis restart…</span>
+                <span>{{ t('nav.restarting') }}</span>
               </div>
               <div v-else-if="applyState === 'error'" class="update-row">
                 <NIcon :component="CircleAlert" size="16" class="icon-danger" />
                 <span>{{ applyError }}</span>
-                <NButton size="tiny" @click="applyState = 'confirm'">Coba lagi</NButton>
+                <NButton size="tiny" @click="applyState = 'confirm'">{{ t('common.tryAgain') }}</NButton>
               </div>
             </template>
           </template>
         </div>
       </NPopover>
+      <LocaleSwitcher />
       <NButton quaternary circle size="small" :title="themeLabel" :aria-label="themeLabel" @click="cycleTheme">
         <template #icon><NIcon :component="themeIcon" /></template>
       </NButton>
       <span class="user hide-narrow">{{ auth.username }}</span>
       <NButton quaternary size="small" @click="handleLogout">
         <template #icon><NIcon :component="LogOut" /></template>
-        <span class="hide-narrow">Keluar</span>
+        <span class="hide-narrow">{{ t('nav.logout') }}</span>
       </NButton>
     </NLayoutHeader>
     <NLayoutContent class="content" :class="{ 'content--player-active': player.current }">
       <slot />
-      <footer class="app-foot">TarOS — dibuat oleh Tarkiman</footer>
+      <footer class="app-foot">{{ t('nav.footer') }}</footer>
     </NLayoutContent>
   </NLayout>
 </template>

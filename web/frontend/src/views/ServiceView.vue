@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
   NCard,
   NInput,
@@ -21,6 +22,7 @@ import { serviceApi } from '../api/service'
 import { ApiError } from '../api/client'
 import type { Unit } from '../types/service'
 
+const { t } = useI18n()
 const message = useMessage()
 const route = useRoute()
 
@@ -43,7 +45,7 @@ async function loadUnits() {
     units.value = res.units
     unavailable.value = null
   } catch (e) {
-    unavailable.value = e instanceof ApiError ? e.message : 'systemd tidak terdeteksi atau tidak bisa diakses.'
+    unavailable.value = e instanceof ApiError ? e.message : t('service.unavailable')
   } finally {
     loading.value = false
   }
@@ -58,7 +60,7 @@ async function runAction(unit: Unit, action: 'start' | 'stop' | 'restart' | 'rel
     const res = await serviceApi.action(unit.name, action, { q: query.value, showAll: showAll.value, failedOnly: failedOnly.value })
     units.value = res.units
   } catch (e) {
-    message.error(e instanceof ApiError ? e.message : `Aksi ${action} gagal: ${unit.name}`)
+    message.error(e instanceof ApiError ? e.message : t('service.actionFailed', { action, name: unit.name }))
   }
 }
 
@@ -77,7 +79,7 @@ async function openLogs(name: string) {
     const res = await serviceApi.logs(name)
     logText.value = res.logs
   } catch (e) {
-    logText.value = e instanceof ApiError ? e.message : 'Gagal membaca log.'
+    logText.value = e instanceof ApiError ? e.message : t('service.logsFailed')
   } finally {
     logLoading.value = false
   }
@@ -98,35 +100,38 @@ function activeSortValue(u: Unit) {
   return activeStateRank[u.active] ?? 6
 }
 
-const columns: DataTableColumns<Unit> = [
+// computed, not a plain const — column titles/messages call t(), which
+// needs to re-run on a locale switch (NDataTable's :columns prop is fine
+// with a computed ref, same as any other reactive prop).
+const columns = computed<DataTableColumns<Unit>>(() => [
   {
-    title: 'Nama',
+    title: t('common.name'),
     key: 'name',
     width: 220,
     ellipsis: { tooltip: true },
     sorter: (a, b) => a.name.localeCompare(b.name),
     render: (row) =>
       row.protected
-        ? h(NSpace, { size: 'small', align: 'center', wrap: false }, () => [row.name, h(NTag, { size: 'small', type: 'warning' }, () => 'terproteksi')])
+        ? h(NSpace, { size: 'small', align: 'center', wrap: false }, () => [row.name, h(NTag, { size: 'small', type: 'warning' }, () => t('service.protectedTag'))])
         : row.name,
   },
-  { title: 'Deskripsi', key: 'description', minWidth: 200, ellipsis: { tooltip: true }, sorter: (a, b) => a.description.localeCompare(b.description) },
+  { title: t('service.description'), key: 'description', minWidth: 200, ellipsis: { tooltip: true }, sorter: (a, b) => a.description.localeCompare(b.description) },
   {
-    title: 'Status',
+    title: t('service.status'),
     key: 'active',
     width: 150,
     sorter: (a, b) => activeSortValue(a) - activeSortValue(b) || a.sub.localeCompare(b.sub),
     render: (row) => h(NTag, { size: 'small', type: statusTagType(row) }, () => `${row.active} (${row.sub})`),
   },
-  { title: 'Aktif Saat Boot', key: 'enabled', width: 130, sorter: (a, b) => (a.enabled || '').localeCompare(b.enabled || ''), render: (row) => row.enabled || '—' },
+  { title: t('service.enabledAtBoot'), key: 'enabled', width: 130, sorter: (a, b) => (a.enabled || '').localeCompare(b.enabled || ''), render: (row) => row.enabled || '—' },
   {
-    title: 'Aksi',
+    title: t('common.actions'),
     key: 'actions',
     width: 260,
     render: (row) => {
       const confirmMsg = row.protected
-        ? `"${row.name}" adalah unit terproteksi — yakin ingin melanjutkan? Ini bisa mengganggu layanan inti.`
-        : `Lanjutkan aksi ini untuk "${row.name}"?`
+        ? t('service.confirmProtected', { name: row.name })
+        : t('service.confirmAction', { name: row.name })
       const buttons: ReturnType<typeof h>[] = []
       if (row.active === 'active') {
         buttons.push(
@@ -149,7 +154,7 @@ const columns: DataTableColumns<Unit> = [
       return h(NSpace, { size: 'small' }, () => buttons)
     },
   },
-]
+])
 
 onMounted(() => {
   loadUnits()
@@ -166,15 +171,15 @@ onUnmounted(() => {
       <NSpace align="center" :size="16" style="margin-bottom: 16px">
         <NInput
           v-model:value="query"
-          placeholder="Cari nama/deskripsi unit…"
+          :placeholder="t('service.searchPlaceholder')"
           style="width: 280px"
           clearable
           @keyup.enter="onFilterChange"
           @blur="onFilterChange"
           @clear="onFilterChange"
         />
-        <NCheckbox v-model:checked="showAll" @update:checked="onFilterChange">Tampilkan socket/timer</NCheckbox>
-        <NCheckbox v-model:checked="failedOnly" @update:checked="onFilterChange">Hanya yang failed</NCheckbox>
+        <NCheckbox v-model:checked="showAll" @update:checked="onFilterChange">{{ t('service.showSocketTimer') }}</NCheckbox>
+        <NCheckbox v-model:checked="failedOnly" @update:checked="onFilterChange">{{ t('service.onlyFailed') }}</NCheckbox>
       </NSpace>
 
       <NAlert v-if="unavailable" type="warning" :title="unavailable" />
@@ -182,8 +187,8 @@ onUnmounted(() => {
     </NCard>
 
     <NDrawer v-model:show="logOpen" :width="560" placement="right">
-      <NDrawerContent :title="`Log — ${logUnitName}`" closable>
-        <pre class="log-content">{{ logLoading ? 'Memuat…' : logText }}</pre>
+      <NDrawerContent :title="t('service.logTitle', { name: logUnitName })" closable>
+        <pre class="log-content">{{ logLoading ? t('common.loading') : logText }}</pre>
       </NDrawerContent>
     </NDrawer>
   </AppShell>

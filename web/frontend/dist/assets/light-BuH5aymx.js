@@ -1,1 +1,0 @@
-import{F as e,p as t,x as n}from"./auth-DkWBYjip.js";import{c as r}from"./createLucideIcon-DyEI0UjO.js";var i={iconSize:`22px`};function a(e){let{fontSize:t,warningColor:n}=e;return Object.assign(Object.assign({},i),{fontSize:t,iconColor:n})}var o=e({name:`Popconfirm`,common:n,peers:{Button:t,Popover:r},self:a});export{a as n,o as t};
