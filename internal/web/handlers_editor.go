@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/fileexplorer"
 )
 
@@ -17,20 +18,20 @@ type contentResponse struct {
 func (s *Server) handleFilesContentGet(w http.ResponseWriter, r *http.Request) {
 	path, err := s.deps.Jail.Resolve(r.URL.Query().Get("path"))
 	if err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
 	fc, err := fileexplorer.ReadContent(path)
 	switch {
 	case errors.Is(err, fileexplorer.ErrTooLarge):
-		writeJSONError(w, http.StatusRequestEntityTooLarge, err.Error())
+		writeJSONError(w, http.StatusRequestEntityTooLarge, apierr.ContentTooLarge, err.Error(), nil)
 		return
 	case errors.Is(err, fileexplorer.ErrBinary):
-		writeJSONError(w, http.StatusUnsupportedMediaType, err.Error())
+		writeJSONError(w, http.StatusUnsupportedMediaType, apierr.ContentBinary, err.Error(), nil)
 		return
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.ContentReadFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -49,13 +50,13 @@ type contentSaveRequest struct {
 func (s *Server) handleFilesContentPut(w http.ResponseWriter, r *http.Request) {
 	path, err := s.deps.Jail.Resolve(r.URL.Query().Get("path"))
 	if err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
 	var req contentSaveRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body JSON tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body JSON tidak valid", nil)
 		return
 	}
 
@@ -66,10 +67,10 @@ func (s *Server) handleFilesContentPut(w http.ResponseWriter, r *http.Request) {
 
 	if err := fileexplorer.WriteContent(path, req.Content, expected); err != nil {
 		if errors.Is(err, fileexplorer.ErrConflict) {
-			writeJSONError(w, http.StatusConflict, err.Error())
+			writeJSONError(w, http.StatusConflict, apierr.ContentConflict, err.Error(), nil)
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.ContentSaveFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 

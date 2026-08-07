@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/auth"
 )
 
@@ -42,7 +43,7 @@ type totpSetupResponse struct {
 func (s *Server) handleSettingsTOTPSetup(w http.ResponseWriter, r *http.Request) {
 	secret, err := auth.GenerateTOTPSecret()
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPSetupFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	sess := sessionFromContext(r.Context())
@@ -68,21 +69,21 @@ type totpConfirmResponse struct {
 func (s *Server) handleSettingsTOTPConfirm(w http.ResponseWriter, r *http.Request) {
 	var req totpConfirmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
 		return
 	}
 	if !auth.ValidateTOTP(req.Secret, req.Code, time.Now()) {
-		writeJSONError(w, http.StatusBadRequest, "Kode tidak cocok — pastikan aplikasi authenticator sudah menampilkan kode untuk akun ini.")
+		writeJSONError(w, http.StatusBadRequest, apierr.TOTPCodeMismatch, "Kode tidak cocok — pastikan aplikasi authenticator sudah menampilkan kode untuk akun ini.", nil)
 		return
 	}
 
 	backupCodes, err := auth.GenerateBackupCodes(backupCodeCount)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPConfirmFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	if err := s.deps.Creds.SetTOTP(s.deps.CredentialsPath, req.Secret, backupCodes); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPConfirmFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -102,16 +103,16 @@ type totpDisableRequest struct {
 func (s *Server) handleSettingsTOTPDisable(w http.ResponseWriter, r *http.Request) {
 	var req totpDisableRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
 		return
 	}
 	sess := sessionFromContext(r.Context())
 	if !s.deps.Creds.Verify(sess.Username, req.Password) {
-		writeJSONError(w, http.StatusForbidden, "password salah") // 403, not 401 — see handlers_settings.go
+		writeJSONError(w, http.StatusForbidden, apierr.WrongPassword, "password salah", nil) // 403, not 401 — see handlers_settings.go
 		return
 	}
 	if err := s.deps.Creds.ClearTOTP(s.deps.CredentialsPath); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPDisableFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	slog.Info("settings: TOTP dinonaktifkan", "username", sess.Username)

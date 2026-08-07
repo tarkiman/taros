@@ -49,7 +49,7 @@ import { ApiError } from '../api/client'
 import type { Entry, Breadcrumb, JobSnapshot } from '../types/files'
 import { formatBytes, formatDate } from '../utils/format'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
@@ -287,6 +287,19 @@ async function copySelected(cut: boolean) {
 // --- paste job progress (SSE) ---
 const activeJob = ref<JobSnapshot | null>(null)
 let stopWatch: (() => void) | null = null
+
+// Same "prefer the translated code, fall back to the raw message" logic
+// as api/client.ts's request() — duplicated here (not imported from
+// there) because this comes over the SSE stream, not a plain JSON error
+// response, see types/files.ts's JobSnapshot doc comment.
+const jobErrorText = computed(() => {
+  const job = activeJob.value
+  if (!job?.error) return ''
+  if (job.errorCode && te(`errors.${job.errorCode}`)) {
+    return t(`errors.${job.errorCode}`, job.errorParams ?? {})
+  }
+  return job.error
+})
 
 async function paste() {
   try {
@@ -591,7 +604,7 @@ onUnmounted(() => stopWatch?.())
           — {{ formatBytes(activeJob.bytesPerSec) }}/s
         </p>
         <p class="job-detail" v-if="activeJob.currentFile">{{ activeJob.currentFile }}</p>
-        <p class="job-detail" v-if="activeJob.error">{{ activeJob.error }}</p>
+        <p class="job-detail" v-if="jobErrorText">{{ jobErrorText }}</p>
         <NButton v-if="activeJob.status === 'running'" size="small" @click="cancelJob">{{ t('common.cancel') }}</NButton>
       </NCard>
     </div>

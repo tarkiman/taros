@@ -1,6 +1,10 @@
 package web
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/tarkiman/taros/internal/apierr"
+)
 
 // handleSystemMonitoringStatus reports whether resource monitoring
 // (Dashboard/Proses, backed by internal/collector reading /proc) is
@@ -15,5 +19,5 @@ func (s *Server) handleSystemMonitoringStatus(w http.ResponseWriter, r *http.Req
 // when unsupported, but a direct API call or a race shouldn't hang or
 // silently return empty data instead of a clear reason).
 func writeMonitoringUnsupported(w http.ResponseWriter) {
-	writeJSONError(w, http.StatusServiceUnavailable, "Monitoring resource sistem tidak didukung di OS ini — fitur ini butuh Linux (baca /proc langsung, lihat internal/collector).")
+	writeJSONError(w, http.StatusServiceUnavailable, apierr.MonitoringUnsupported, "Monitoring resource sistem tidak didukung di OS ini — fitur ini butuh Linux (baca /proc langsung, lihat internal/collector).", nil)
 }

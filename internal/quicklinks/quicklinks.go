@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"gopkg.in/yaml.v3"
 )
 
@@ -31,18 +32,41 @@ var ErrNotFound = errors.New("quick link tidak ditemukan")
 // type rather than a wrapped sentinel so the message stays exactly the
 // clean, user-facing string set at the call site — no "sentinel: actual
 // message" prefix leaking into what the UI displays.
-type invalidInputError struct{ msg string }
+//
+// code/params mirror internal/web's apiErrorBody (code from the shared
+// internal/apierr package — this package sits below internal/web in the
+// import graph, so it can't import web's own error-code constants
+// directly, hence the separate leaf package) — CodeAndParams below is how
+// internal/web/handlers_quicklinks.go pulls them back out to build a
+// translatable response.
+type invalidInputError struct {
+	code   string
+	msg    string
+	params map[string]any
+}
 
 func (e *invalidInputError) Error() string { return e.msg }
 
-func invalidf(format string, args ...any) error {
-	return &invalidInputError{msg: fmt.Sprintf(format, args...)}
+func invalid(code, msg string, params map[string]any) error {
+	return &invalidInputError{code: code, msg: msg, params: params}
 }
 
 // IsInvalid reports whether err is a validation failure from this package.
 func IsInvalid(err error) bool {
 	var e *invalidInputError
 	return errors.As(err, &e)
+}
+
+// CodeAndParams extracts the (code, params) pair from a validation error
+// returned by this package. ok is false for any other error (e.g.
+// ErrNotFound, or a save() I/O failure) — those don't carry a translatable
+// code from this package at all.
+func CodeAndParams(err error) (code string, params map[string]any, ok bool) {
+	var e *invalidInputError
+	if errors.As(err, &e) {
+		return e.code, e.params, true
+	}
+	return "", nil, false
 }
 
 const (
@@ -149,7 +173,7 @@ func (s *Store) Add(label, rawURL, rawIcon string) (Link, error) {
 	defer s.mu.Unlock()
 
 	if len(s.links) >= maxLinks {
-		return Link{}, invalidf("sudah ada %d quick link (maksimum) — hapus salah satu dulu", maxLinks)
+		return Link{}, invalid(apierr.MaxLinksReached, fmt.Sprintf("sudah ada %d quick link (maksimum) — hapus salah satu dulu", maxLinks), map[string]any{"max": maxLinks})
 	}
 
 	link, err := buildLink(label, rawURL, rawIcon)
@@ -229,10 +253,10 @@ func (s *Store) Delete(id string) error {
 func buildLink(label, rawURL, rawIcon string) (Link, error) {
 	label = strings.TrimSpace(label)
 	if label == "" {
-		return Link{}, invalidf("nama tidak boleh kosong")
+		return Link{}, invalid(apierr.LabelEmpty, "nama tidak boleh kosong", nil)
 	}
 	if len(label) > maxLabelLen {
-		return Link{}, invalidf("nama maksimum %d karakter", maxLabelLen)
+		return Link{}, invalid(apierr.LabelTooLong, fmt.Sprintf("nama maksimum %d karakter", maxLabelLen), map[string]any{"max": maxLabelLen})
 	}
 
 	normURL, err := normalizeURL(rawURL)
@@ -255,14 +279,14 @@ func buildLink(label, rawURL, rawIcon string) (Link, error) {
 func normalizeURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", invalidf("URL tidak boleh kosong")
+		return "", invalid(apierr.URLEmpty, "URL tidak boleh kosong", nil)
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
-		return "", invalidf("URL tidak valid — harus lengkap, mis. https://dash.cloudflare.com")
+		return "", invalid(apierr.URLInvalid, "URL tidak valid — harus lengkap, mis. https://dash.cloudflare.com", nil)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return "", invalidf("URL harus http:// atau https://")
+		return "", invalid(apierr.URLScheme, "URL harus http:// atau https://", nil)
 	}
 	return raw, nil
 }
@@ -287,7 +311,7 @@ func normalizeIcon(raw string) (string, error) {
 	}
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		if _, err := url.ParseRequestURI(raw); err != nil {
-			return "", invalidf("URL icon tidak valid")
+			return "", invalid(apierr.IconURLInvalid, "URL icon tidak valid", nil)
 		}
 		return raw, nil
 	}
@@ -296,25 +320,26 @@ func normalizeIcon(raw string) (string, error) {
 	if strings.HasPrefix(raw, "data:") {
 		idx := strings.Index(raw, ",")
 		if idx < 0 {
-			return "", invalidf("format data URI icon tidak valid")
+			return "", invalid(apierr.IconDataURIInvalid, "format data URI icon tidak valid", nil)
 		}
 		b64 = raw[idx+1:]
 	}
 
 	data, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		return "", invalidf("icon bukan URL maupun data gambar (base64) yang valid")
+		return "", invalid(apierr.IconNotValid, "icon bukan URL maupun data gambar (base64) yang valid", nil)
 	}
 	if len(data) == 0 {
-		return "", invalidf("data icon kosong")
+		return "", invalid(apierr.IconEmpty, "data icon kosong", nil)
 	}
 	if len(data) > maxIconBytes {
-		return "", invalidf("icon terlalu besar (maksimum %dKB, gunakan gambar yang lebih kecil)", maxIconBytes/1024)
+		maxKb := maxIconBytes / 1024
+		return "", invalid(apierr.IconTooLarge, fmt.Sprintf("icon terlalu besar (maksimum %dKB, gunakan gambar yang lebih kecil)", maxKb), map[string]any{"maxKb": maxKb})
 	}
 
 	mime := sniffImageMIME(data)
 	if !allowedIconMIME[mime] {
-		return "", invalidf("format icon tidak didukung (%s) — pakai PNG/JPEG/GIF/WebP/SVG", mime)
+		return "", invalid(apierr.IconUnsupportedFormat, fmt.Sprintf("format icon tidak didukung (%s) — pakai PNG/JPEG/GIF/WebP/SVG", mime), map[string]any{"mime": mime})
 	}
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }

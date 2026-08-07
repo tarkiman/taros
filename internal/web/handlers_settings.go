@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/config"
 )
 
@@ -34,7 +35,7 @@ type settingsTerminalRequest struct {
 func (s *Server) handleSettingsTerminal(w http.ResponseWriter, r *http.Request) {
 	var req settingsTerminalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
 		return
 	}
 
@@ -46,12 +47,12 @@ func (s *Server) handleSettingsTerminal(w http.ResponseWriter, r *http.Request) 
 		// /login, which would be wrong here (wipes the in-progress form,
 		// confusing after just typing the *dashboard* password correctly
 		// moments ago to even load this page).
-		writeJSONError(w, http.StatusForbidden, "password salah")
+		writeJSONError(w, http.StatusForbidden, apierr.WrongPassword, "password salah", nil)
 		return
 	}
 
 	if err := config.SetTerminalEnabled(s.deps.ConfigPath, req.Enabled); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.TerminalToggleFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -95,18 +96,18 @@ func (s *Server) handleSettingsPortStatus(w http.ResponseWriter, r *http.Request
 func (s *Server) handleSettingsPort(w http.ResponseWriter, r *http.Request) {
 	var req settingsPortRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
 		return
 	}
 	if req.Port < 1 || req.Port > 65535 {
-		writeJSONError(w, http.StatusBadRequest, "port harus antara 1-65535")
+		writeJSONError(w, http.StatusBadRequest, apierr.PortRangeInvalid, "port harus antara 1-65535", nil)
 		return
 	}
 
 	sess := sessionFromContext(r.Context())
 	if !s.deps.Creds.Verify(sess.Username, req.Password) {
 		// 403, not 401 — see handleSettingsTerminal above for why.
-		writeJSONError(w, http.StatusForbidden, "password salah")
+		writeJSONError(w, http.StatusForbidden, apierr.WrongPassword, "password salah", nil)
 		return
 	}
 
@@ -118,13 +119,13 @@ func (s *Server) handleSettingsPort(w http.ResponseWriter, r *http.Request) {
 
 	ln, err := net.Listen("tcp", newListen)
 	if err != nil {
-		writeJSONError(w, http.StatusConflict, "port "+strconv.Itoa(req.Port)+" tidak bisa dipakai: "+err.Error())
+		writeJSONError(w, http.StatusConflict, apierr.PortUnavailable, "port "+strconv.Itoa(req.Port)+" tidak bisa dipakai: "+err.Error(), map[string]any{"port": req.Port, "detail": err.Error()})
 		return
 	}
 	ln.Close()
 
 	if err := config.SetServerListen(s.deps.ConfigPath, newListen); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.PortChangeFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 

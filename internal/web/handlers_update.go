@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/selfupdate"
 )
 
@@ -27,7 +28,7 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 
 	info, err := selfupdate.CheckLatest(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+		writeJSONError(w, http.StatusBadGateway, apierr.UpdateCheckFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -47,13 +48,13 @@ func (s *Server) handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 // reaches the client first, instead of racing the process's own death.
 func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	if !s.deps.UpdateEnabled {
-		writeJSONError(w, http.StatusForbidden, "update: dinonaktifkan di config (update.enabled)")
+		writeJSONError(w, http.StatusForbidden, apierr.UpdateDisabled, "update: dinonaktifkan di config (update.enabled)", nil)
 		return
 	}
 
 	info, err := selfupdate.CheckLatest(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+		writeJSONError(w, http.StatusBadGateway, apierr.UpdateCheckFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	if info.Version == s.deps.Version {
@@ -62,7 +63,7 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := selfupdate.Apply(r.Context(), info.DownloadURL); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.UpdateApplyFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 

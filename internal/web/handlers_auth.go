@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/auth"
 )
 
@@ -49,19 +50,19 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 
 	if !s.deps.RateLimiter.Allow(ip) {
-		writeJSONError(w, http.StatusTooManyRequests, "Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.")
+		writeJSONError(w, http.StatusTooManyRequests, apierr.TooManyAttempts, "Terlalu banyak percobaan gagal. Coba lagi beberapa menit lagi.", nil)
 		return
 	}
 
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Permintaan tidak valid.")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "Permintaan tidak valid.", nil)
 		return
 	}
 
 	if !s.deps.Creds.Verify(req.Username, req.Password) {
 		s.deps.RateLimiter.RecordFailure(ip)
-		writeJSONError(w, http.StatusUnauthorized, "Username atau password salah.")
+		writeJSONError(w, http.StatusUnauthorized, apierr.WrongCredentials, "Username atau password salah.", nil)
 		return
 	}
 
@@ -75,12 +76,12 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		ok, err := s.deps.Creds.VerifyTOTPOrBackupCode(s.deps.CredentialsPath, req.TOTPCode, time.Now())
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "Gagal memverifikasi kode TOTP.")
+			writeJSONError(w, http.StatusInternalServerError, apierr.TOTPVerifyFailed, "Gagal memverifikasi kode TOTP.", map[string]any{"detail": err.Error()})
 			return
 		}
 		if !ok {
 			s.deps.RateLimiter.RecordFailure(ip)
-			writeJSONError(w, http.StatusUnauthorized, "Kode TOTP salah.")
+			writeJSONError(w, http.StatusUnauthorized, apierr.WrongTOTP, "Kode TOTP salah.", nil)
 			return
 		}
 	}
@@ -88,7 +89,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, sess, err := s.deps.Sessions.Create(req.Username)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Gagal membuat sesi, coba lagi.")
+		writeJSONError(w, http.StatusInternalServerError, apierr.SessionCreateFailed, "Gagal membuat sesi, coba lagi.", map[string]any{"detail": err.Error()})
 		return
 	}
 

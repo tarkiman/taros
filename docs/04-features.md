@@ -771,12 +771,10 @@ untuk kenapa dan apa yang dipertimbangkan untuk fase berikutnya kalau memang dib
 ## 4.10 Multi-Bahasa (Indonesia/English)
 
 Seluruh UI Vue mendukung Indonesia dan English, dengan **default English untuk instalasi
-baru** — permintaan langsung dari user. Scope fase ini **frontend-only**: label/tombol/judul/
-menu/pesan di halaman Vue sepenuhnya dwibahasa, tapi pesan error yang datang dari backend Go
-(field `error` di response JSON — validasi form, kegagalan operasi, dst) **masih Bahasa
-Indonesia apa adanya**, belum ikut ter-translate. Keputusan scope sadar, bukan celah
-terlewat — backend butuh sistem kode-error terpisah untuk bisa dwibahasa juga, ukurannya jauh
-lebih besar dari migrasi frontend; dideferred ke fase berikutnya kalau memang dibutuhkan.
+baru** — permintaan langsung dari user. Dibangun dua fase: Fase 1 (frontend, v0.16.0) membuat
+seluruh label/tombol/judul/menu/pesan di halaman Vue dwibahasa; Fase 2 (backend) menyusul
+untuk pesan error yang datang dari Go — lihat "Pesan error backend (kode + terjemahan)" di
+bawah.
 
 - **Library**: `vue-i18n` v11, Composition API mode (`legacy: false`) — dipasang di
   `web/frontend/src/i18n/index.ts`, dipakai tiap halaman/komponen lewat `useI18n()` (pola
@@ -803,3 +801,37 @@ lebih besar dari migrasi frontend; dideferred ke fase berikutnya kalau memang di
   "ketinggalan" bahasa Inggris saat sudah di-switch ke Indonesia.
 - **Format tanggal/jam**: nama hari/bulan di jam Dashboard pakai `Intl.DateTimeFormat` bawaan
   JS (`id-ID`/`en-US`) berdasarkan locale aktif, bukan array terjemahan manual.
+
+### Pesan error backend (kode + terjemahan)
+
+Backend Go tidak menerjemahkan apa pun sendiri — tiap response error JSON kirim **kode
+stabil** (+ params interpolasi opsional) di samping teks aslinya, frontend yang sudah punya
+`vue-i18n` yang resolve terjemahannya:
+
+- **Envelope**: `{error: "...", code?: "...", params?: {...}}` — `error` tetap teks fallback
+  apa adanya (dipakai API client non-browser/log), `code` (konstanta di package baru
+  `internal/apierr`, mis. `wrong_password`, `file_op_failed`) yang jadi kunci terjemahan.
+  Ditulis lewat `writeJSONError` (`internal/web/errors.go`) — 65 titik panggil di semua
+  `handlers_*.go` + `ws_terminal.go` sudah migrasi, tidak ada yang tersisa versi lama.
+- **`internal/apierr` package terpisah** (bukan bagian `internal/web`) khusus supaya
+  `internal/quicklinks` bisa attach kode ke error validasinya sendiri tanpa import cycle balik
+  ke `internal/web`.
+- **Params membawa detail teknis mentah** (`{detail: err.Error()}`) untuk error yang dibungkus
+  dari OS/stdlib/Docker daemon/systemd yang tidak bisa diklasifikasi lebih jauh — satu kode
+  generik per titik panggil (menjelaskan *aksi* yang gagal, mis. `file_op_failed`,
+  `port_unavailable`), bukan kode unik per varian pesan teknis; sama filosofinya dengan
+  stack-trace/log detail, bukan kalimat UI yang perlu diterjemahkan.
+- **Frontend resolve di titik lempar, bukan titik tangkap**: `api/client.ts`'s `request()`
+  resolve pesan terjemahan sekali saat `ApiError` dibuat (pakai locale `vue-i18n` aktif saat
+  itu) via `errors.<code>` di `i18n/en.ts`/`id.ts` (fallback ke `error` mentah kalau kode tidak
+  dikenal, dicek lewat `te()` — mencegah key hilang bocor sebagai `errors.some_code` mentah).
+  Efeknya seluruh ~40 titik `e instanceof ApiError ? e.message : t(...)` yang sudah ada dari
+  Fase 1 otomatis dapat teks terjemahan yang benar tanpa perlu diubah satu pun.
+- **Docker unavailable state** (`dockerUnavailableJSON`, dikonsumsi `DockerView.vue`) dapat
+  `code`/`params` yang sama (`docker_disabled` / `docker_unreachable`), field `enabled` tidak
+  berubah bentuk.
+- **SSE job errors** (`fileexplorer.JobSnapshot`, panel progress copy/move di `FilesView.vue`)
+  adalah transport terpisah dari `writeJSONError` (EventSource, bukan fetch JSON) — dapat
+  mekanisme serupa lewat `ErrorCode`/`ErrorParams`, di-resolve `FilesView.vue` sendiri lewat
+  `useI18n()`'s `t`/`te` langsung (kode tunggal `job_failed` + `{detail}`, semua kegagalan
+  copy/move di sini memang tidak terklasifikasi lebih jauh).

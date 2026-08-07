@@ -6,39 +6,58 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/docker"
 )
 
 // dockerUnavailableJSON is the JSON counterpart of the old error_panel.html
 // degradation path — see docs/04-features.md §4.2. `enabled` lets the Vue
 // DockerView distinguish "off in config" from "on but unreachable" without
-// parsing the message text.
+// parsing the message text. Code/Params follow the same shape as
+// apiErrorBody (errors.go) even though this doesn't go through
+// writeJSONError — DockerView.vue's isUnavailable() type-guard already
+// expects `enabled` alongside `error`, so Code/Params are additive here
+// for the same reason they are there.
 type dockerUnavailableJSON struct {
-	Error   string `json:"error"`
-	Enabled bool   `json:"enabled"`
+	Error   string         `json:"error"`
+	Enabled bool           `json:"enabled"`
+	Code    string         `json:"code,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
 }
 
 func (s *Server) writeDockerUnavailable(w http.ResponseWriter, err error) {
 	msg := "Docker tidak diaktifkan di konfigurasi."
+	code := apierr.DockerDisabled
+	var params map[string]any
 	if s.deps.DockerEnabled {
+		code = apierr.DockerUnreachable
 		msg = "Docker tidak terdeteksi atau tidak bisa diakses."
 		if err != nil {
 			msg += " (" + err.Error() + ")"
+			params = map[string]any{"detail": err.Error()}
 		}
 	}
-	writeJSON(w, http.StatusServiceUnavailable, dockerUnavailableJSON{Error: msg, Enabled: s.deps.DockerEnabled})
+	writeJSON(w, http.StatusServiceUnavailable, dockerUnavailableJSON{Error: msg, Enabled: s.deps.DockerEnabled, Code: code, Params: params})
 }
 
 // writeDockerActionError maps a docker.APIError's real HTTP status (e.g.
 // 409 "still in use") through to the client instead of flattening every
 // failure to 500 — the Vue action buttons show the daemon's own message.
-func writeDockerActionError(w http.ResponseWriter, fallbackMsg string, err error) {
+// params is nil for call sites with no extra interpolation beyond detail
+// (most of them); "detail" is always added here, callers don't set it
+// themselves.
+func writeDockerActionError(w http.ResponseWriter, code, fallbackMsg string, params map[string]any, err error) {
+	if params == nil {
+		params = map[string]any{}
+	}
 	var apiErr *docker.APIError
 	if errors.As(err, &apiErr) {
-		writeJSONError(w, apiErr.StatusCode, fallbackMsg+": "+apiErr.Message)
+		params["detail"] = apiErr.Message
+		writeJSONError(w, apiErr.StatusCode, code, fallbackMsg+": "+apiErr.Message, params)
 		return
 	}
-	writeJSONError(w, http.StatusInternalServerError, fallbackMsg+": "+err.Error())
+	params["detail"] = err.Error()
+	writeJSONError(w, http.StatusInternalServerError, code, fallbackMsg+": "+err.Error(), params)
 }
 
 type containersResponse struct {
@@ -156,7 +175,7 @@ func (s *Server) handleAPIDockerContainerAction(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err != nil {
-		writeDockerActionError(w, "Aksi "+action+" gagal", err)
+		writeDockerActionError(w, apierr.DockerContainerActionFailed, "Aksi "+action+" gagal", map[string]any{"action": action}, err)
 		return
 	}
 
@@ -172,7 +191,7 @@ func (s *Server) handleAPIDockerImageRemove(w http.ResponseWriter, r *http.Reque
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveImage(ctx, r.PathValue("id")); err != nil {
-		writeDockerActionError(w, "Hapus image gagal (mungkin masih dipakai container)", err)
+		writeDockerActionError(w, apierr.DockerImageRemoveFailed, "Hapus image gagal (mungkin masih dipakai container)", nil, err)
 		return
 	}
 	s.handleAPIDockerImages(w, r)
@@ -186,7 +205,7 @@ func (s *Server) handleAPIDockerVolumeRemove(w http.ResponseWriter, r *http.Requ
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveVolume(ctx, r.PathValue("name")); err != nil {
-		writeDockerActionError(w, "Hapus volume gagal (mungkin masih dipakai container)", err)
+		writeDockerActionError(w, apierr.DockerVolumeRemoveFailed, "Hapus volume gagal (mungkin masih dipakai container)", nil, err)
 		return
 	}
 	s.handleAPIDockerVolumes(w, r)
@@ -200,7 +219,7 @@ func (s *Server) handleAPIDockerNetworkRemove(w http.ResponseWriter, r *http.Req
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := s.deps.Docker.RemoveNetwork(ctx, r.PathValue("id")); err != nil {
-		writeDockerActionError(w, "Hapus network gagal (mungkin builtin atau masih ada container terhubung)", err)
+		writeDockerActionError(w, apierr.DockerNetworkRemoveFailed, "Hapus network gagal (mungkin builtin atau masih ada container terhubung)", nil, err)
 		return
 	}
 	s.handleAPIDockerNetworks(w, r)
@@ -235,7 +254,7 @@ func (s *Server) handleAPIDockerPrune(w http.ResponseWriter, r *http.Request) {
 
 	for _, k := range kinds {
 		if _, err := s.deps.Docker.Prune(ctx, k); err != nil {
-			writeDockerActionError(w, "Cleanup gagal: "+string(k), err)
+			writeDockerActionError(w, apierr.DockerPruneFailed, "Cleanup gagal: "+string(k), map[string]any{"kind": string(k)}, err)
 			return
 		}
 	}
