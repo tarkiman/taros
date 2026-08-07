@@ -64,6 +64,11 @@ butuh sudo/root sama sekali):
 curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | sudo bash
 ```
 
+**Di macOS, jangan pakai command di atas** — tidak butuh (dan tidak boleh) `sudo`. Pakai
+command tanpa `sudo` di §9.2 "macOS" di bawah; kalau terlanjur jalan pakai `sudo` di macOS,
+script sekarang menolak otomatis (lihat §9.2 "macOS" untuk cara benerin ownership file yang
+sempat kepakai `sudo`).
+
 Sudah root (umum di image STB minimal, tidak ada `sudo` terpasang)? Jalankan tanpa `sudo` di
 depan `bash` — script mendeteksi ini sendiri. Semua flag `install.sh` di bawah tetap berlaku,
 diteruskan lewat `--`:
