@@ -5,6 +5,7 @@
 # Local dev artifacts — never commit real credentials/config
 /config.yaml
 /credentials.yaml
+/notify.yaml
 
 # Build-once JS bundling (see scripts/codemirror-build) — only the
 # committed output in web/static/js/vendor/ ships, not node_modules.

@@ -835,3 +835,44 @@ stabil** (+ params interpolasi opsional) di samping teks aslinya, frontend yang 
   mekanisme serupa lewat `ErrorCode`/`ErrorParams`, di-resolve `FilesView.vue` sendiri lewat
   `useI18n()`'s `t`/`te` langsung (kode tunggal `job_failed` + `{detail}`, semua kegagalan
   copy/move di sini memang tidak terklasifikasi lebih jauh).
+
+## 4.11 Notifikasi Discord (CPU/RAM/Suhu)
+
+Kirim notifikasi ke webhook Discord kalau CPU, RAM, atau suhu CPU **bertahan** di atas nilai
+threshold selama lebih dari durasi tertentu — bukan alert sesaat/spike, tapi kondisi yang
+memang berkepanjangan. Threshold dan durasi tiap metrik independen dan configurable lewat
+slider di halaman Settings.
+
+- **Semantik sustained-threshold**: `internal/notify.Monitor` mengevaluasi snapshot metrik
+  terbaru (`internal/store`, sumber yang sama dengan Dashboard) tiap 10 detik. Begitu sebuah
+  metrik melewati threshold-nya, waktu mulai breach dicatat; alert baru terkirim kalau breach
+  itu **terus-menerus** (bukan naik-turun) bertahan ≥ durasi yang dikonfigurasi. Sekali kirim
+  saat transisi ke kondisi alert, sekali kirim lagi ("kembali normal") saat metrik turun lagi
+  di bawah threshold — **sengaja tidak ada notifikasi berulang** selama breach masih
+  berlangsung, supaya channel Discord tidak banjir pesan tiap 10 detik selama insiden
+  berlangsung lama.
+- **3 metrik independen**: CPU (`snap.CPU.TotalPercent`), RAM (`snap.Mem.UsedPercent`, keduanya
+  threshold 1–100%), Suhu CPU (nilai sensor tertinggi dari `snap.Temps`, threshold 30–120°C).
+  Tiap metrik punya toggle enable sendiri — mengaktifkan notifikasi Discord secara keseluruhan
+  tidak otomatis mengaktifkan ketiganya. Perangkat tanpa sensor suhu (`len(snap.Temps) == 0`)
+  otomatis dilewati, tidak pernah false-alarm di 0°C.
+- **Durasi 1–60 menit**, threshold masing-masing lewat `NSlider` di kartu "Notifikasi Discord"
+  (Settings) — nilai live ditampilkan di samping slider, disimpan lewat satu tombol "Simpan"
+  (bukan auto-save tiap geser, supaya tidak spam API saat drag).
+- **Webhook URL divalidasi domainnya** (`https://discord.com/api/webhooks/...` atau
+  `discordapp.com`) — field ini jadi origin request keluar (`http.Post`), jadi divalidasi
+  ketat untuk cegah SSRF lewat field ini, bukan sekadar dicek format URL. Ada tombol "Kirim
+  Test" terpisah supaya webhook bisa diverifikasi sebelum disimpan.
+- **Konfigurasi live, tanpa restart**: sama seperti Akses Cepat (Custom, §4.1) — tersimpan di
+  `notify.yaml` sendiri (path configurable lewat `notify.settingsFile` di `config.yaml`),
+  dimutasi langsung lewat API, bukan lewat `config.yaml` + restart. Beda dari quick-links.yaml,
+  file ini berisi secret (URL webhook) — ditulis 0600 dan **tidak pernah masuk git** (lihat
+  `.gitignore`), sama perlakuannya seperti `credentials.yaml`. Detail keamanan lengkap di
+  [07-security.md](07-security.md).
+- **Linux-only**: goroutine `Monitor.Run` cuma dijalankan kalau
+  `systemMonitoringSupported` (sama gate dengan `internal/collector` di `cmd/taros/main.go`) —
+  tidak ada snapshot metrik valid di OS lain untuk dievaluasi.
+- **Pesan Discord** dikirim sebagai embed (bukan plain text) — merah untuk alert, hijau untuk
+  recovery, biru untuk pesan test, berisi nilai saat ini/threshold/durasi bertahan, footer
+  `TarOS · <hostname>`. Bahasa pesan Bahasa Indonesia tetap (bukan ikut sistem i18n UI Vue di
+  §4.10) — ini pesan langsung ke channel Discord milik user sendiri, bukan bagian UI aplikasi.

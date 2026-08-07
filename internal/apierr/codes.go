@@ -102,6 +102,14 @@ const (
 	TerminalTooManySessions = "terminal_too_many_sessions"
 	TerminalStartFailed     = "terminal_start_failed" // params: detail
 
+	// handlers_notify.go / internal/notify
+	NotifyWebhookRequired = "notify_webhook_required"
+	NotifyWebhookInvalid  = "notify_webhook_invalid"
+	NotifyThresholdRange  = "notify_threshold_range" // params: min, max
+	NotifyDurationRange   = "notify_duration_range"  // params: min, max
+	NotifySaveFailed      = "notify_save_failed"     // params: detail
+	NotifyTestFailed      = "notify_test_failed"     // params: detail
+
 	// SSE job errors (internal/fileexplorer.JobSnapshot, separate transport
 	// from apiErrorBody — see FilesView.vue's job panel).
 	JobFailed = "job_failed" // params: detail
