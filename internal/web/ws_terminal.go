@@ -10,6 +10,7 @@ import (
 
 	"nhooyr.io/websocket"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/terminal"
 )
 
@@ -48,8 +49,10 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	termSession, err := s.deps.TerminalManager.NewSession()
 	if err != nil {
 		status := http.StatusInternalServerError
+		code := apierr.TerminalStartFailed
 		if errors.Is(err, terminal.ErrTooManySessions) {
 			status = http.StatusServiceUnavailable
+			code = apierr.TerminalTooManySessions
 		} else {
 			// ErrTooManySessions is expected/routine (capacity limit, not a
 			// fault) — anything else (PTY spawn failure: shell missing,
@@ -62,7 +65,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 			// have shown up, and it didn't.
 			slog.Error("terminal session start failed", "username", sess.Username, "err", err)
 		}
-		writeJSONError(w, status, err.Error())
+		writeJSONError(w, status, code, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 

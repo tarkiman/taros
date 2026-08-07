@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/tarkiman/taros/internal/apierr"
 )
 
 type JobStatus string
@@ -53,7 +55,17 @@ type JobSnapshot struct {
 	PercentDone float64   `json:"percentDone"`
 	CurrentFile string    `json:"currentFile"`
 	Error       string    `json:"error,omitempty"`
-	BytesPerSec float64   `json:"bytesPerSec"`
+	// ErrorCode/ErrorParams mirror internal/web's apiErrorBody shape (see
+	// its doc comment) even though a job's progress is streamed over SSE,
+	// not a plain JSON error response — same "code the frontend can
+	// translate, Error stays as a fallback" design. Always apierr.JobFailed
+	// when set (the only code this package's jobs report) — every copy/
+	// move failure here is a filesystem/OS-level error with no further
+	// classification worth exposing; the specific detail lives in Error
+	// (and ErrorParams["detail"]) either way.
+	ErrorCode   string         `json:"errorCode,omitempty"`
+	ErrorParams map[string]any `json:"errorParams,omitempty"`
+	BytesPerSec float64        `json:"bytesPerSec"`
 }
 
 func (j *Job) Snapshot() JobSnapshot {
@@ -68,6 +80,10 @@ func (j *Job) Snapshot() JobSnapshot {
 		CopiedBytes: j.copiedBytes,
 		CurrentFile: j.currentFile,
 		Error:       j.err,
+	}
+	if j.err != "" {
+		s.ErrorCode = apierr.JobFailed
+		s.ErrorParams = map[string]any{"detail": j.err}
 	}
 	if j.totalBytes > 0 {
 		s.PercentDone = float64(j.copiedBytes) / float64(j.totalBytes) * 100

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/systemd"
 )
 
@@ -30,7 +31,7 @@ func (s *Server) handleAPIServicesList(w http.ResponseWriter, r *http.Request) {
 	// separate case of Linux-without-systemd (e.g. an Alpine/OpenRC box),
 	// so it's left as the fallback rather than replaced entirely.
 	if !s.deps.SystemMonitoringSupported {
-		writeJSONError(w, http.StatusServiceUnavailable, "Monitoring Service (systemd) tidak didukung di OS ini — fitur ini khusus Linux.")
+		writeJSONError(w, http.StatusServiceUnavailable, apierr.ServicesUnsupported, "Monitoring Service (systemd) tidak didukung di OS ini — fitur ini khusus Linux.", nil)
 		return
 	}
 
@@ -43,7 +44,7 @@ func (s *Server) handleAPIServicesList(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	units, err := systemd.List(ctx, types)
 	if err != nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "systemd tidak terdeteksi atau tidak bisa diakses: "+err.Error())
+		writeJSONError(w, http.StatusServiceUnavailable, apierr.SystemdUnavailable, "systemd tidak terdeteksi atau tidak bisa diakses: "+err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -91,8 +92,9 @@ func (s *Server) handleAPIServiceAction(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	if err := fn(ctx, name); err != nil {
-		writeJSONError(w, http.StatusInternalServerError,
-			"Aksi gagal: "+action+" "+name+": "+err.Error()+" — lihat docs/09-deployment.md §9.2 soal privilege yang dibutuhkan aksi ini.")
+		writeJSONError(w, http.StatusInternalServerError, apierr.ServiceActionFailed,
+			"Aksi gagal: "+action+" "+name+": "+err.Error()+" — lihat docs/09-deployment.md §9.2 soal privilege yang dibutuhkan aksi ini.",
+			map[string]any{"action": action, "name": name, "detail": err.Error()})
 		return
 	}
 
@@ -106,7 +108,7 @@ func (s *Server) handleAPIServiceLogs(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	logs, err := systemd.Tail(ctx, name, 50)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Gagal membaca log: "+name+": "+err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.ServiceLogsFailed, "Gagal membaca log: "+name+": "+err.Error(), map[string]any{"name": name, "detail": err.Error()})
 		return
 	}
 

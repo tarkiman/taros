@@ -59,9 +59,14 @@ Endpoint dikelompokkan:
 
 - Semua endpoint state-changing (`POST/PUT/DELETE`) wajib **CSRF token** (lihat
   [07-security.md](07-security.md)) & login session valid.
-- Format error konsisten & selalu JSON: `{error: "..."}` (`writeJSONError`), ditampilkan Vue
-  lewat toast (`useMessage()`) atau dialog (`useDialog()`) sesuai konteks — bukan lagi HTML
-  fragment alert box seperti versi htmx.
+- Format error konsisten & selalu JSON: `{error: "...", code?: "...", params?: {...}}`
+  (`writeJSONError`, lihat `internal/web/errors.go`), ditampilkan Vue lewat toast
+  (`useMessage()`) atau dialog (`useDialog()`) sesuai konteks — bukan lagi HTML fragment alert
+  box seperti versi htmx. `error` tetap teks fallback (untuk API client non-browser/log);
+  `code` (konstanta di `internal/apierr`, mis. `wrong_password`) + `params` opsional untuk
+  interpolasi (mis. `{detail}`) dipakai `api/client.ts` untuk resolve pesan terjemahan lewat
+  `vue-i18n` (`errors.<code>` di `i18n/en.ts`/`id.ts`) sebelum ditampilkan — lihat
+  [04-features.md](04-features.md) §4.10.
 - Semua path file di-normalisasi & divalidasi di server sebelum dipakai (cegah `../` traversal).
 - `GET /api/terminal/ws` tetap wajib session login valid (cookie ikut terkirim otomatis saat
   WebSocket handshake same-origin) **plus** validasi header `Origin` di server — detail

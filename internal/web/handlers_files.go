@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tarkiman/taros/internal/apierr"
 	"github.com/tarkiman/taros/internal/fileexplorer"
 )
 
@@ -68,13 +69,13 @@ type filesListResponse struct {
 func (s *Server) handleAPIFilesList(w http.ResponseWriter, r *http.Request) {
 	dir, err := s.currentDir(r)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "Path tidak valid: "+err.Error())
+		writeJSONError(w, http.StatusBadRequest, apierr.PathInvalid, "Path tidak valid: "+err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
 	entries, err := fileexplorer.List(dir)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "Gagal membaca direktori: "+err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.DirectoryReadFailed, "Gagal membaca direktori: "+err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -133,7 +134,7 @@ type filesOpRequest struct {
 func (s *Server) handleFilesOp(w http.ResponseWriter, r *http.Request) {
 	var req filesOpRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "body JSON tidak valid")
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body JSON tidak valid", nil)
 		return
 	}
 
@@ -148,7 +149,7 @@ func (s *Server) handleFilesOp(w http.ResponseWriter, r *http.Request) {
 
 	path, err := s.deps.Jail.Resolve(req.Path)
 	if err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -166,12 +167,12 @@ func (s *Server) handleFilesOp(w http.ResponseWriter, r *http.Request) {
 			err = fileexplorer.Rename(path, newPath)
 		}
 	default:
-		writeJSONError(w, http.StatusBadRequest, "aksi tidak dikenal: "+req.Action)
+		writeJSONError(w, http.StatusBadRequest, apierr.UnknownAction, "aksi tidak dikenal: "+req.Action, map[string]any{"action": req.Action})
 		return
 	}
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.FileOpFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -186,13 +187,13 @@ func (s *Server) handleFilesCopyCut(w http.ResponseWriter, r *http.Request, req 
 	for _, p := range req.Paths {
 		rp, err := s.deps.Jail.Resolve(p)
 		if err != nil {
-			writeJSONError(w, http.StatusForbidden, err.Error())
+			writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 			return
 		}
 		resolved = append(resolved, rp)
 	}
 	if len(resolved) == 0 {
-		writeJSONError(w, http.StatusBadRequest, "tidak ada item dipilih")
+		writeJSONError(w, http.StatusBadRequest, apierr.NoItemsSelected, "tidak ada item dipilih", nil)
 		return
 	}
 
@@ -212,19 +213,19 @@ func (s *Server) handleFilesPaste(w http.ResponseWriter, r *http.Request, req fi
 	sess := sessionFromContext(r.Context())
 	clip, cut := sess.Clipboard()
 	if len(clip) == 0 {
-		writeJSONError(w, http.StatusBadRequest, "clipboard kosong")
+		writeJSONError(w, http.StatusBadRequest, apierr.ClipboardEmpty, "clipboard kosong", nil)
 		return
 	}
 
 	destDir, err := s.deps.Jail.Resolve(req.Path)
 	if err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
 	job, err := s.deps.Jobs.Paste(clip, destDir, cut)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		writeJSONError(w, http.StatusInternalServerError, apierr.PasteFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -288,7 +289,7 @@ func (s *Server) handleFilesOpCancel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 	destDir, err := s.deps.Jail.Resolve(r.URL.Query().Get("path"))
 	if err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
@@ -296,33 +297,33 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "upload gagal (kemungkinan melebihi batas ukuran): "+err.Error())
+		writeJSONError(w, http.StatusBadRequest, apierr.UploadFailed, "upload gagal (kemungkinan melebihi batas ukuran): "+err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
 
 	files := r.MultipartForm.File["file"]
 	if len(files) == 0 {
-		writeJSONError(w, http.StatusBadRequest, "tidak ada file diupload")
+		writeJSONError(w, http.StatusBadRequest, apierr.NoFileUploaded, "tidak ada file diupload", nil)
 		return
 	}
 
 	for _, fh := range files {
 		dstPath, err := s.deps.Jail.Resolve(filepath.Join(destDir, fh.Filename))
 		if err != nil {
-			writeJSONError(w, http.StatusForbidden, err.Error())
+			writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 			return
 		}
 
 		src, err := fh.Open()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			writeJSONError(w, http.StatusInternalServerError, apierr.UploadWriteFailed, err.Error(), map[string]any{"detail": err.Error()})
 			return
 		}
 		dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
 			src.Close()
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			writeJSONError(w, http.StatusInternalServerError, apierr.UploadWriteFailed, err.Error(), map[string]any{"detail": err.Error()})
 			return
 		}
 
@@ -331,19 +332,13 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 		src.Close()
 		dst.Close()
 		if copyErr != nil {
-			writeJSONError(w, http.StatusInternalServerError, copyErr.Error())
+			writeJSONError(w, http.StatusInternalServerError, apierr.UploadWriteFailed, copyErr.Error(), map[string]any{"detail": copyErr.Error()})
 			return
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // handleFilesDownload streams a single file via http.ServeFile, or a

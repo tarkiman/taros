@@ -1688,6 +1688,68 @@ kode-error terpisah di Go — scope jauh lebih besar dari migrasi frontend, seng
   regex-scan teks halaman untuk pola `namespace.key` mentah yang bocor (indikasi key hilang) —
   hasilnya kosong, nol console/page error di sepanjang pengujian.
 
+### Dukungan Multi-Bahasa (Indonesia/English) — Fase 2: backend (kode error + terjemahan)
+
+Lanjutan langsung dari fase frontend-only di atas — user minta lanjut ke bagian backend yang
+sengaja dideferred saat itu. Riset ulang (manual + agent riset independen, hasil konsisten)
+menemukan cakupan lebih besar dari perkiraan awal: **65 call site** `writeJSONError` (bukan
+~40), **67 pesan Bahasa Indonesia unik** tersebar di 11 file `handlers_*.go` + `ws_terminal.go`,
+plus satu **permukaan keempat yang terlewat di perkiraan awal**: `fileexplorer.JobSnapshot.Error`
+di-stream lewat SSE ke job-progress panel `FilesView.vue` — transportnya beda sama sekali dari
+`writeJSONError`, butuh penanganan terpisah.
+
+- **Desain: kode-error, bukan translate string di Go.** Backend tidak tahu locale aktif user
+  per-request tanpa header tambahan, dan menduplikasi mesin terjemahan di dua bahasa pemrograman
+  itu boros. Sebagai gantinya backend kirim kode stabil (+ params interpolasi opsional) lewat
+  envelope `{error, code?, params?}` (backward-compatible, `error` tetap ada) — frontend yang
+  sudah punya `vue-i18n` dari Fase 1 yang resolve terjemahannya. Detail lengkap mekanismenya di
+  [04-features.md](04-features.md) §4.10 "Pesan error backend".
+- **Import cycle dihindari lewat leaf package baru**: draft awal taruh konstanta kode langsung
+  di `internal/web`, tapi `internal/quicklinks` (yang perlu attach kode ke error validasinya
+  sendiri) sudah di-import balik oleh `internal/web` — jadi tidak bisa import balik. Dipindah ke
+  package baru dependency-free `internal/apierr`, dipakai `internal/web` maupun
+  `internal/quicklinks`/`internal/fileexplorer` tanpa masalah.
+- **Migrasi dipandu compile error**: mengubah signature `writeJSONError` (nambah `code`,
+  `params`) langsung membuat semua 65 pemanggilan lama gagal compile — output `go build ./...`
+  dipakai sebagai checklist literal, migrasi file demi file, `go build ./internal/web/...`
+  ulang tiap habis satu file sebelum lanjut (pola sama seperti vue-tsc per-file di Fase 1).
+- **`{detail}` param untuk error yang tidak bisa diklasifikasi lebih jauh**: error yang
+  membungkus OS/stdlib/Docker daemon/`systemctl` stderr (disk penuh, permission denied,
+  `net.Listen` gagal, dst) tidak dapat kode unik per varian — satu kode generik per titik
+  panggil (menjelaskan *aksi* yang gagal, mis. `file_op_failed`, `port_unavailable`) dengan
+  `err.Error()` mentah dikirim sebagai param `{detail}`, ditempel di template kalimat
+  terjemahan. Filosofinya sama seperti stack-trace/log detail — tidak perlu diterjemahkan.
+- **Frontend resolve di titik lempar (`client.ts`'s `request()`), bukan di titik tangkap** —
+  keputusan desain paling menghemat waktu di fase ini: `ApiError.message` sudah jadi teks
+  terjemahan final saat instance dibuat (pakai locale `vue-i18n` aktif saat itu), jadi seluruh
+  ~40 titik `e instanceof ApiError ? e.message : t(...)` yang sudah ada dari Fase 1 di 13 file
+  Vue otomatis benar tanpa satu pun perlu diubah.
+- **SSE job errors ditangani terpisah**: karena tidak lewat `client.ts`'s `request()`
+  (EventSource, bukan fetch JSON), `FilesView.vue` resolve sendiri lewat `useI18n()`'s `t`/`te`
+  langsung saat merender `activeJob.error` — kode tunggal `job_failed` + `{detail}` (semua
+  kegagalan copy/move di sini memang tidak terklasifikasi lebih jauh, tidak perlu kode
+  bervariasi).
+- **`internal/quicklinks` satu-satunya package yang perlu refactor sumber** (selain
+  `internal/web`) — `invalidInputError` sebelumnya pre-bake string hasil `fmt.Sprintf` lewat
+  `invalidf(...)`; ditambah field `code`/`params`, plus fungsi `CodeAndParams(err)` baru supaya
+  `handlers_quicklinks.go` bisa ekstrak balik. Package lain (`selfupdate`, `fileexplorer`,
+  `config`, `auth`, `docker`, `systemd`) tidak perlu diubah sumbernya sama sekali — pesan
+  human-readable mereka (14 pesan `selfupdate`, semua Bahasa Indonesia) tetap keluar lewat
+  cuma segelintir titik `writeJSONError` di level handler, cukup satu kode per call site di
+  situ.
+- **Verifikasi 1:1 lewat grep silang otomatis**: 62 konstanta Go `apierr` ⟷ 62 key
+  `errors.*` TypeScript nyata di `en.ts` maupun `id.ts`, nol mismatch di kedua arah — compiler
+  tidak bisa enforce ini lintas bahasa (Go ↔ TS), jadi grep manual di akhir jadi gerbang wajib
+  sebelum dianggap selesai.
+- **Diuji end-to-end** lewat instance nyata: skenario representatif di kedua locale (password
+  salah di Settings, quick-link URL invalid `javascript:`, rename folder ke nama yang sudah
+  ada). Satu skrip Puppeteer sempat false-negative karena bug di skrip tes sendiri (state UI
+  tidak direset antar skenario, bukan bug aplikasi) — diperbaiki dengan fresh browser context
+  per skenario. Skenario rename-conflict lewat klik UI gagal karena tebakan selector DOM
+  `NDataTable` salah (test-only) — dipindah ke verifikasi langsung via `curl` terautentikasi
+  (cookie + CSRF token dari login asli), lebih reliable untuk memastikan bentuk JSON persis
+  (`code`, `params.detail`) daripada mengejar selector library UI yang fragile.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
