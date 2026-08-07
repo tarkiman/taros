@@ -21,6 +21,7 @@ type Config struct {
 	FileExplorer FileExplorerConfig `yaml:"fileExplorer"`
 	Terminal     TerminalConfig     `yaml:"terminal"`
 	Update       UpdateConfig       `yaml:"update"`
+	Dashboard    DashboardConfig    `yaml:"dashboard"`
 }
 
 type ServerConfig struct {
@@ -110,6 +111,20 @@ type UpdateConfig struct {
 	Enabled bool `yaml:"enabled"`
 }
 
+// DashboardConfig — see docs/04-features.md §4.1 "Akses Cepat (Custom)".
+type DashboardConfig struct {
+	// QuickLinksFile holds the user's custom Dashboard shortcut tiles
+	// (internal/quicklinks), separate from config.yaml for the same reason
+	// as CredentialsFile above: it's mutated directly and often by a
+	// running, unprivileged service process, not via the
+	// edit-then-restart path config.yaml itself uses (internal/config/
+	// mutate.go). Default is relative ("./..."), same convention as
+	// CredentialsFile's own default — deploy/config.example.yaml overrides
+	// this to an absolute, already-service-user-writable path for the
+	// packaged Linux install (see docs/09-deployment.md).
+	QuickLinksFile string `yaml:"quickLinksFile"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -158,6 +173,9 @@ func Default() Config {
 		},
 		Update: UpdateConfig{
 			Enabled: true,
+		},
+		Dashboard: DashboardConfig{
+			QuickLinksFile: "./quick-links.yaml",
 		},
 	}
 }

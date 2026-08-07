@@ -7,6 +7,7 @@ import (
 	"github.com/tarkiman/taros/internal/auth"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 )
@@ -83,6 +84,12 @@ type Deps struct {
 	// the collector goroutine entirely when it's false rather than let it
 	// spin forever logging failed /proc reads.
 	SystemMonitoringSupported bool
+
+	// QuickLinks holds the user's custom Dashboard shortcut tiles — see
+	// internal/quicklinks and docs/04-features.md §4.1 "Akses Cepat
+	// (Custom)". Unlike most Deps here, mutated directly by its own
+	// handlers (no restart-and-reload), so it's always non-nil.
+	QuickLinks *quicklinks.Store
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -193,6 +200,15 @@ func (s *Server) Handler() http.Handler {
 	// discover by scanning — a plain disabled response is enough.
 	mux.HandleFunc("GET /api/update/check", s.requireAuth(s.handleUpdateCheck))
 	mux.HandleFunc("POST /api/update/apply", s.requireAuth(s.handleUpdateApply))
+
+	// Dashboard "Akses Cepat (Custom)" tiles — see internal/quicklinks and
+	// docs/04-features.md §4.1. No password re-confirmation like the
+	// terminal/port toggles above: this is just personal bookmark-style
+	// data, not a privilege flip.
+	mux.HandleFunc("GET /api/quick-links", s.requireAuth(s.handleQuickLinksList))
+	mux.HandleFunc("POST /api/quick-links", s.requireAuth(s.handleQuickLinksCreate))
+	mux.HandleFunc("PUT /api/quick-links/{id}", s.requireAuth(s.handleQuickLinksUpdate))
+	mux.HandleFunc("DELETE /api/quick-links/{id}", s.requireAuth(s.handleQuickLinksDelete))
 
 	return recoverMiddleware(loggingMiddleware(mux))
 }

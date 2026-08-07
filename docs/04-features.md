@@ -614,6 +614,42 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
 | RAM breakdown (used/cached/buffers/free), Disk breakdown per mount | **Bar chart horizontal / stacked** | Baik untuk membandingkan proporsi antar kategori |
 | Ranking container by CPU/RAM, ranking mount by usage | **Bar chart terurut (top-N)** | Memudahkan lihat "siapa yang paling boros" sekilas |
 
+### Akses Cepat (Custom)
+
+Selain tile navigasi bawaan (Dashboard, Docker, Service, dst — dari router, statis), section
+"Akses Cepat" di Dashboard juga bisa diisi tile buatan user sendiri: link ke layanan eksternal
+apa pun, misal dashboard akun Cloudflare atau ZeroTier. Setiap tile custom punya nama, URL,
+dan icon opsional (URL gambar, atau kode base64 — termasuk lewat file picker yang otomatis
+meng-encode gambar lokal jadi base64 di browser, tidak pernah di-upload sebagai file terpisah
+ke server).
+
+- **Penyimpanan**: `internal/quicklinks`, file YAML sendiri (`dashboard.quickLinksFile` di
+  `config.yaml`, default `/opt/taros/quick-links.yaml` di paket Linux — direktori yang sama
+  yang sudah dipakai fitur self-update, jadi service user yang berjalan tanpa root sudah bisa
+  menulis ke sana tanpa langkah instalasi tambahan). Sengaja **bukan** lewat mekanisme
+  edit-config.yaml-lalu-restart yang dipakai toggle Terminal/ganti port (lihat §4.7 di
+  bawah) — tile ini diharapkan ditambah/diedit/dihapus santai dan sering, bukan pengaturan
+  langka yang pantas membenarkan restart proses tiap kali berubah.
+- **Validasi & keamanan** (`internal/quicklinks`, semua di sisi server, bukan cuma
+  client-side): URL tujuan tile harus `http://` atau `https://` — skema lain (`javascript:`,
+  `data:`, dsb) ditolak, karena nilai ini dipakai langsung sebagai `href` tile
+  (`target="_blank" rel="noopener noreferrer"`). Icon boleh URL gambar biasa, atau data base64
+  (dengan atau tanpa prefix `data:...;base64,`) — kalau base64, byte hasil decode disniff
+  server-side (`http.DetectContentType` + pengecekan khusus SVG, yang disniff manual karena
+  SVG teks XML tidak dikenali sniffer bawaan) dan harus salah satu dari
+  PNG/JPEG/GIF/WebP/SVG, maksimum 150KB per icon — bukan dipercaya begitu saja dari
+  content-type yang diklaim client. Icon SVG aman dari eksekusi script tersemat karena
+  **selalu** dirender lewat `<img src="...">` di frontend (bukan `v-html`) — browser
+  mensandbox SVG yang dimuat lewat `<img>`, `<script>` di dalamnya tidak jalan. Maksimum 60
+  tile custom (`maxLinks`) — bukan batas produk, cuma pagar sama seperti batas-batas lain di
+  aplikasi ini (ukuran upload, concurrent ops), untuk kondisi tak terbatas yang jelas bukan
+  pemakaian wajar.
+- **Layout**: grid `auto-fill`/`minmax`, bukan jumlah kolom tetap — otomatis menyesuaikan
+  berapa pun jumlah tile (bawaan + custom) tanpa perlu diubah manual tiap kali tile
+  ditambah/dihapus, dan tidak merapatkan kolom jadi terlalu sempit di layar kecil.
+- Edit/hapus tile custom lewat ikon kecil yang muncul saat tile di-hover (tile navigasi bawaan
+  tidak punya ini — tidak bisa diedit/dihapus, itu bagian tetap dari router).
+
 ## 4.7 Pengaturan (Settings)
 
 - ~~Lihat versi aplikasi, uptime service TarOS sendiri~~ — bagian versi sudah ada duluan

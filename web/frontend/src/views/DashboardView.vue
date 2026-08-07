@@ -1,7 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NGrid, NGi, NCard, NSpin, NIcon, NAlert } from 'naive-ui'
-import { ShieldCheck, TriangleAlert, HardDrive, Wifi, Box, LayoutDashboard, Server, FolderOpen, SquareTerminal, Cpu } from '@lucide/vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { NGrid, NGi, NCard, NSpin, NIcon, NAlert, NModal, NForm, NFormItem, NInput, NButton, NPopconfirm, useMessage } from 'naive-ui'
+import {
+  ShieldCheck,
+  TriangleAlert,
+  HardDrive,
+  Wifi,
+  Box,
+  LayoutDashboard,
+  Server,
+  FolderOpen,
+  SquareTerminal,
+  Cpu,
+  Plus,
+  Pencil,
+  Trash2,
+  Link2,
+  ImagePlus,
+} from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
@@ -10,11 +26,16 @@ import { fetchHistory } from '../api/metrics'
 import { dockerApi } from '../api/docker'
 import { serviceApi } from '../api/service'
 import { processesApi } from '../api/processes'
+import { quickLinksApi } from '../api/quicklinks'
+import { ApiError } from '../api/client'
 import { useTerminalStore } from '../stores/terminal'
 import type { Sample } from '../types/metrics'
 import type { Container } from '../types/docker'
 import type { ProcInfo } from '../types/processes'
+import type { QuickLink } from '../types/quicklinks'
 import { formatBytes } from '../utils/format'
+
+const message = useMessage()
 
 const terminal = useTerminalStore()
 const { snapshot, supported: monitoringSupported, statusLoaded: monitoringStatusLoaded } = useMetricsStream()
@@ -210,6 +231,7 @@ onMounted(async () => {
     fetchHistory('diskWrite').then((s) => { diskWriteHistory.value = toPoints(s, 1 / 1024 / 1024) }),
     loadDockerSummary(),
     loadServiceSummary(),
+    loadCustomLinks(),
   ])
 })
 onUnmounted(() => {
@@ -228,19 +250,119 @@ const quickLinks = computed(() => {
   if (terminal.enabled) links.push({ to: '/terminal', label: 'Terminal', icon: SquareTerminal })
   return links
 })
+
+// --- Custom quick links: user-added shortcut tiles (e.g. a link to their
+// Cloudflare or ZeroTier account) — separate from the built-in nav tiles
+// above (those come from the router, these come from the API and can be
+// added/edited/removed from this page). See internal/quicklinks. ---
+const customLinks = ref<QuickLink[]>([])
+
+async function loadCustomLinks() {
+  try {
+    const res = await quickLinksApi.list()
+    customLinks.value = res.links
+  } catch {
+    customLinks.value = []
+  }
+}
+
+const linkModalShow = ref(false)
+const editingLinkId = ref<string | null>(null)
+const linkForm = reactive({ label: '', url: '', icon: '' })
+const linkFormError = ref('')
+const linkSaving = ref(false)
+
+function openAddLinkModal() {
+  editingLinkId.value = null
+  linkForm.label = ''
+  linkForm.url = ''
+  linkForm.icon = ''
+  linkFormError.value = ''
+  linkModalShow.value = true
+}
+
+function openEditLinkModal(link: QuickLink) {
+  editingLinkId.value = link.id
+  linkForm.label = link.label
+  linkForm.url = link.url
+  linkForm.icon = link.icon
+  linkFormError.value = ''
+  linkModalShow.value = true
+}
+
+// Soft client-side cap on the *raw* file before base64 inflation (~33%) —
+// the server's real limit is on decoded bytes (see internal/quicklinks,
+// maxIconBytes), this just avoids reading+uploading an obviously-too-big
+// image only to have the request rejected.
+const MAX_ICON_FILE_BYTES = 200 * 1024
+
+function onIconFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // reset so picking the same file again still fires @change
+  if (!file) return
+  if (file.size > MAX_ICON_FILE_BYTES) {
+    linkFormError.value = `Gambar terlalu besar (maks ${Math.round(MAX_ICON_FILE_BYTES / 1024)}KB) — pakai icon yang lebih kecil`
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    linkForm.icon = String(reader.result ?? '')
+    linkFormError.value = ''
+  }
+  reader.onerror = () => {
+    linkFormError.value = 'Gagal membaca file gambar'
+  }
+  reader.readAsDataURL(file)
+}
+
+async function saveLink() {
+  if (!linkForm.label.trim() || !linkForm.url.trim()) {
+    linkFormError.value = 'Nama dan URL wajib diisi'
+    return
+  }
+  linkSaving.value = true
+  linkFormError.value = ''
+  try {
+    const input = { label: linkForm.label.trim(), url: linkForm.url.trim(), icon: linkForm.icon.trim() }
+    if (editingLinkId.value) {
+      await quickLinksApi.update(editingLinkId.value, input)
+    } else {
+      await quickLinksApi.create(input)
+    }
+    linkModalShow.value = false
+    await loadCustomLinks()
+  } catch (e) {
+    linkFormError.value = e instanceof ApiError ? e.message : 'Gagal menyimpan quick link'
+  } finally {
+    linkSaving.value = false
+  }
+}
+
+async function deleteLink(link: QuickLink) {
+  try {
+    await quickLinksApi.remove(link.id)
+    await loadCustomLinks()
+  } catch (e) {
+    message.error(e instanceof ApiError ? e.message : `Gagal menghapus "${link.label}"`)
+  }
+}
+
 </script>
 
 <template>
   <AppShell>
     <div class="dashboard">
       <div v-if="!monitoringStatusLoaded" class="loading"><NSpin size="large" /></div>
-      <NAlert v-else-if="!monitoringSupported" type="warning" title="Monitoring resource tidak didukung di OS ini" class="unsupported-alert">
-        Dashboard ini menampilkan data CPU/RAM/disk/network yang dibaca langsung dari
-        <code>/proc</code> — bagian khusus Linux yang tidak ada di OS ini. Docker, File
-        Explorer, dan Web Terminal tetap berfungsi normal lewat menu di atas.
-      </NAlert>
-      <div v-else-if="!snapshot" class="loading"><NSpin size="large" /></div>
       <template v-else>
+        <NAlert v-if="!monitoringSupported" type="warning" title="Monitoring resource tidak didukung di OS ini" class="unsupported-alert">
+          Dashboard ini menampilkan data CPU/RAM/disk/network yang dibaca langsung dari
+          <code>/proc</code> — bagian khusus Linux yang tidak ada di OS ini. Docker, File
+          Explorer, dan Web Terminal tetap berfungsi normal lewat menu di atas.
+        </NAlert>
+        <div v-if="monitoringSupported && !snapshot" class="loading"><NSpin size="large" /></div>
+
+        <template v-if="monitoringSupported && snapshot">
         <div class="hero-row">
           <div class="glass-card clock-card">
             <div class="clock-time">{{ clockTime }}</div>
@@ -371,6 +493,7 @@ const quickLinks = computed(() => {
             </NCard>
           </div>
         </div>
+        </template>
 
         <p class="eyebrow section">Akses cepat</p>
         <div class="quick-grid">
@@ -378,8 +501,43 @@ const quickLinks = computed(() => {
             <span class="quick-icon"><NIcon :component="link.icon" size="20" /></span>
             <span class="quick-name">{{ link.label }}</span>
           </RouterLink>
+
+          <a
+            v-for="link in customLinks"
+            :key="link.id"
+            :href="link.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="glass-card quick-tile quick-tile--custom"
+            :title="link.url"
+          >
+            <span class="quick-icon quick-icon--custom">
+              <img v-if="link.icon" :src="link.icon" alt="" class="quick-icon-img" />
+              <NIcon v-else :component="Link2" size="20" />
+            </span>
+            <span class="quick-name">{{ link.label }}</span>
+            <span class="tile-actions">
+              <button type="button" class="tile-action-btn" title="Edit" @click.prevent.stop="openEditLinkModal(link)">
+                <NIcon :component="Pencil" size="13" />
+              </button>
+              <NPopconfirm @positive-click="deleteLink(link)">
+                <template #trigger>
+                  <button type="button" class="tile-action-btn tile-action-btn--danger" title="Hapus" @click.prevent.stop>
+                    <NIcon :component="Trash2" size="13" />
+                  </button>
+                </template>
+                Hapus "{{ link.label }}"?
+              </NPopconfirm>
+            </span>
+          </a>
+
+          <button type="button" class="glass-card quick-tile quick-tile--add" @click="openAddLinkModal">
+            <span class="quick-icon quick-icon--add"><NIcon :component="Plus" size="20" /></span>
+            <span class="quick-name">Tambah</span>
+          </button>
         </div>
 
+        <template v-if="monitoringSupported && snapshot">
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>
             <NCard title="CPU — 15 menit terakhir">
@@ -432,7 +590,39 @@ const quickLinks = computed(() => {
             </NCard>
           </NGi>
         </NGrid>
+        </template>
       </template>
+
+      <NModal v-model:show="linkModalShow" preset="dialog" :title="editingLinkId ? 'Edit Akses Cepat' : 'Tambah Akses Cepat'" style="width: 440px">
+        <NForm label-placement="top" style="margin-top: 4px">
+          <NFormItem label="Nama">
+            <NInput v-model:value="linkForm.label" placeholder="mis. Cloudflare" maxlength="40" show-count @keyup.enter="saveLink" />
+          </NFormItem>
+          <NFormItem label="URL">
+            <NInput v-model:value="linkForm.url" placeholder="https://dash.cloudflare.com" @keyup.enter="saveLink" />
+          </NFormItem>
+          <NFormItem label="Icon (opsional)">
+            <div class="icon-field">
+              <div class="icon-preview">
+                <img v-if="linkForm.icon" :src="linkForm.icon" alt="" />
+                <NIcon v-else :component="ImagePlus" size="18" />
+              </div>
+              <div class="icon-controls">
+                <NInput v-model:value="linkForm.icon" placeholder="URL gambar, atau kode base64" size="small" />
+                <label class="icon-upload-btn">
+                  Upload gambar
+                  <input type="file" accept="image/*" hidden @change="onIconFile" />
+                </label>
+              </div>
+            </div>
+          </NFormItem>
+        </NForm>
+        <NAlert v-if="linkFormError" type="error" :title="linkFormError" style="margin-top: 4px" />
+        <template #action>
+          <NButton quaternary @click="linkModalShow = false">Batal</NButton>
+          <NButton type="primary" :loading="linkSaving" @click="saveLink">Simpan</NButton>
+        </template>
+      </NModal>
     </div>
   </AppShell>
 </template>
@@ -724,12 +914,18 @@ const quickLinks = computed(() => {
   margin-top: 4px;
 }
 
+/* auto-fill + minmax, not a fixed column count: the built-in nav tiles are
+   a known quantity, but customLinks can grow to maxLinks (60, see
+   internal/quicklinks) — this reflows on its own at any count instead of
+   squeezing a fixed number of columns ever-thinner or needing a media
+   query bump every time someone adds another link. */
 .quick-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 12px;
 }
 .quick-tile {
+  position: relative;
   padding: 18px 10px 14px;
   display: flex;
   flex-direction: column;
@@ -738,6 +934,8 @@ const quickLinks = computed(() => {
   text-decoration: none;
   color: inherit;
   cursor: pointer;
+  border: 1px solid var(--glass-border);
+  font-family: var(--font-sans);
   transition: transform 0.18s ease, border-color 0.18s ease;
 }
 .quick-tile:hover {
@@ -756,10 +954,108 @@ const quickLinks = computed(() => {
   place-items: center;
   background: var(--accent-soft);
   color: var(--accent);
+  overflow: hidden;
+}
+.quick-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .quick-name {
   font-size: 0.78rem;
   font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-tile--add {
+  background: transparent;
+  border: 1px dashed var(--glass-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.quick-tile--add:hover {
+  border-color: var(--accent);
+  border-style: dashed;
+}
+.quick-icon--add {
+  background: var(--track);
+  color: var(--text-muted);
+}
+
+.tile-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.quick-tile--custom:hover .tile-actions,
+.quick-tile--custom:focus-within .tile-actions {
+  opacity: 1;
+}
+.tile-action-btn {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 7px;
+  background: var(--glass-strong);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tile-action-btn:hover {
+  color: var(--text);
+  background: var(--track);
+}
+.tile-action-btn--danger:hover {
+  color: var(--danger);
+}
+
+.icon-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.icon-preview {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--track);
+  color: var(--text-faint);
+  overflow: hidden;
+}
+.icon-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.icon-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.icon-upload-btn {
+  align-self: flex-start;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.icon-upload-btn:hover {
+  text-decoration: underline;
 }
 
 .storage-list {
@@ -834,7 +1130,6 @@ const quickLinks = computed(() => {
 @media (max-width: 860px) {
   .hero-row { grid-template-columns: 1fr; }
   .main-grid { grid-template-columns: 1fr; }
-  .quick-grid { grid-template-columns: repeat(3, 1fr); }
   .io-strip { grid-template-columns: 1fr; }
 }
 </style>

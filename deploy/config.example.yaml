@@ -65,3 +65,11 @@ update:
   # resmi dari github.com/tarkiman/taros — set false untuk update manual
   # saja lewat scripts/quick-install.sh.
   enabled: true
+
+dashboard:
+  # /opt/taros, bukan /etc/taros — direktori ini sudah dimiliki (chown -R)
+  # user servis oleh scripts/install.sh untuk keperluan self-update, jadi
+  # aman ditulis proses taros yang berjalan tanpa root tanpa langkah
+  # instalasi tambahan (beda dari /etc/taros, yang cuma file config.yaml/
+  # credentials.yaml spesifiknya yang di-chown, bukan direktorinya).
+  quickLinksFile: "/opt/taros/quick-links.yaml"
