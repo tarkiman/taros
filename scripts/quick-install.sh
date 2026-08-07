@@ -33,6 +33,18 @@ case "$OS_NAME" in
   *) die "cuma mendukung Linux dan macOS — bukan $OS_NAME" ;;
 esac
 
+# Beda dari Linux (butuh root untuk /etc/taros, systemd, dst), jalur macOS di
+# bawah taruh semuanya di $HOME dan sengaja tidak butuh sudo/root sama sekali.
+# Kalau tetap dijalankan lewat `sudo bash`, $HOME dari user pemanggil biasanya
+# masih kepakai (bukan di-reset ke home root) tapi SEMUA file yang dibuat jadi
+# milik root — sesi berikutnya yang dijalankan sebagai user biasa (tanpa sudo,
+# jalur yang benar) langsung gagal permission-denied nulis ke file-file itu.
+# Ditolak eksplisit di sini daripada diam-diam lanjut dan baru ketahuan gagal
+# beberapa langkah kemudian.
+if [[ "$IS_DARWIN" -eq 1 && "$EUID" -eq 0 ]]; then
+  die "jalur macOS tidak butuh sudo/root — jalankan ulang TANPA 'sudo' di depan 'bash': curl -sSL .../quick-install.sh | bash (kalau sebelumnya sempat dijalankan pakai sudo, jalankan 'sudo chown -R \$(whoami):staff ~/taros' dulu untuk benerin ownership sebelum coba lagi)"
+fi
+
 if [[ "$IS_DARWIN" -eq 1 ]]; then
   # macOS: Docker/Files/Terminal jalan penuh, Dashboard/Proses/Service
   # gracefully lapor "tidak didukung" (baca /proc + systemd, Linux-only)
