@@ -687,3 +687,47 @@ ke waktu). Detail komponen visual & implementasi ada di [06-api-ui-ux.md](06-api
   command/shell, cuma mengganti satu file binary dengan asset resmi dari
   `github.com/tarkiman/taros`, dan tetap butuh sesi dashboard yang sudah terautentikasi untuk
   memicunya.
+
+## 4.9 Kompatibilitas macOS
+
+Permintaan langsung dari user: TarOS di-install juga di Mac (motivasi konkret: alternatif
+lebih ringan dari Docker Desktop untuk monitoring Docker). Bukan target device utama TarOS
+(itu tetap STB/Raspberry Pi, lihat [01-overview.md](01-overview.md)), tapi didukung sebagai
+fase pertama yang scope-nya sengaja dibatasi — dibahas dulu dengan user sebelum dikerjakan
+karena beberapa fitur inti nempel erat ke API khusus Linux.
+
+**Jalan penuh tanpa perubahan kode**, dikonfirmasi lewat `GOOS=darwin go build ./...` yang
+sukses tanpa error compile sama sekali (termasuk `syscall.Statfs_t` di `internal/fileexplorer`
+yang sempat dikira berisiko field-nya beda antar OS — ternyata tidak, definisi Go stdlib untuk
+darwin sudah kompatibel):
+- **Docker** — `internal/docker` cuma dial ke `docker.socketPath` dari config, tidak ada
+  hardcode path Linux. Arahkan ke socket Docker Desktop atau Colima di macOS dan langsung
+  jalan, tanpa perubahan kode.
+- **File Explorer** dan **Web Terminal** — pakai API POSIX standar Go (`os`, `creack/pty`),
+  portable ke darwin apa adanya.
+
+**Gracefully tidak didukung** (bukan crash/data kosong tanpa penjelasan) — dua subsistem ini
+murni baca internal Linux, tidak ada padanan langsung yang ditulis untuk fase ini:
+- **Dashboard & Proses** (§4.1) — `internal/collector` baca `/proc` langsung (lihat komentar
+  package doc-nya soal kenapa bukan gopsutil). Tidak ada di macOS sama sekali.
+- **Monitoring Service** (§4.3) — shell out ke `systemctl`/`journalctl`. macOS punya
+  `launchd`/`launchctl`, API dan bentuk datanya beda total (termasuk sistem log — macOS pakai
+  unified logging `log show`, bukan journald) — bukan sekadar path binary yang beda.
+
+Mekanismenya: `web.Deps.SystemMonitoringSupported` (`runtime.GOOS == "linux"`, di-set sekali
+saat startup) dicek di titik-titik berikut. Endpoint status baru,
+`GET /api/system/monitoring-status`, dicek klien **sebelum** membuka koneksi SSE metrics
+sama sekali — sengaja begitu karena `EventSource` bawaan browser tidak punya cara bersih
+untuk memberi tahu "endpoint ini tidak akan pernah mengirim data": kalau endpoint SSE
+langsung dikembalikan 503, browser cuma mencoba reconnect selamanya tanpa pesan jelas.
+Dashboard, halaman Proses, dan Monitoring Service masing-masing menampilkan `NAlert` yang
+menjelaskan **kenapa** (bukan generik "gagal memuat"), sementara Docker/Files/Terminal di
+halaman lain tidak terpengaruh sama sekali.
+
+**Instalasi**: `scripts/quick-install.sh` mendeteksi Darwin dan mengambil jalur terpisah dari
+Linux — paket rilis macOS cuma berisi binary + config contoh (tanpa `install.sh` yang
+mengasumsikan `systemctl`/`useradd`), diletakkan di `~/taros/` dan dijalankan manual, **tanpa
+butuh sudo/root sama sekali**. Belum ada auto-restart/auto-start setara `launchd`'s
+`KeepAlive` di fase ini (itu setara systemd `Restart=always` yang sudah dipakai fitur
+ganti-port/toggle-terminal di Linux) — sengaja ditunda, lihat [10-roadmap.md](10-roadmap.md)
+untuk kenapa dan apa yang dipertimbangkan untuk fase berikutnya kalau memang dibutuhkan.

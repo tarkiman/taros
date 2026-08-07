@@ -23,6 +23,17 @@ type serviceUnitJSON struct {
 // for 170+ units on this dev box, so this queries systemd directly per
 // request — no background cache needed, see docs/05-data-storage.md.
 func (s *Server) handleAPIServicesList(w http.ResponseWriter, r *http.Request) {
+	// Checked explicitly (rather than just letting `systemctl` fail
+	// naturally below, which it already does cleanly) so a non-Linux OS
+	// gets a message about *that*, not a raw "executable file not found
+	// in $PATH" — the exec error is still the right message for the
+	// separate case of Linux-without-systemd (e.g. an Alpine/OpenRC box),
+	// so it's left as the fallback rather than replaced entirely.
+	if !s.deps.SystemMonitoringSupported {
+		writeJSONError(w, http.StatusServiceUnavailable, "Monitoring Service (systemd) tidak didukung di OS ini — fitur ini khusus Linux.")
+		return
+	}
+
 	types := "service"
 	if r.URL.Query().Get("showAll") == "1" {
 		types = "service,socket,timer"

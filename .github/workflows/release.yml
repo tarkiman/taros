@@ -42,6 +42,12 @@ jobs:
           # amd64: not a real TarOS device, but covers WSL2/x86 Linux/CI/dev
           # VMs — see docs/09-deployment.md §9.1.
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-amd64 ./cmd/taros
+          # macOS — Docker/Files/Terminal work fully; Dashboard/Proses/
+          # Service gracefully report "not supported" since they read
+          # Linux-only /proc + shell out to systemd. See
+          # docs/09-deployment.md §9.2 "macOS".
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-darwin-arm64 ./cmd/taros
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" -o dist/taros-darwin-amd64 ./cmd/taros
 
       - name: Package release tarballs
         run: |
@@ -53,6 +59,20 @@ jobs:
             cp deploy/config.example.yaml "$pkg/deploy/config.example.yaml"
             cp deploy/systemd/taros.service "$pkg/deploy/systemd/taros.service"
             chmod +x "$pkg/taros" "$pkg/install.sh"
+            tar -czf "${pkg}.tar.gz" "$pkg"
+          done
+          # macOS gets a simpler package — no install.sh (that assumes
+          # systemd/useradd, neither of which exist on macOS) and no
+          # systemd unit. Just the binary + a config template; quick-
+          # install.sh prints manual run instructions for this OS instead
+          # of trying to run a service installer. See
+          # docs/09-deployment.md §9.2 "macOS".
+          for arch in darwin-arm64 darwin-amd64; do
+            pkg="taros-${GITHUB_REF_NAME}-${arch}"
+            mkdir -p "$pkg"
+            cp "dist/taros-${arch}" "$pkg/taros"
+            cp deploy/config.example.yaml "$pkg/config.example.yaml"
+            chmod +x "$pkg/taros"
             tar -czf "${pkg}.tar.gz" "$pkg"
           done
 

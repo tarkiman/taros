@@ -28,6 +28,11 @@ type processesResponse struct {
 // of rows, so there's no reason to ship the full process table (100+ rows
 // on a busy system) over the wire every time someone switches sort order.
 func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.SystemMonitoringSupported {
+		writeMonitoringUnsupported(w)
+		return
+	}
+
 	procs := append([]store.ProcInfo(nil), s.deps.Store.Processes()...)
 
 	switch r.URL.Query().Get("sortBy") {

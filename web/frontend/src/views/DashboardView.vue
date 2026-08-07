@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { NGrid, NGi, NCard, NSpin, NIcon } from 'naive-ui'
+import { NGrid, NGi, NCard, NSpin, NIcon, NAlert } from 'naive-ui'
 import { ShieldCheck, TriangleAlert, HardDrive, Wifi, Box, LayoutDashboard, Server, FolderOpen, SquareTerminal, Cpu } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
@@ -17,7 +17,7 @@ import type { ProcInfo } from '../types/processes'
 import { formatBytes } from '../utils/format'
 
 const terminal = useTerminalStore()
-const { snapshot } = useMetricsStream()
+const { snapshot, supported: monitoringSupported, statusLoaded: monitoringStatusLoaded } = useMetricsStream()
 
 // ~15 min at a ~1s SSE tick — matches the ring buffer retention documented
 // in docs/02-architecture.md, so the live chart never grows past what the
@@ -233,7 +233,13 @@ const quickLinks = computed(() => {
 <template>
   <AppShell>
     <div class="dashboard">
-      <div v-if="!snapshot" class="loading"><NSpin size="large" /></div>
+      <div v-if="!monitoringStatusLoaded" class="loading"><NSpin size="large" /></div>
+      <NAlert v-else-if="!monitoringSupported" type="warning" title="Monitoring resource tidak didukung di OS ini" class="unsupported-alert">
+        Dashboard ini menampilkan data CPU/RAM/disk/network yang dibaca langsung dari
+        <code>/proc</code> — bagian khusus Linux yang tidak ada di OS ini. Docker, File
+        Explorer, dan Web Terminal tetap berfungsi normal lewat menu di atas.
+      </NAlert>
+      <div v-else-if="!snapshot" class="loading"><NSpin size="large" /></div>
       <template v-else>
         <div class="hero-row">
           <div class="glass-card clock-card">
@@ -436,6 +442,10 @@ const quickLinks = computed(() => {
   display: flex;
   justify-content: center;
   padding: 80px 0;
+}
+
+.unsupported-alert {
+  margin-top: 24px;
 }
 
 .section {

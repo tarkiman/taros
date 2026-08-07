@@ -13,6 +13,11 @@ import (
 // every sseInterval. See docs/02-architecture.md "Kenapa SSE untuk metrics"
 // — one-way server push, no WebSocket needed for this.
 func (s *Server) handleMetricsStream(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.SystemMonitoringSupported {
+		writeMonitoringUnsupported(w)
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -66,6 +71,11 @@ var historySeries = map[string]string{
 }
 
 func (s *Server) handleMetricsHistory(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.SystemMonitoringSupported {
+		writeMonitoringUnsupported(w)
+		return
+	}
+
 	metric := r.URL.Query().Get("metric")
 	series, ok := historySeries[metric]
 	if !ok {

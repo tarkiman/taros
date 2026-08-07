@@ -5,8 +5,8 @@
 **Kebanyakan orang tidak perlu melakukan ini secara manual** — lihat §9.2 "Jalur tercepat" untuk
 instalasi satu perintah yang mengunduh binary dari [GitHub Releases](https://github.com/tarkiman/taros/releases)
 (dibuild otomatis, lihat `.github/workflows/release.yml`). Bagian ini relevan kalau memang mau
-build sendiri (arsitektur di luar ARM64/ARMv7/x86_64, ingin memverifikasi build dari source,
-atau berkontribusi ke proyek).
+build sendiri (arsitektur di luar ARM64/ARMv7/x86_64/darwin, ingin memverifikasi build dari
+source, atau berkontribusi ke proyek).
 
 Go native cross-compile, tanpa CGO (menghindari kebutuhan toolchain C untuk ARM di mesin dev):
 
@@ -21,6 +21,13 @@ GOOS=linux GOARCH=arm CGO_ENABLED=0 GOARM=7 go build -ldflags="-s -w" -o dist/ta
 # Linux x86_64 biasa, dan WSL2 (Windows) yang kernelnya juga Linux x86_64. Lihat §9.2
 # "WSL2 (Windows)" soal requirement systemd di jalur WSL.
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-amd64 ./cmd/taros
+
+# macOS (Apple Silicon & Intel) — Docker/Files/Terminal jalan penuh,
+# Dashboard/Proses/Monitoring Service gracefully tidak didukung (baca
+# internal Linux tanpa padanan di fase ini). Lihat 04-features.md §4.9 dan
+# §9.2 "macOS".
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-darwin-arm64 ./cmd/taros
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-darwin-amd64 ./cmd/taros
 ```
 
 - `-ldflags="-s -w"`: strip debug symbols & DWARF info → mengecilkan ukuran binary
@@ -45,12 +52,13 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/taros-am
 
 ### Jalur tercepat: satu perintah, tanpa build sama sekali
 
-Untuk perangkat ARM64/ARMv7 (Raspberry Pi, kebanyakan STB Android) maupun Linux x86_64/WSL2,
-**tidak perlu Go, Node, atau clone repo di perangkat target sama sekali** —
-`scripts/quick-install.sh` mendeteksi arsitektur, mengunduh binary siap pakai dari
+Untuk perangkat ARM64/ARMv7 (Raspberry Pi, kebanyakan STB Android), Linux x86_64/WSL2, maupun
+macOS, **tidak perlu Go, Node, atau clone repo di perangkat target sama sekali** —
+`scripts/quick-install.sh` mendeteksi OS & arsitektur, mengunduh binary siap pakai dari
 [GitHub Releases](https://github.com/tarkiman/taros/releases) (dibuild otomatis oleh
 `.github/workflows/release.yml` tiap tag `v*` di-push), lalu menjalankan `install.sh` (lihat di
-bawah) untuknya:
+bawah) untuknya — kecuali macOS, yang jalurnya beda total (lihat §9.2 "macOS" di bawah, tidak
+butuh sudo/root sama sekali):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | sudo bash
@@ -94,6 +102,49 @@ yang dicetak di akhir output:
    ```bash
    sudo -u taros /opt/taros/taros --config /etc/taros/config.yaml &
    ```
+
+### macOS
+
+Juga bukan target device utama TarOS, didukung sebagai fase pertama dengan scope sengaja
+dibatasi — lihat [04-features.md](04-features.md) §4.9 untuk rincian apa yang jalan penuh
+(Docker/Files/Terminal) vs. yang gracefully tidak didukung (Dashboard/Proses/Monitoring
+Service, keduanya baca internal khusus Linux tanpa padanan di fase ini).
+
+`quick-install.sh` mendeteksi Darwin secara otomatis dan mengambil jalur yang jauh lebih
+sederhana dari Linux — **tidak butuh sudo/root sama sekali**:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/tarkiman/taros/main/scripts/quick-install.sh | bash
+```
+
+Binary diletakkan di `~/taros/`, tanpa install service/unit apa pun (paket rilis macOS tidak
+menyertakan `install.sh` — itu mengasumsikan `systemctl`/`useradd` yang tidak ada di macOS).
+Setelah unduh selesai:
+
+```bash
+cd ~/taros
+./taros setup --config ./config.yaml   # sekali saja, buat admin
+./taros --config ./config.yaml
+```
+
+**Belum ada auto-start/auto-restart** setara systemd `Restart=always` (dipakai fitur
+ganti-port dan toggle-terminal di Linux) — belum ada padanan `launchd`'s `KeepAlive` di fase
+ini. Servis berhenti kalau terminal ditutup atau Mac restart; jalankan ulang perintah di atas
+secara manual, atau pakai `nohup .../taros --config ./config.yaml &` / tmux/screen kalau mau
+tetap jalan setelah terminal ditutup. Lihat [10-roadmap.md](10-roadmap.md) untuk status
+`launchd` di fase berikutnya.
+
+Untuk Docker, arahkan `docker.socketPath` di `config.yaml` ke socket Docker Desktop atau
+Colima — `internal/docker` tidak hardcode path Linux, jadi ini cuma soal isi config, bukan
+kode:
+
+```yaml
+docker:
+  enabled: true
+  socketPath: "/Users/<user>/.docker/run/docker.sock"   # Docker Desktop, sesuaikan username
+  # atau untuk Colima:
+  # socketPath: "/Users/<user>/.colima/default/docker.sock"
+```
 
 ### Build dari source + `install.sh`
 
