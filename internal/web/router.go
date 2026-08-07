@@ -7,6 +7,7 @@ import (
 	"github.com/tarkiman/taros/internal/auth"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
@@ -90,6 +91,12 @@ type Deps struct {
 	// (Custom)". Unlike most Deps here, mutated directly by its own
 	// handlers (no restart-and-reload), so it's always non-nil.
 	QuickLinks *quicklinks.Store
+
+	// Notify holds Discord alert settings (webhook URL, CPU/RAM/temp
+	// thresholds+durations) — see internal/notify and
+	// docs/04-features.md §4.11. Same "mutated directly, no restart"
+	// shape as QuickLinks above, always non-nil.
+	Notify *notify.Store
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -209,6 +216,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/quick-links", s.requireAuth(s.handleQuickLinksCreate))
 	mux.HandleFunc("PUT /api/quick-links/{id}", s.requireAuth(s.handleQuickLinksUpdate))
 	mux.HandleFunc("DELETE /api/quick-links/{id}", s.requireAuth(s.handleQuickLinksDelete))
+
+	// Discord alert settings — see internal/notify and
+	// docs/04-features.md §4.11. Same "no password re-confirmation" reasoning
+	// as quick links above: this doesn't restart the service or grant any
+	// new capability, it just changes what gets posted to the user's own
+	// Discord webhook.
+	mux.HandleFunc("GET /api/notify/settings", s.requireAuth(s.handleNotifyGet))
+	mux.HandleFunc("PUT /api/notify/settings", s.requireAuth(s.handleNotifyUpdate))
+	mux.HandleFunc("POST /api/notify/test", s.requireAuth(s.handleNotifyTest))
 
 	return recoverMiddleware(loggingMiddleware(mux))
 }

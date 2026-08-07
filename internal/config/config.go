@@ -22,6 +22,7 @@ type Config struct {
 	Terminal     TerminalConfig     `yaml:"terminal"`
 	Update       UpdateConfig       `yaml:"update"`
 	Dashboard    DashboardConfig    `yaml:"dashboard"`
+	Notify       NotifyConfig       `yaml:"notify"`
 }
 
 type ServerConfig struct {
@@ -125,6 +126,16 @@ type DashboardConfig struct {
 	QuickLinksFile string `yaml:"quickLinksFile"`
 }
 
+// NotifyConfig — see docs/04-features.md §4.11 "Notifikasi Discord". Like
+// DashboardConfig.QuickLinksFile above, SettingsFile holds only the path;
+// the actual thresholds/durations/webhook URL live in that file (mutated
+// live, no restart) rather than here — and unlike QuickLinksFile, that
+// file contains a secret (the webhook URL), so it's saved 0600 and
+// git-ignored by default filename (see .gitignore).
+type NotifyConfig struct {
+	SettingsFile string `yaml:"settingsFile"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -176,6 +187,9 @@ func Default() Config {
 		},
 		Dashboard: DashboardConfig{
 			QuickLinksFile: "./quick-links.yaml",
+		},
+		Notify: NotifyConfig{
+			SettingsFile: "./notify.yaml",
 		},
 	}
 }

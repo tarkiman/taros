@@ -24,6 +24,7 @@ import (
 	"github.com/tarkiman/taros/internal/config"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
@@ -132,6 +133,20 @@ func runServer(args []string) {
 		quickLinks = quicklinks.New(cfg.Dashboard.QuickLinksFile)
 	}
 
+	// Same "non-critical, don't block startup" reasoning as quickLinks
+	// above — a corrupt notify.yaml just means alerting starts disabled
+	// until re-saved from the Settings page, not a service that refuses
+	// to start.
+	notifySettings, err := notify.Load(cfg.Notify.SettingsFile)
+	if err != nil {
+		slog.Warn("gagal load pengaturan notifikasi, mulai dengan default (nonaktif)", "path", cfg.Notify.SettingsFile, "err", err)
+		notifySettings = notify.New(cfg.Notify.SettingsFile)
+	}
+	if systemMonitoringSupported {
+		notifyMonitor := notify.NewMonitor(metricsStore, notifySettings)
+		go notifyMonitor.Run(ctx, 10*time.Second)
+	}
+
 	deps := web.Deps{
 		Sessions:                  sessions,
 		Creds:                     creds,
@@ -150,6 +165,7 @@ func runServer(args []string) {
 		Listen:                    cfg.Server.Listen,
 		SystemMonitoringSupported: systemMonitoringSupported,
 		QuickLinks:                quickLinks,
+		Notify:                    notifySettings,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

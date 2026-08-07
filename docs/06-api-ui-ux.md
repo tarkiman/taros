@@ -54,6 +54,9 @@ Endpoint dikelompokkan:
 | `GET /api/auth/session` | Hidrasi auth store Vue saat boot app (`authStore.hydrate()`) → `{authenticated}` atau `{authenticated, username, csrfToken}`. Selalu 200 — "belum login" bukan kondisi error di endpoint ini, karena endpoint ini justru satu-satunya tempat pemanggil tanpa login diharapkan |
 | `POST /api/auth/logout` | Hapus session → `{ok: true}`. JSON sejak semua halaman jadi Vue — sebelumnya redirect karena masih dipanggil dua cara sekaligus (form-post halaman lama + `fetch()` dari Vue), tidak relevan lagi setelah migrasi selesai |
 | `POST /api/settings/password` | Ganti password |
+| `GET /api/notify/settings` | Pengaturan notifikasi Discord saat ini (`{enabled, webhookUrl, cpu, mem, temp}`) — lihat [04-features.md](04-features.md) §4.11 |
+| `PUT /api/notify/settings` | Simpan pengaturan baru (live, tanpa restart) — validasi domain webhook + rentang threshold/durasi di server, sama seperti quick links tanpa password re-confirmation |
+| `POST /api/notify/test` | Body `{webhookUrl?}` — kirim satu pesan test ke URL yang dikirim (atau yang sudah tersimpan kalau kosong), tanpa perlu Save dulu |
 
 ### Konvensi
 

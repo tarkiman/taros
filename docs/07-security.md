@@ -273,6 +273,8 @@ bagian ini fokus ke kontrol keamanannya.
 | Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |
 | Fitur update disalahgunakan untuk jalankan binary arbitrer | URL rilis hardcoded ke `github.com/tarkiman/taros`, tidak configurable; tetap butuh sesi terautentikasi + CSRF; `update.enabled` bisa dimatikan |
 | Bug (path traversal, dsb) berdampak ke seluruh sistem, bukan cuma lingkup TarOS | Non-root tetap default (Opsi A/B); mode root (Opsi C, setara CasaOS) hanya lewat pilihan eksplisit saat instalasi, bukan default diam-diam |
+| URL webhook Discord (secret) bocor lewat log/response error | Tidak pernah masuk `slog`/pesan error API (§7.10); file penyimpanannya 0600 dan git-ignored |
+| SSRF lewat field URL webhook notifikasi | Domain divalidasi ketat ke `discord.com`/`discordapp.com`, bukan sekadar `url.Parse` (§7.10) |
 
 ## 7.9 Update Aplikasi
 

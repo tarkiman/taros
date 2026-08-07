@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NSpace, NSwitch, NInput, NInputNumber, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
+import { NCard, NSpace, NSwitch, NInput, NInputNumber, NSlider, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import { terminalApi } from '../api/terminal'
 import { settingsApi } from '../api/settings'
 import { totpApi } from '../api/totp'
+import { notifyApi, type NotifySettings } from '../api/notify'
 import { ApiError } from '../api/client'
 
 const { t } = useI18n()
@@ -32,6 +33,7 @@ onMounted(() => {
   loadStatus()
   loadTotpStatus()
   loadPortStatus()
+  loadNotifySettings()
 })
 
 // --- toggle flow: switch never applies directly, always goes through a
@@ -269,6 +271,56 @@ function cancelTotpFlow() {
   totpPassword.value = ''
   totpError.value = ''
 }
+
+// --- Discord notifications ---
+// No password-confirm flow like Terminal/Port above (see router.go's
+// comment on these routes) — saving here neither restarts the service nor
+// grants a new capability, same reasoning as quick links.
+const notifyLoading = ref(true)
+const notifySaving = ref(false)
+const notifyTesting = ref(false)
+const notifyForm = ref<NotifySettings>({
+  enabled: false,
+  webhookUrl: '',
+  cpu: { enabled: false, thresholdPct: 90, durationMin: 5 },
+  mem: { enabled: false, thresholdPct: 90, durationMin: 5 },
+  temp: { enabled: false, thresholdC: 80, durationMin: 5 },
+})
+
+async function loadNotifySettings() {
+  notifyLoading.value = true
+  try {
+    notifyForm.value = await notifyApi.get()
+  } catch {
+    message.error(t('settings.notify.loadFailed'))
+  } finally {
+    notifyLoading.value = false
+  }
+}
+
+async function saveNotifySettings() {
+  notifySaving.value = true
+  try {
+    notifyForm.value = await notifyApi.update(notifyForm.value)
+    message.success(t('settings.notify.saved'))
+  } catch (e) {
+    message.error(e instanceof ApiError ? e.message : t('settings.notify.saveFailed'))
+  } finally {
+    notifySaving.value = false
+  }
+}
+
+async function sendNotifyTest() {
+  notifyTesting.value = true
+  try {
+    await notifyApi.test(notifyForm.value.webhookUrl)
+    message.success(t('settings.notify.testSent'))
+  } catch (e) {
+    message.error(e instanceof ApiError ? e.message : t('settings.notify.testFailed'))
+  } finally {
+    notifyTesting.value = false
+  }
+}
 </script>
 
 <template>
@@ -461,6 +513,84 @@ function cancelTotpFlow() {
             </NAlert>
           </NSpace>
         </NCard>
+
+        <NCard embedded size="small" :title="t('settings.notify.title')" style="margin-top: 16px">
+          <div v-if="notifyLoading" class="loading"><NSpin size="small" /></div>
+          <NSpace v-else vertical :size="16">
+            <NSpace align="center" justify="space-between">
+              <span>{{ t('settings.notify.desc') }}</span>
+              <NSwitch v-model:value="notifyForm.enabled" />
+            </NSpace>
+
+            <NSpace vertical :size="8">
+              <span class="text-muted">{{ t('settings.notify.webhookLabel') }}</span>
+              <NSpace :size="8" align="center" :wrap="false">
+                <NInput
+                  v-model:value="notifyForm.webhookUrl"
+                  type="password"
+                  show-password-on="click"
+                  :placeholder="t('settings.notify.webhookPlaceholder')"
+                  style="flex: 1"
+                />
+                <NButton size="small" :disabled="!notifyForm.webhookUrl" :loading="notifyTesting" @click="sendNotifyTest">
+                  {{ t('settings.notify.sendTest') }}
+                </NButton>
+              </NSpace>
+            </NSpace>
+
+            <div class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.cpuLabel') }}</span>
+                <NSwitch v-model:value="notifyForm.cpu.enabled" size="small" />
+              </NSpace>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.threshold') }}: {{ notifyForm.cpu.thresholdPct }}%</span>
+                <NSlider v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.cpu.enabled" />
+              </div>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.duration') }}: {{ t('settings.notify.minutes', { count: notifyForm.cpu.durationMin }) }}</span>
+                <NSlider v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.cpu.enabled" />
+              </div>
+            </div>
+
+            <div class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.memLabel') }}</span>
+                <NSwitch v-model:value="notifyForm.mem.enabled" size="small" />
+              </NSpace>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.threshold') }}: {{ notifyForm.mem.thresholdPct }}%</span>
+                <NSlider v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.mem.enabled" />
+              </div>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.duration') }}: {{ t('settings.notify.minutes', { count: notifyForm.mem.durationMin }) }}</span>
+                <NSlider v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.mem.enabled" />
+              </div>
+            </div>
+
+            <div class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.tempLabel') }}</span>
+                <NSwitch v-model:value="notifyForm.temp.enabled" size="small" />
+              </NSpace>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.threshold') }}: {{ notifyForm.temp.thresholdC }}°C</span>
+                <NSlider v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :disabled="!notifyForm.temp.enabled" />
+              </div>
+              <div class="notify-slider-row">
+                <span class="notify-slider-label">{{ t('settings.notify.duration') }}: {{ t('settings.notify.minutes', { count: notifyForm.temp.durationMin }) }}</span>
+                <NSlider v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.temp.enabled" />
+              </div>
+              <p class="text-muted">{{ t('settings.notify.tempHint') }}</p>
+            </div>
+
+            <NSpace justify="end">
+              <NButton type="primary" size="small" :loading="notifySaving" @click="saveNotifySettings">
+                {{ t('settings.notify.save') }}
+              </NButton>
+            </NSpace>
+          </NSpace>
+        </NCard>
       </template>
     </NCard>
   </AppShell>
@@ -503,5 +633,22 @@ function cancelTotpFlow() {
   gap: 6px 16px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.88rem;
+}
+.notify-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.2));
+  border-radius: 8px;
+}
+.notify-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.notify-slider-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 </style>

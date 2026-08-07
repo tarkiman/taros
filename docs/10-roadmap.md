@@ -1750,6 +1750,67 @@ di-stream lewat SSE ke job-progress panel `FilesView.vue` — transportnya beda 
   (cookie + CSRF token dari login asli), lebih reliable untuk memastikan bentuk JSON persis
   (`code`, `params.detail`) daripada mengejar selector library UI yang fragile.
 
+### Notifikasi Discord (CPU/RAM/Suhu melebihi threshold berkelanjutan)
+
+Diminta langsung: kirim notifikasi ke Discord (via webhook) kalau CPU, RAM, atau suhu CPU
+melebihi threshold **selama lebih dari kurun waktu tertentu** (bukan spike sesaat) — threshold
+dan durasi configurable lewat UI, idealnya pakai slider. User menempel satu URL webhook Discord
+asli langsung di chat untuk dites end-to-end.
+
+- **Package baru `internal/notify`**, ditiru persis dari pola `internal/quicklinks` (fitur
+  paling mirip yang sudah ada): `Store` mutex-guarded, persist ke YAML file terpisah dari
+  `config.yaml` (path configurable lewat `notify.settingsFile`, default `./notify.yaml`),
+  live-mutable tanpa restart service — beda dari `internal/config/mutate.go`'s pola
+  edit-lalu-restart yang dipakai terminal/port, karena thresholds ini memang dimaksudkan
+  ditata-ulang casually, bukan sekali-set.
+- **Beda dari quick-links.yaml**: file ini berisi secret (URL webhook Discord — siapa pun yang
+  punya URL itu bisa post ke channel Discord user), jadi ditulis **0600** (bukan 0644) dan
+  ditambahkan ke `.gitignore` (`/notify.yaml`) — perlakuan sama dengan `credentials.yaml`.
+  Webhook URL divalidasi domainnya ketat (`discord.com`/`discordapp.com` saja) karena field ini
+  jadi origin `http.Post` keluar — cegah SSRF lewat field konfigurasi ini.
+- **Desain kode**: state machine sustained-threshold di `internal/notify.Monitor` — ticker 10
+  detik, mengevaluasi `store.Store.Latest()` (sumber data yang sama dengan Dashboard) per
+  metrik. Breach dicatat waktu mulainya; alert terkirim sekali begitu breach kontinu (tidak
+  boleh drop di antara tick) bertahan ≥ durasi konfigurasi; recovery terkirim sekali begitu
+  metrik turun lagi di bawah threshold. **Sengaja tidak ada notifikasi berulang** selama breach
+  berlangsung — keputusan desain yang disengaja (bukan keterbatasan): mencegah channel Discord
+  banjir pesan tiap 10 detik selama insiden panjang, dan menghindari perlu config tambahan
+  "cooldown/repeat every" yang bikin UI lebih ribet dari yang diminta.
+- **3 metrik independen** (CPU/RAM 1–100%, Suhu CPU 30–120°C, durasi 1–60 menit) — tiap metrik
+  toggle enable sendiri, terpisah dari toggle enable keseluruhan. Perangkat tanpa sensor suhu
+  otomatis dilewati (`len(snap.Temps) == 0`), bukan false-alarm di pembacaan 0°C.
+  Goroutine `Monitor.Run` cuma jalan kalau `systemMonitoringSupported` (gate sama seperti
+  `internal/collector` di `cmd/taros/main.go`).
+- **UI slider** (`NSlider`, dipakai pertama kali di codebase ini — Naive UI tidak auto-import
+  jadi ditambah eksplisit ke import list `SettingsView.vue`) untuk threshold & durasi tiap
+  metrik, dengan angka live di sampingnya. Satu tombol "Simpan" eksplisit (bukan auto-save tiap
+  geser slider) — menghindari spam API saat drag, pola sama seperti alur-alur lain di halaman
+  ini. Tidak pakai alur password-confirm seperti toggle Terminal/Port: fitur ini tidak
+  merestart service atau memberi capability baru, sama seperti quick links.
+- **Endpoint test terpisah** (`POST /api/notify/test`, terima `webhookUrl` opsional di body) —
+  supaya webhook bisa diverifikasi sebelum diklik Save, dipakai juga oleh tombol "Kirim Test"
+  di UI.
+- **Pesan Discord sebagai embed** (bukan `content` teks polos) — merah untuk alert, hijau untuk
+  recovery, biru untuk test, field nilai-saat-ini/threshold/durasi-bertahan, footer
+  `TarOS · <hostname>`. Sengaja tetap Bahasa Indonesia (tidak ikut sistem i18n UI Vue dari fase
+  sebelumnya) — ini pesan ke channel Discord milik user sendiri, bukan bagian UI aplikasi yang
+  perlu dwibahasa.
+- **Kehati-hatian kredensial**: URL webhook yang ditempel user di chat **tidak pernah ditulis
+  ke source code, docs, atau commit apa pun** — cuma dipakai manual lewat API/UI saat pengujian
+  end-to-end di instance dev lokal (tersimpan di `notify.yaml` yang sudah di-gitignore).
+  `internal/notify.sendWebhook`'s error path juga sengaja tidak pernah menyertakan URL webhook
+  itu sendiri (cuma status/body respons Discord), supaya tidak bocor ke `server.log` atau
+  response error API kalau pengiriman gagal.
+- **Diuji end-to-end nyata** dengan webhook Discord asli dari user: validasi negatif (domain
+  webhook salah → 400 `notify_webhook_invalid`, threshold/durasi di luar rentang → 400
+  `notify_threshold_range`/`notify_duration_range`, alert diaktifkan tanpa webhook → 400
+  `notify_webhook_required`), endpoint test (`POST /api/notify/test` → `{sent:true}`), lalu
+  skenario penuh: rule CPU diaktifkan dengan threshold rendah (1%, hampir selalu breach) +
+  durasi minimum (1 menit) → alert 🔴 terkirim setelah breach bertahan cukup lama tanpa error di
+  log; threshold lalu dinaikkan drastis (99.9%) → recovery ✅ terkirim di tick berikutnya begitu
+  nilai turun di bawah threshold baru. Setelah pengujian, `notify.yaml` lokal dibersihkan dan
+  webhook dikosongkan lagi supaya tidak ada kredensial nyala tanpa sepengetahuan user setelahnya.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

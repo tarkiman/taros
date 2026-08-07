@@ -73,3 +73,10 @@ dashboard:
   # instalasi tambahan (beda dari /etc/taros, yang cuma file config.yaml/
   # credentials.yaml spesifiknya yang di-chown, bukan direktorinya).
   quickLinksFile: "/opt/taros/quick-links.yaml"
+
+notify:
+  # Threshold/durasi/URL webhook Discord (lihat docs/04-features.md §4.11)
+  # disimpan di sini, bukan di config.yaml ini — file ini berisi secret
+  # (URL webhook), jadi ditulis 0600, sama perlakuan credentials.yaml.
+  # Lokasi sama alasannya dengan quickLinksFile di atas.
+  settingsFile: "/opt/taros/notify.yaml"
