@@ -1570,6 +1570,59 @@ penuh, Dashboard/Proses/Service gracefully lapor "tidak didukung", instalasi man
     memastikan nol regresi — Dashboard tetap tampil dengan data live seperti sebelum
     perubahan ini sama sekali.
 
+### Akses Cepat (Custom): tile Dashboard buatan user, link ke layanan eksternal
+
+Diminta langsung: user mau bisa menambah tile "Akses Cepat" sendiri di Dashboard yang mengarah
+ke layanan eksternal (contoh yang disebut: akun Cloudflare, akun ZeroTier), lengkap dengan
+icon — boleh URL gambar atau kode base64, termasuk lewat file picker.
+
+- Backend baru, `internal/quicklinks` — daftar `{id, label, url, icon}` disimpan sebagai file
+  YAML sendiri (`dashboard.quickLinksFile`), **bukan** lewat mekanisme edit-config.yaml-lalu-
+  restart yang dipakai toggle Terminal/ganti port (`internal/config/mutate.go`) — tile ini
+  wajar ditambah/diedit/dihapus sering, restart proses tiap kali berubah adalah overkill jelas.
+  Default path di paket Linux: `/opt/taros/quick-links.yaml` — sengaja bukan
+  `/etc/taros/...` seperti `credentialsFile`, karena `/etc/taros` sendiri (bukan cuma
+  file-file di dalamnya) tidak pernah di-chown ke service user oleh `scripts/install.sh`,
+  cuma file spesifik seperti `config.yaml`/`credentials.yaml` yang di-chown satu-satu. Proses
+  servis yang jalan tanpa root tidak akan bisa membuat file baru di `/etc/taros`.
+  `/opt/taros/` sudah `chown -R` ke service user dari sononya (dipakai self-update), jadi
+  dipakai ulang di sini tanpa perlu langkah instalasi tambahan apa pun.
+- **Validasi & sanitasi di server, bukan cuma di UI**: URL tile harus `http://`/`https://` —
+  skema lain (`javascript:` dicoba eksplisit saat pengujian, lihat di bawah) ditolak dengan
+  pesan jelas. Icon (data base64, dengan/tanpa prefix `data:`) di-decode lalu byte-nya
+  disniff pakai `http.DetectContentType` + pengecekan manual untuk SVG (XML teks, tidak
+  dikenali sniffer bawaan net/http) — cuma PNG/JPEG/GIF/WebP/SVG yang diterima, maksimum
+  150KB per icon. SVG aman dari script tersemat karena frontend selalu render lewat
+  `<img src="...">`, tidak pernah `v-html` — sandbox browser bawaan untuk `<img>` sudah cukup.
+- Layout grid "Akses Cepat" diubah dari kolom tetap (`repeat(5, 1fr)`) jadi
+  `repeat(auto-fill, minmax(96px, 1fr))` — poin eksplisit yang diminta user ("sistem otomatis
+  menyesuaikan, tidak merusak tampilan"): tile custom bisa bertambah sampai `maxLinks` (60,
+  pagar bukan batas produk) tanpa perlu ubah CSS/media-query manual tiap kali.
+- Efek samping yang disengaja: section "Akses Cepat" (termasuk tile navigasi bawaan) tadinya
+  ikut tersembunyi total di macOS (lihat entri "Kompatibilitas macOS" di atas) karena berada
+  di dalam blok template yang mensyaratkan `snapshot` metrics ada — padahal section ini sama
+  sekali tidak butuh data `/proc`. Direstrukturisasi supaya "Akses Cepat" (dan sekarang tile
+  custom-nya) tetap tampil di macOS, cuma bagian gauge/chart/storage/network yang tetap
+  disembunyikan di balik cek `monitoringSupported && snapshot`.
+- **Diuji end-to-end** lewat instance nyata + Puppeteer: tambah link (icon base64 mentah tanpa
+  prefix `data:`, dan lewat file picker sungguhan), reject `javascript:alert(1)` sebagai URL
+  (dikonfirmasi pesan error yang muncul), edit label, hapus lewat popconfirm, reload halaman
+  untuk pastikan persist ke disk (dicek juga langsung isi file YAML-nya, bukan cuma lewat UI).
+  Dua kesalahan ditemukan **di skrip pengujian**, bukan di kode aplikasi — dicatat di sini
+  karena sama-sama masuk kategori "kesalahan proses" seperti kejadian `npm run build` di entri
+  macOS di atas:
+  - Percobaan pertama ganti isi field "Nama" saat edit pakai triple-click
+    (`click({clickCount: 3})`) untuk select-all sebelum ketik ulang — tidak reliably men-select
+    isi field NInput di lingkungan ini, hasilnya teks baru numpuk di belakang teks lama
+    ("CloudflareCloudflare Dash"). Diganti pakai `Ctrl+A` sungguhan via `page.keyboard`,
+    langsung benar di percobaan berikutnya.
+  - `page.reload({ waitUntil: 'networkidle0' })` di halaman Dashboard timeout 30 detik — bukan
+    bug persistensi (dicek langsung, data sudah benar tersimpan di file), tapi karena Dashboard
+    selalu punya koneksi `EventSource` (`/api/stream/metrics`) terbuka yang membuat kondisi
+    "0 koneksi network aktif" tidak pernah tercapai. Diganti `waitUntil: 'domcontentloaded'` +
+    `waitForSelector` manual — pola yang sama harus dipakai untuk skrip Puppeteer lain yang
+    me-reload halaman Dashboard ke depannya.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

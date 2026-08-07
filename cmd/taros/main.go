@@ -24,6 +24,7 @@ import (
 	"github.com/tarkiman/taros/internal/config"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/web"
@@ -120,6 +121,17 @@ func runServer(args []string) {
 		SyncEveryBytes:      int64(cfg.FileExplorer.CopySyncEveryMB) * 1024 * 1024,
 	})
 
+	// A load failure here (corrupt YAML, unreadable file) is logged, not
+	// fatal — this is optional Dashboard customization, not core to the
+	// app; falling back to an empty, unsaved store lets the rest of TarOS
+	// come up normally instead of the whole service refusing to start over
+	// a broken quick-links.yaml.
+	quickLinks, err := quicklinks.Load(cfg.Dashboard.QuickLinksFile)
+	if err != nil {
+		slog.Warn("gagal load quick links, mulai dengan daftar kosong", "path", cfg.Dashboard.QuickLinksFile, "err", err)
+		quickLinks = quicklinks.New(cfg.Dashboard.QuickLinksFile)
+	}
+
 	deps := web.Deps{
 		Sessions:                  sessions,
 		Creds:                     creds,
@@ -137,6 +149,7 @@ func runServer(args []string) {
 		CredentialsPath:           cfg.Auth.CredentialsFile,
 		Listen:                    cfg.Server.Listen,
 		SystemMonitoringSupported: systemMonitoringSupported,
+		QuickLinks:                quickLinks,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
