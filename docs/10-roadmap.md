@@ -1811,6 +1811,50 @@ asli langsung di chat untuk dites end-to-end.
   nilai turun di bawah threshold baru. Setelah pengujian, `notify.yaml` lokal dibersihkan dan
   webhook dikosongkan lagi supaya tidak ada kredensial nyala tanpa sepengetahuan user setelahnya.
 
+### Shortcut Folder — File Explorer
+
+Diminta langsung: bisa menandai folder terpilih di File Explorer jadi "shortcut", lalu
+shortcut itu muncul di sidebar File Explorer dan/atau halaman utama Dashboard — **per-shortcut,
+user yang pilih mau ditampilkan di mana**, bukan setting global satu-satunya.
+
+- **Package baru `internal/foldershortcuts`**, ditiru langsung dari `internal/quicklinks`
+  (Fase 5, Akses Cepat Custom) — pola paling mirip yang sudah ada: `Store` mutex-guarded,
+  full-file YAML rewrite, `invalidInputError`+`CodeAndParams`. Beda mendasarnya: datanya bukan
+  URL eksternal tapi path internal di dalam filesystem yang dijaga `fileexplorer.Jail`, jadi
+  butuh validasi jail-boundary + "harus folder yang benar-benar ada" — keputusan desain
+  penting: validasi itu **tidak** ditaruh di package `foldershortcuts` sendiri (biar tidak
+  perlu import `fileexplorer` ke situ), tapi di layer handler (`internal/web`), yang sudah
+  punya akses `Jail.Resolve` yang sama dipakai semua `handlers_files.go`. Package
+  `foldershortcuts` sendiri cuma validasi bentuk data (label, non-duplicate path, minimal
+  satu lokasi tampil dipilih, cap jumlah).
+- **Tidak seperti `notify.yaml`, file ini bukan secret** (cuma path folder, bukan kredensial)
+  — tetap 0644 seperti `quick-links.yaml`, tidak perlu masuk `.gitignore`.
+- **Toggle pin/unpin simetris di row action**: ikon bookmark di kolom Aksi (list view) & tile
+  action (grid view) File Explorer, muncul cuma untuk folder. Klik pada folder belum di-pin
+  → buka modal (nama default nama folder, dua checkbox lokasi tampil, keduanya default
+  tercentang); klik pada folder sudah di-pin → langsung unpin tanpa modal — simetris dengan
+  bintang favorit di aplikasi lain, disengaja low-friction karena re-pin cuma satu klik lagi.
+- **Sidebar File Explorer** dapat section baru di atas tree navigasi folder yang sudah ada
+  (`FileTree.vue`, tidak diubah — section baru ditambah sebagai sibling-nya di
+  `FilesView.vue`, bukan modifikasi komponen itu) — perlu sedikit penyesuaian CSS
+  (`.files-sidebar` jadi flex column, `.file-tree` dapat `flex:1; min-height:0`) supaya tree
+  di bawahnya tetap scroll dengan benar setelah ada section baru di atasnya.
+- **Dashboard dapat section terpisah** (bukan digabung ke grid "Akses Cepat Custom" yang
+  sudah ada — beda semantik: navigasi internal vs link eksternal), cuma dirender kalau ada
+  minimal satu shortcut `showOnDashboard=true`, tanpa tombol "Add" di situ — pembuatan
+  shortcut sengaja dibatasi cuma dari halaman Files, Dashboard murni titik akses cepat +
+  bisa unpin cepat. Tile pakai `RouterLink` ke `/files?path=...`, memanfaatkan routing query
+  yang sudah didukung penuh sejak Fase 3, tidak perlu route baru.
+- **Diuji end-to-end** lewat curl langsung (validasi: path di luar jail → 403
+  `folder_shortcut_path_invalid`; path bukan direktori → 400 kode yang sama; duplicate path →
+  400 `folder_shortcut_duplicate_path`; kedua checkbox lokasi dimatikan → 400
+  `folder_shortcut_no_destination`; label kosong → default nama folder) dan Puppeteer end-to-end
+  nyata (pin dari list-view, sidebar section muncul dengan label benar, klik navigasi ke
+  folder yang tepat, tile Dashboard muncul & bisa diklik & bisa di-unpin) — nol console/page
+  error di seluruh pengujian, dikonfirmasi lewat screenshot bukan cuma teks (dua "gagal" di
+  assertion teks skrip ternyata cuma soal `text-transform: uppercase` CSS pada judul section,
+  bukan bug — dikonfirmasi lewat screenshot render sebenarnya sebelum disimpulkan aman).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

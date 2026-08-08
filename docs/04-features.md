@@ -549,6 +549,40 @@ keandalan inti (baca/edit/simpan tetap aman tanpa fitur-fitur ini):
   langsung dari prinsip least-privilege di [07-security.md](07-security.md), bukan bug yang
   bisa "diperbaiki" tanpa menaikkan privilege proses.
 
+### Shortcut Folder
+
+Folder mana pun bisa ditandai jadi "shortcut" — akses cepat tanpa perlu navigasi ulang lewat
+tree — lewat ikon bookmark di kolom Aksi (list view) atau tombol aksi di tile (grid view),
+muncul cuma untuk baris folder. Tiap shortcut punya dua toggle independen, **dipilih user saat
+membuatnya**: tampil di sidebar File Explorer, tampil di halaman utama Dashboard, atau
+keduanya sekaligus — minimal satu wajib dipilih.
+
+- **Backend**: `internal/foldershortcuts`, pola persis `internal/quicklinks` (Fase 5, Akses
+  Cepat Custom) — `Store` mutex-guarded, persist ke `folder-shortcuts.yaml` sendiri (path
+  configurable lewat `folderShortcuts.settingsFile` di `config.yaml`), live-mutable tanpa
+  restart. Bedanya dari quicklinks: package ini tidak tahu apa-apa soal
+  `fileexplorer.Jail` — validasi jail-boundary + "ini beneran direktori yang ada" dilakukan
+  di `internal/web/handlers_foldershortcuts.go` (pakai `Jail.Resolve` yang sama dipakai semua
+  handler `handlers_files.go`), bukan di package `foldershortcuts` sendiri.
+- **Toggle pin/unpin simetris**: klik ikon bookmark pada folder yang belum di-pin membuka
+  modal (nama default = nama folder, dua checkbox lokasi tampil); klik lagi pada folder yang
+  sudah di-pin langsung unpin, tanpa modal/konfirmasi — sama seperti pola bintang favorit di
+  aplikasi lain, berisiko rendah karena re-pin cuma satu klik lagi.
+- **Sidebar** (di atas tree navigasi folder, `FilesView.vue`): daftar shortcut yang
+  `showInSidebar=true`, klik navigasi langsung, ada aksi edit (ganti nama/lokasi tampil,
+  path sendiri tidak bisa diubah dari sini — cuma cara mengubah path adalah unpin lalu pin
+  ulang dari folder yang benar) dan hapus. Section tidak dirender sama sekali kalau belum ada
+  shortcut apa pun — sidebar tetap bersih untuk instalasi baru.
+- **Dashboard** (`DashboardView.vue`): section terpisah di bawah "Akses Cepat (Custom)"
+  (semantiknya beda — navigasi internal, bukan link eksternal), berisi shortcut
+  `showOnDashboard=true`, tiap tile `RouterLink` ke `/files?path=...` (routing query yang
+  sudah didukung penuh sejak awal Fase 3). Tidak ada tombol "Add" di Dashboard — pembuatan
+  shortcut cuma lewat halaman Files, Dashboard murni titik akses cepat + bisa unpin cepat.
+- **Validasi**: path harus resolve di dalam jail root & benar-benar direktori (403/400
+  `folder_shortcut_path_invalid`), tidak boleh duplikat (`folder_shortcut_duplicate_path`),
+  minimal satu lokasi tampil dipilih (`folder_shortcut_no_destination`), cap 40 shortcut
+  (sanity limit, sama semangat `quicklinks.maxLinks`).
+
 ## 4.5 Web Terminal
 
 - Halaman `/terminal` menampilkan emulator terminal penuh-layar (xterm.js) yang terhubung

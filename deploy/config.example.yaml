@@ -80,3 +80,9 @@ notify:
   # (URL webhook), jadi ditulis 0600, sama perlakuan credentials.yaml.
   # Lokasi sama alasannya dengan quickLinksFile di atas.
   settingsFile: "/opt/taros/notify.yaml"
+
+folderShortcuts:
+  # Folder yang di-pin dari File Explorer (lihat docs/04-features.md §4.4
+  # "Shortcut Folder") — bukan secret (cuma path), jadi 0644 seperti
+  # quickLinksFile, tidak seperti notify.yaml di atas.
+  settingsFile: "/opt/taros/folder-shortcuts.yaml"

@@ -7,6 +7,7 @@ import (
 	"github.com/tarkiman/taros/internal/auth"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/foldershortcuts"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
@@ -97,6 +98,12 @@ type Deps struct {
 	// docs/04-features.md §4.11. Same "mutated directly, no restart"
 	// shape as QuickLinks above, always non-nil.
 	Notify *notify.Store
+
+	// FolderShortcuts holds the user's pinned File Explorer folders — see
+	// internal/foldershortcuts and docs/04-features.md §4.4 "Shortcut
+	// Folder". Same "mutated directly, no restart" shape as QuickLinks
+	// above, always non-nil.
+	FolderShortcuts *foldershortcuts.Store
 }
 
 // Server holds everything HTTP handlers need. It has no framework
@@ -225,6 +232,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notify/settings", s.requireAuth(s.handleNotifyGet))
 	mux.HandleFunc("PUT /api/notify/settings", s.requireAuth(s.handleNotifyUpdate))
 	mux.HandleFunc("POST /api/notify/test", s.requireAuth(s.handleNotifyTest))
+
+	// Pinned File Explorer folders — see internal/foldershortcuts and
+	// docs/04-features.md §4.4. Same "no password re-confirmation" reasoning
+	// as quick links/notify settings above.
+	mux.HandleFunc("GET /api/folder-shortcuts", s.requireAuth(s.handleFolderShortcutsList))
+	mux.HandleFunc("POST /api/folder-shortcuts", s.requireAuth(s.handleFolderShortcutsCreate))
+	mux.HandleFunc("PUT /api/folder-shortcuts/{id}", s.requireAuth(s.handleFolderShortcutsUpdate))
+	mux.HandleFunc("DELETE /api/folder-shortcuts/{id}", s.requireAuth(s.handleFolderShortcutsDelete))
 
 	return recoverMiddleware(loggingMiddleware(mux))
 }
