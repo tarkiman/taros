@@ -547,8 +547,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.cpu.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.cpu.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>%</template>
                     </NInputNumber>
                   </div>
@@ -556,8 +556,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.cpu.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.cpu.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                     </NInputNumber>
                   </div>
@@ -574,8 +574,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.mem.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.mem.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>%</template>
                     </NInputNumber>
                   </div>
@@ -583,8 +583,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.mem.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.mem.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                     </NInputNumber>
                   </div>
@@ -601,8 +601,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :disabled="!notifyForm.temp.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :disabled="!notifyForm.temp.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>°C</template>
                     </NInputNumber>
                   </div>
@@ -610,8 +610,8 @@ async function sendNotifyTest() {
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
                   <div class="notify-slider-combo">
-                    <NSlider v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
-                    <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                    <NSlider v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.temp.enabled" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.temp.enabled" :show-button="false" size="small" class="notify-combo-input">
                       <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                     </NInputNumber>
                   </div>

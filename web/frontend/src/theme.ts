@@ -14,6 +14,7 @@ interface ColorTokens {
   glass: string
   glassStrong: string
   glassBorder: string
+  switchRailOff: string
 }
 
 // Mirrors src/style/tokens.css so Naive UI components (buttons, cards,
@@ -34,6 +35,12 @@ export const tokens: { dark: ColorTokens; light: ColorTokens } = {
     glass: 'rgba(23, 27, 34, 0.55)',
     glassStrong: 'rgba(23, 27, 34, 0.72)',
     glassBorder: 'rgba(255, 255, 255, 0.09)',
+    // Naive UI's default unchecked Switch rail is a dark grey that blends
+    // almost invisibly into this theme's dark cards — a user missed a
+    // switch entirely because of it. Deliberately lighter than any other
+    // dark-mode surface token so an off switch always reads as "a switch",
+    // not as part of the background.
+    switchRailOff: '#4a5160',
   },
   light: {
     bg: '#f4f5f7',
@@ -49,6 +56,7 @@ export const tokens: { dark: ColorTokens; light: ColorTokens } = {
     glass: 'rgba(255, 255, 255, 0.62)',
     glassStrong: 'rgba(255, 255, 255, 0.82)',
     glassBorder: 'rgba(20, 22, 26, 0.08)',
+    switchRailOff: '#c0c4cc',
   },
 }
 
@@ -81,6 +89,7 @@ function overridesFor(t: ColorTokens): GlobalThemeOverrides {
     Card: { color: t.glass, borderColor: t.glassBorder },
     Layout: { color: 'transparent', siderColor: t.glass, headerColor: t.glass },
     Menu: { color: 'transparent' },
+    Switch: { railColor: t.switchRailOff },
   }
 }
 
