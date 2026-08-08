@@ -546,13 +546,13 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.cpu.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" style="width: 100%">
                     <template #suffix>%</template>
                   </NInputNumber>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.cpu.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" style="width: 100%">
                     <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                   </NInputNumber>
                 </div>
@@ -567,13 +567,13 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.mem.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" style="width: 100%">
                     <template #suffix>%</template>
                   </NInputNumber>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.mem.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" style="width: 100%">
                     <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                   </NInputNumber>
                 </div>
@@ -588,13 +588,13 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :disabled="!notifyForm.temp.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" style="width: 100%">
                     <template #suffix>°C</template>
                   </NInputNumber>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.temp.enabled" style="width: 100%">
+                  <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" style="width: 100%">
                     <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
                   </NInputNumber>
                 </div>
