@@ -99,9 +99,11 @@ async function containerAction(id: string, action: 'start' | 'stop' | 'restart' 
 const logDrawerOpen = ref(false)
 const logContainerId = ref('')
 const logContainerName = ref('')
-const logSinceMin = ref(15)
+const logSinceMin = ref(5)
 const LOG_TAIL = 500
 const logSinceOptions = [
+  { label: t('docker.logs.last5m'), value: 5 },
+  { label: t('docker.logs.last10m'), value: 10 },
   { label: t('docker.logs.last15m'), value: 15 },
   { label: t('docker.logs.last1h'), value: 60 },
   { label: t('docker.logs.last6h'), value: 360 },
@@ -112,22 +114,54 @@ const logsStream = useContainerLogsStream()
 const logScrollEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 
+// If the connection hasn't opened within a few seconds — e.g. a container
+// with an unusually large log history taking longer than expected to
+// respond, or a dropped connection — show a hint plus a manual reconnect
+// button instead of leaving "Connecting…" up with no way out. Cleared as
+// soon as the SSE connection actually opens.
+const logConnectSlow = ref(false)
+let logConnectSlowTimer: ReturnType<typeof setTimeout> | undefined
+
+function startLogs(id: string, sinceMin: number) {
+  logConnectSlow.value = false
+  if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  logConnectSlowTimer = setTimeout(() => {
+    if (!logsStream.connected.value) logConnectSlow.value = true
+  }, 6000)
+  logsStream.open(id, sinceMin, LOG_TAIL)
+}
+
+function reconnectLogs() {
+  autoScroll.value = true
+  startLogs(logContainerId.value, logSinceMin.value)
+}
+
 function openLogs(container: Container) {
   logContainerId.value = container.id
   logContainerName.value = container.name
   logDrawerOpen.value = true
   autoScroll.value = true
-  logsStream.open(container.id, logSinceMin.value, LOG_TAIL)
+  startLogs(container.id, logSinceMin.value)
 }
 
 watch(logSinceMin, (min) => {
   if (!logDrawerOpen.value) return
   autoScroll.value = true
-  logsStream.open(logContainerId.value, min, LOG_TAIL)
+  startLogs(logContainerId.value, min)
 })
 
 watch(logDrawerOpen, (open) => {
-  if (!open) logsStream.close()
+  if (!open) {
+    logsStream.close()
+    if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  }
+})
+
+watch(logsStream.connected, (connected) => {
+  if (connected) {
+    logConnectSlow.value = false
+    if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  }
 })
 
 watch(
@@ -454,6 +488,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (containersTimer) clearInterval(containersTimer)
+  if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
   logsStream.close()
 })
 </script>
@@ -533,9 +568,13 @@ onUnmounted(() => {
           size="small"
           style="width: 150px; margin-bottom: 10px"
         />
+        <div v-if="logsStream.lines.value.length === 0 && !logsStream.connected.value" class="log-empty">
+          <p>{{ logConnectSlow ? t('docker.logs.connectingSlow') : t('docker.logs.connecting') }}</p>
+          <NButton v-if="logConnectSlow" size="tiny" @click="reconnectLogs">{{ t('docker.logs.reconnect') }}</NButton>
+        </div>
         <div ref="logScrollEl" class="log-scroll" @scroll="onLogScroll">
-          <p v-if="logsStream.lines.value.length === 0" class="log-empty">
-            {{ logsStream.connected.value ? t('docker.logs.waiting') : t('docker.logs.connecting') }}
+          <p v-if="logsStream.lines.value.length === 0 && logsStream.connected.value" class="log-empty">
+            {{ t('docker.logs.waiting') }}
           </p>
           <div v-for="(line, i) in logsStream.lines.value" :key="i" class="log-line" :class="{ 'log-line--stderr': line.stream === 'stderr' }">
             <span v-if="line.timestamp" class="log-ts">{{ formatLogTimestamp(line.timestamp) }}</span>
@@ -564,6 +603,9 @@ onUnmounted(() => {
 }
 .log-empty {
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .log-line {
   display: flex;
