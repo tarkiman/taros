@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NSpace, NSwitch, NInput, NInputNumber, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
+import { NCard, NSpace, NSwitch, NInput, NInputNumber, NSlider, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
@@ -546,15 +546,21 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.cpu.enabled" style="width: 100%">
-                    <template #suffix>%</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.cpu.thresholdPct" :min="50" :max="100" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>%</template>
+                    </NInputNumber>
+                  </div>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.cpu.enabled" style="width: 100%">
-                    <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.cpu.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
+                    </NInputNumber>
+                  </div>
                 </div>
               </div>
             </div>
@@ -567,15 +573,21 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :disabled="!notifyForm.mem.enabled" style="width: 100%">
-                    <template #suffix>%</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.mem.thresholdPct" :min="50" :max="100" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>%</template>
+                    </NInputNumber>
+                  </div>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.mem.enabled" style="width: 100%">
-                    <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.mem.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
+                    </NInputNumber>
+                  </div>
                 </div>
               </div>
             </div>
@@ -588,15 +600,21 @@ async function sendNotifyTest() {
               <div class="notify-field-grid">
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.threshold') }}</span>
-                  <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :disabled="!notifyForm.temp.enabled" style="width: 100%">
-                    <template #suffix>°C</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.temp.thresholdC" :min="30" :max="120" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>°C</template>
+                    </NInputNumber>
+                  </div>
                 </div>
                 <div class="notify-field">
                   <span class="notify-field-label">{{ t('settings.notify.duration') }}</span>
-                  <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.temp.enabled" style="width: 100%">
-                    <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
-                  </NInputNumber>
+                  <div class="notify-slider-combo">
+                    <NSlider v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" style="flex: 1" />
+                    <NInputNumber v-model:value="notifyForm.temp.durationMin" :min="1" :max="60" :step="1" :show-button="false" size="small" class="notify-combo-input">
+                      <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
+                    </NInputNumber>
+                  </div>
                 </div>
               </div>
               <p class="text-muted">{{ t('settings.notify.tempHint') }}</p>
@@ -673,5 +691,14 @@ async function sendNotifyTest() {
 .notify-field-label {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+.notify-slider-combo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.notify-combo-input {
+  flex: 0 0 76px;
+  width: 76px;
 }
 </style>
