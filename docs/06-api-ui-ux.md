@@ -57,6 +57,10 @@ Endpoint dikelompokkan:
 | `GET /api/notify/settings` | Pengaturan notifikasi Discord saat ini (`{enabled, webhookUrl, cpu, mem, temp}`) — lihat [04-features.md](04-features.md) §4.11 |
 | `PUT /api/notify/settings` | Simpan pengaturan baru (live, tanpa restart) — validasi domain webhook + rentang threshold/durasi di server, sama seperti quick links tanpa password re-confirmation |
 | `POST /api/notify/test` | Body `{webhookUrl?}` — kirim satu pesan test ke URL yang dikirim (atau yang sudah tersimpan kalau kosong), tanpa perlu Save dulu |
+| `GET /api/folder-shortcuts` | Daftar folder yang di-pin (`{shortcuts: [...]}`) — lihat [04-features.md](04-features.md) §4.4 "Shortcut Folder" |
+| `POST /api/folder-shortcuts` | Body `{label?, path, showInSidebar, showOnDashboard}` — `path` divalidasi lewat `Jail.Resolve` + wajib direktori sebelum disimpan; `label` kosong default ke nama folder |
+| `PUT /api/folder-shortcuts/{id}` | Sama body, replace penuh (path ikut re-validasi) |
+| `DELETE /api/folder-shortcuts/{id}` | Unpin |
 
 ### Konvensi
 

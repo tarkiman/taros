@@ -24,6 +24,7 @@ import (
 	"github.com/tarkiman/taros/internal/config"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
+	"github.com/tarkiman/taros/internal/foldershortcuts"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
@@ -147,6 +148,14 @@ func runServer(args []string) {
 		go notifyMonitor.Run(ctx, 10*time.Second)
 	}
 
+	// Same "non-critical, don't block startup" reasoning as quickLinks
+	// above.
+	folderShortcuts, err := foldershortcuts.Load(cfg.FolderShortcuts.SettingsFile)
+	if err != nil {
+		slog.Warn("gagal load folder shortcuts, mulai dengan daftar kosong", "path", cfg.FolderShortcuts.SettingsFile, "err", err)
+		folderShortcuts = foldershortcuts.New(cfg.FolderShortcuts.SettingsFile)
+	}
+
 	deps := web.Deps{
 		Sessions:                  sessions,
 		Creds:                     creds,
@@ -166,6 +175,7 @@ func runServer(args []string) {
 		SystemMonitoringSupported: systemMonitoringSupported,
 		QuickLinks:                quickLinks,
 		Notify:                    notifySettings,
+		FolderShortcuts:           folderShortcuts,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)

@@ -100,6 +100,13 @@ onMounted(loadRoot)
   padding: 4px;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Sized to fill remaining space when nested in FilesView.vue's
+     .files-sidebar flex column (below the shortcuts section, when
+     present) — flex:0 0 auto there means this needs to claim the rest
+     explicitly, and min-height:0 is required for a flex child to actually
+     shrink and scroll instead of overflowing its parent. */
+  flex: 1;
+  min-height: 0;
 }
 .tree-loading {
   display: flex;

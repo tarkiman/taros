@@ -110,6 +110,16 @@ const (
 	NotifySaveFailed      = "notify_save_failed"     // params: detail
 	NotifyTestFailed      = "notify_test_failed"     // params: detail
 
+	// handlers_foldershortcuts.go / internal/foldershortcuts
+	FolderShortcutNotFound      = "folder_shortcut_not_found"
+	FolderShortcutPathInvalid   = "folder_shortcut_path_invalid" // params: detail
+	FolderShortcutPathRequired  = "folder_shortcut_path_required"
+	FolderShortcutDuplicatePath = "folder_shortcut_duplicate_path"
+	FolderShortcutNoDestination = "folder_shortcut_no_destination"
+	FolderShortcutLabelTooLong  = "folder_shortcut_label_too_long" // params: max
+	MaxFolderShortcutsReached   = "max_folder_shortcuts_reached"   // params: max
+	FolderShortcutsSaveFailed   = "folder_shortcuts_save_failed"   // params: detail
+
 	// SSE job errors (internal/fileexplorer.JobSnapshot, separate transport
 	// from apiErrorBody — see FilesView.vue's job panel).
 	JobFailed = "job_failed" // params: detail

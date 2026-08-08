@@ -13,16 +13,17 @@ import (
 )
 
 type Config struct {
-	Server       ServerConfig       `yaml:"server"`
-	Auth         AuthConfig         `yaml:"auth"`
-	Polling      PollingConfig      `yaml:"polling"`
-	Docker       DockerConfig       `yaml:"docker"`
-	Systemd      SystemdConfig      `yaml:"systemd"`
-	FileExplorer FileExplorerConfig `yaml:"fileExplorer"`
-	Terminal     TerminalConfig     `yaml:"terminal"`
-	Update       UpdateConfig       `yaml:"update"`
-	Dashboard    DashboardConfig    `yaml:"dashboard"`
-	Notify       NotifyConfig       `yaml:"notify"`
+	Server          ServerConfig          `yaml:"server"`
+	Auth            AuthConfig            `yaml:"auth"`
+	Polling         PollingConfig         `yaml:"polling"`
+	Docker          DockerConfig          `yaml:"docker"`
+	Systemd         SystemdConfig         `yaml:"systemd"`
+	FileExplorer    FileExplorerConfig    `yaml:"fileExplorer"`
+	Terminal        TerminalConfig        `yaml:"terminal"`
+	Update          UpdateConfig          `yaml:"update"`
+	Dashboard       DashboardConfig       `yaml:"dashboard"`
+	Notify          NotifyConfig          `yaml:"notify"`
+	FolderShortcuts FolderShortcutsConfig `yaml:"folderShortcuts"`
 }
 
 type ServerConfig struct {
@@ -136,6 +137,14 @@ type NotifyConfig struct {
 	SettingsFile string `yaml:"settingsFile"`
 }
 
+// FolderShortcutsConfig — see docs/04-features.md §4.4 "Shortcut Folder".
+// Same "path only, actual data lives elsewhere, live-mutable" shape as
+// NotifyConfig/DashboardConfig.QuickLinksFile above — not secret, so
+// unlike NotifyConfig's file this one doesn't need 0600/git-ignore.
+type FolderShortcutsConfig struct {
+	SettingsFile string `yaml:"settingsFile"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -190,6 +199,9 @@ func Default() Config {
 		},
 		Notify: NotifyConfig{
 			SettingsFile: "./notify.yaml",
+		},
+		FolderShortcuts: FolderShortcutsConfig{
+			SettingsFile: "./folder-shortcuts.yaml",
 		},
 	}
 }

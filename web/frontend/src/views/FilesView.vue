@@ -37,16 +37,22 @@ import {
   LayoutGrid,
   PanelLeftClose,
   PanelLeftOpen,
+  Bookmark,
+  BookmarkX,
+  FolderBookmark,
 } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import FileTree from '../components/files/FileTree.vue'
 import FilePreviewOverlay from '../components/files/FilePreviewOverlay.vue'
+import ShortcutModal from '../components/files/ShortcutModal.vue'
 import { isImage, isVideo, isAudio, isPreviewable, iconFor } from '../components/files/filetypes'
 import { usePlayerStore } from '../stores/player'
 import { filesApi, watchJob } from '../api/files'
 import { getCsrfToken } from '../api/client'
 import { ApiError } from '../api/client'
+import { folderShortcutsApi } from '../api/folderShortcuts'
 import type { Entry, Breadcrumb, JobSnapshot } from '../types/files'
+import type { FolderShortcut } from '../types/folderShortcuts'
 import { formatBytes, formatDate } from '../utils/format'
 
 const { t, te } = useI18n()
@@ -147,6 +153,65 @@ watch(searchQuery, () => {
 
 function fullPath(name: string) {
   return `${resolvedPath.value}/${name}`.replace(/\/+/g, '/')
+}
+
+// --- Folder shortcuts (pin a folder for quick access in the sidebar
+// below and/or the Dashboard, see DashboardView.vue) ---
+const shortcuts = ref<FolderShortcut[]>([])
+const shortcutByPath = computed(() => new Map(shortcuts.value.map((s) => [s.path, s])))
+const sidebarShortcuts = computed(() => shortcuts.value.filter((s) => s.showInSidebar))
+
+async function loadShortcuts() {
+  try {
+    shortcuts.value = (await folderShortcutsApi.list()).shortcuts
+  } catch {
+    // Non-critical — sidebar/dashboard just show no shortcuts rather than
+    // breaking the rest of the page.
+    shortcuts.value = []
+  }
+}
+
+const shortcutModalShow = ref(false)
+const shortcutModalPath = ref('')
+const editingShortcut = ref<FolderShortcut | null>(null)
+
+function openPinModal(path: string) {
+  editingShortcut.value = null
+  shortcutModalPath.value = path
+  shortcutModalShow.value = true
+}
+
+function openEditShortcutModal(sc: FolderShortcut) {
+  editingShortcut.value = sc
+  shortcutModalShow.value = true
+}
+
+// Toggling an already-pinned folder's bookmark icon unpins it directly
+// (no confirm) — symmetric with how a "favorite" star usually behaves;
+// re-pinning is one click away via the same icon, so this stays low-risk
+// despite the lack of a confirmation step.
+async function toggleShortcut(entry: Entry) {
+  const path = fullPath(entry.name)
+  const existing = shortcutByPath.value.get(path)
+  if (existing) {
+    try {
+      await folderShortcutsApi.remove(existing.id)
+      await loadShortcuts()
+    } catch (e) {
+      message.error(e instanceof ApiError ? e.message : t('files.shortcuts.deleteFailed'))
+    }
+    return
+  }
+  openPinModal(path)
+}
+
+async function deleteShortcut(sc: FolderShortcut) {
+  try {
+    await folderShortcutsApi.remove(sc.id)
+    await loadShortcuts()
+  } catch (e) {
+    message.error(e instanceof ApiError ? e.message : t('files.shortcuts.deleteFailed'))
+  }
 }
 
 function editorHref(entry: Entry) {
@@ -394,7 +459,7 @@ const columns = computed<DataTableColumns<Entry>>(() => [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 190,
+    width: 225,
     render: (row) =>
       h(NSpace, { size: 'small' }, () => [
         row.isDir
@@ -406,6 +471,20 @@ const columns = computed<DataTableColumns<Entry>>(() => [
             ),
         row.isDir
           ? h(NButton, { size: 'tiny', tag: 'a', href: filesApi.downloadUrl(fullPath(row.name)) }, () => 'Zip')
+          : null,
+        row.isDir
+          ? h(
+              NButton,
+              {
+                size: 'tiny',
+                type: shortcutByPath.value.has(fullPath(row.name)) ? 'primary' : 'default',
+                ghost: shortcutByPath.value.has(fullPath(row.name)),
+                onClick: () => toggleShortcut(row),
+                title: shortcutByPath.value.has(fullPath(row.name)) ? t('files.shortcuts.unpin') : t('files.shortcuts.pin'),
+                'aria-label': t('files.shortcuts.pinAria', { name: row.name }),
+              },
+              { icon: () => h(NIcon, { component: shortcutByPath.value.has(fullPath(row.name)) ? BookmarkX : Bookmark }) },
+            )
           : null,
         h(
           NButton,
@@ -429,7 +508,10 @@ const columns = computed<DataTableColumns<Entry>>(() => [
   },
 ])
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  loadShortcuts()
+})
 onUnmounted(() => stopWatch?.())
 </script>
 
@@ -503,6 +585,28 @@ onUnmounted(() => stopWatch?.())
 
     <div class="files-shell" :class="{ 'sidebar-collapsed': !sidebarOpen }">
       <aside class="files-sidebar" v-show="sidebarOpen">
+        <div v-if="sidebarShortcuts.length > 0" class="shortcuts-section">
+          <p class="shortcuts-heading">{{ t('files.shortcuts.sectionTitle') }}</p>
+          <div v-for="sc in sidebarShortcuts" :key="sc.id" class="shortcut-row" :class="{ active: sc.path === resolvedPath }">
+            <button type="button" class="shortcut-link" :title="sc.path" @click="navigateTo(sc.path)">
+              <NIcon :component="FolderBookmark" size="15" />
+              <span class="shortcut-label">{{ sc.label }}</span>
+            </button>
+            <span class="shortcut-actions">
+              <button type="button" class="shortcut-action-btn" :title="t('common.edit')" @click="openEditShortcutModal(sc)">
+                <NIcon :component="Pencil" size="12" />
+              </button>
+              <NPopconfirm @positive-click="deleteShortcut(sc)">
+                <template #trigger>
+                  <button type="button" class="shortcut-action-btn" :title="t('common.delete')" @click.stop>
+                    <NIcon :component="Trash2" size="12" />
+                  </button>
+                </template>
+                {{ t('files.shortcuts.confirmDelete', { name: sc.label }) }}
+              </NPopconfirm>
+            </span>
+          </div>
+        </div>
         <FileTree :active-path="resolvedPath" @navigate="navigateTo" />
       </aside>
 
@@ -574,6 +678,17 @@ onUnmounted(() => stopWatch?.())
                   :title="t('files.download')"
                   :aria-label="t('files.downloadAria', { name: entry.name })"
                 ><NIcon :component="Download" size="14" /></a>
+                <button
+                  v-if="entry.isDir"
+                  type="button"
+                  class="grid-action-btn"
+                  :class="{ 'grid-action-btn--active': shortcutByPath.has(fullPath(entry.name)) }"
+                  :title="shortcutByPath.has(fullPath(entry.name)) ? t('files.shortcuts.unpin') : t('files.shortcuts.pin')"
+                  :aria-label="t('files.shortcuts.pinAria', { name: entry.name })"
+                  @click="toggleShortcut(entry)"
+                >
+                  <NIcon :component="shortcutByPath.has(fullPath(entry.name)) ? BookmarkX : Bookmark" size="14" />
+                </button>
                 <button type="button" class="grid-action-btn" :title="t('files.rename')" :aria-label="t('files.renameAria', { name: entry.name })" @click="renameEntry(entry)">
                   <NIcon :component="Pencil" size="14" />
                 </button>
@@ -618,6 +733,13 @@ onUnmounted(() => stopWatch?.())
       @close="previewEntry = null"
       @navigate="(e) => (previewEntry = e)"
     />
+
+    <ShortcutModal
+      v-model:show="shortcutModalShow"
+      :shortcut="editingShortcut"
+      :path="shortcutModalPath"
+      @saved="loadShortcuts"
+    />
   </AppShell>
 </template>
 
@@ -642,6 +764,75 @@ onUnmounted(() => stopWatch?.())
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcuts-section {
+  flex: 0 0 auto;
+  padding: 8px 4px 6px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.shortcuts-heading {
+  margin: 2px 8px 4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+.shortcut-row:hover,
+.shortcut-row.active {
+  background: var(--track);
+}
+.shortcut-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.shortcut-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.shortcut-actions {
+  display: none;
+  gap: 2px;
+  padding-right: 6px;
+}
+.shortcut-row:hover .shortcut-actions {
+  display: flex;
+}
+.shortcut-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.shortcut-action-btn:hover {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .files-main {
@@ -838,6 +1029,9 @@ onUnmounted(() => stopWatch?.())
 .grid-action-btn:hover {
   background: var(--track);
   color: var(--text);
+}
+.grid-action-btn--active {
+  color: var(--accent);
 }
 .grid-action-btn--danger:hover {
   color: var(--danger);

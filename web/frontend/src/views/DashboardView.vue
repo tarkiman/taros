@@ -18,6 +18,7 @@ import {
   Trash2,
   Link2,
   ImagePlus,
+  FolderBookmark,
 } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
@@ -28,12 +29,14 @@ import { dockerApi } from '../api/docker'
 import { serviceApi } from '../api/service'
 import { processesApi } from '../api/processes'
 import { quickLinksApi } from '../api/quicklinks'
+import { folderShortcutsApi } from '../api/folderShortcuts'
 import { ApiError } from '../api/client'
 import { useTerminalStore } from '../stores/terminal'
 import type { Sample } from '../types/metrics'
 import type { Container } from '../types/docker'
 import type { ProcInfo } from '../types/processes'
 import type { QuickLink } from '../types/quicklinks'
+import type { FolderShortcut } from '../types/folderShortcuts'
 import { formatBytes } from '../utils/format'
 
 const { t, locale } = useI18n()
@@ -241,6 +244,7 @@ onMounted(async () => {
     loadDockerSummary(),
     loadServiceSummary(),
     loadCustomLinks(),
+    loadFolderShortcuts(),
   ])
 })
 onUnmounted(() => {
@@ -272,6 +276,31 @@ async function loadCustomLinks() {
     customLinks.value = res.links
   } catch {
     customLinks.value = []
+  }
+}
+
+// --- Folder shortcuts: pinned File Explorer folders (see
+// internal/foldershortcuts and FilesView.vue, which is the only place
+// they're created/edited — this page just shows the ones opted into
+// showOnDashboard, and can unpin). ---
+const folderShortcuts = ref<FolderShortcut[]>([])
+const dashboardShortcuts = computed(() => folderShortcuts.value.filter((s) => s.showOnDashboard))
+
+async function loadFolderShortcuts() {
+  try {
+    const res = await folderShortcutsApi.list()
+    folderShortcuts.value = res.shortcuts
+  } catch {
+    folderShortcuts.value = []
+  }
+}
+
+async function unpinFolderShortcut(sc: FolderShortcut) {
+  try {
+    await folderShortcutsApi.remove(sc.id)
+    await loadFolderShortcuts()
+  } catch (e) {
+    message.error(e instanceof ApiError ? e.message : t('dashboard.folderShortcuts.deleteFailed', { name: sc.label }))
   }
 }
 
@@ -543,6 +572,32 @@ async function deleteLink(link: QuickLink) {
             <span class="quick-name">{{ t('common.add') }}</span>
           </button>
         </div>
+
+        <template v-if="dashboardShortcuts.length > 0">
+          <p class="eyebrow section">{{ t('dashboard.folderShortcuts.title') }}</p>
+          <div class="quick-grid">
+            <RouterLink
+              v-for="sc in dashboardShortcuts"
+              :key="sc.id"
+              :to="{ path: '/files', query: { path: sc.path } }"
+              class="glass-card quick-tile quick-tile--custom"
+              :title="sc.path"
+            >
+              <span class="quick-icon quick-icon--custom"><NIcon :component="FolderBookmark" size="20" /></span>
+              <span class="quick-name">{{ sc.label }}</span>
+              <span class="tile-actions">
+                <NPopconfirm @positive-click="unpinFolderShortcut(sc)">
+                  <template #trigger>
+                    <button type="button" class="tile-action-btn tile-action-btn--danger" :title="t('common.delete')" @click.prevent.stop>
+                      <NIcon :component="Trash2" size="13" />
+                    </button>
+                  </template>
+                  {{ t('dashboard.folderShortcuts.confirmDelete', { name: sc.label }) }}
+                </NPopconfirm>
+              </span>
+            </RouterLink>
+          </div>
+        </template>
 
         <template v-if="monitoringSupported && snapshot">
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
