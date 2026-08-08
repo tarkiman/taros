@@ -2,8 +2,10 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/tarkiman/taros/internal/apierr"
@@ -181,6 +183,82 @@ func (s *Server) handleAPIDockerContainerAction(w http.ResponseWriter, r *http.R
 
 	s.deps.DockerWatcher.RefreshNow(ctx)
 	s.handleAPIDockerContainers(w, r)
+}
+
+// handleDockerContainerLogsStream pushes container log lines over SSE —
+// event-driven (one push per log line as the container writes it), unlike
+// handleMetricsStream's fixed-interval ticker, since log lines arrive
+// whenever the container's process happens to write to stdout/stderr, not
+// on a schedule. tail/sinceMin bound the initial backlog Docker sends
+// before switching to live follow — see docs/04-features.md §4.2 "Log
+// Container" for why both exist (a container that's already logged for
+// days shouldn't make the first connect expensive).
+func (s *Server) handleDockerContainerLogsStream(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.DockerEnabled {
+		s.writeDockerUnavailable(w, nil)
+		return
+	}
+	id := r.PathValue("id")
+
+	tail := clampInt(queryInt(r, "tail", 500), 1, 2000)
+	sinceMin := clampInt(queryInt(r, "sinceMin", 15), 1, 1440)
+	since := time.Now().Add(-time.Duration(sinceMin) * time.Minute)
+
+	lines, err := s.deps.Docker.ContainerLogs(r.Context(), id, tail, since)
+	if err != nil {
+		writeDockerActionError(w, apierr.DockerLogsFailed, "Gagal membaca log container", nil, err)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	for line := range lines {
+		data, err := json.Marshal(line)
+		if err != nil {
+			continue
+		}
+		if _, err := w.Write([]byte("data: ")); err != nil {
+			return
+		}
+		if _, err := w.Write(data); err != nil {
+			return
+		}
+		if _, err := w.Write([]byte("\n\n")); err != nil {
+			return
+		}
+		flusher.Flush()
+	}
+}
+
+func queryInt(r *http.Request, key string, def int) int {
+	v := r.URL.Query().Get(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func (s *Server) handleAPIDockerImageRemove(w http.ResponseWriter, r *http.Request) {

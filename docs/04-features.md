@@ -134,8 +134,44 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
   item polish UI di [Fase 5](10-roadmap.md), bukan blocker untuk fungsi dasar start/stop/
   restart/remove yang sudah aman (tetap ada konfirmasi, cuma belum custom-styled).
 - **Belum diimplementasikan di Fase 2** (dicadangkan untuk iterasi berikut): detail container
-  (env vars, mounted volumes, network terhubung) saat diklik, dan log viewer. Scope Fase 2
-  difokuskan ke list + live stats + aksi dasar dulu.
+  (env vars, mounted volumes, network terhubung) saat diklik. Scope Fase 2 difokuskan ke
+  list + live stats + aksi dasar dulu — log viewer (dicadangkan di sini) menyusul, lihat
+  "Log Container" di bawah.
+
+### Log Container
+
+Live-tail log stdout/stderr container langsung dari dashboard — dibuka lewat tombol "Logs" di
+kolom Aksi tab Containers, tampil di drawer sisi kanan. Ditambahkan atas permintaan langsung
+user (untuk tracking kalau ada masalah), sempat didiskusikan dulu soal beban sebelum
+diimplementasikan — keputusan akhir: **realtime**, dengan backlog awal dibatasi rentang waktu
+supaya connect pertama tetap ringan.
+
+- **Live, bukan cuma snapshot**: baris baru muncul begitu proses container menulisnya, lewat
+  SSE (`GET /api/docker/containers/{id}/logs/stream`) — berbeda dari Service Logs (§4.3, yang
+  cuma 50 baris terakhir sekali ambil, tidak live), karena tujuannya memang tracking real-time.
+- **Backlog awal dibatasi** (dropdown 15 menit/1 jam/6 jam/24 jam, default 15 menit + cap keras
+  500 baris) — Docker API mendukung `tail` dan `since` sekaligus meski dengan `follow=1`, jadi
+  connect pertama ke container yang sudah logging berhari-hari tidak pernah menarik seluruh
+  riwayatnya. Ganti dropdown = reconnect dengan backlog baru.
+- **Tidak ada proses yang jalan terus-menerus**: satu goroutine + satu koneksi ke Docker daemon
+  cuma hidup selama drawer log itu terbuka di satu tab browser — beda total dari fitur lain
+  yang memang selalu polling (mis. `internal/notify.Monitor`). Drawer ditutup → koneksi
+  ditutup bersih (diverifikasi lewat perbandingan jumlah file descriptor proses sebelum/
+  sesudah, bukan cuma dari tampilan UI).
+- **Warna stdout vs stderr** berbeda (stderr kemerahan) buat bantu visual saat nyari error,
+  plus timestamp per baris (format lokal, bukan RFC3339Nano mentah dari Docker).
+- **Auto-scroll pintar**: ikut baris terbaru secara default, otomatis berhenti kalau user
+  scroll ke atas buat baca baris lama (tidak ke-tarik paksa ke bawah), lanjut lagi begitu balik
+  scroll ke bawah — pola umum log viewer.
+- **Detail teknis**: Docker API tidak menyediakan SDK resmi di sini (lihat
+  [03-tech-stack.md](03-tech-stack.md) "Kenapa tidak Docker SDK resmi?"), jadi parsing stream
+  log dilakukan manual — container non-TTY (mayoritas) mem-multiplex stdout/stderr lewat frame
+  header 8-byte (`internal/docker/logs.go`'s `readMultiplexedLogs`); container TTY (`docker run -t`)
+  mengirim byte mentah tanpa multiplex dan tanpa bisa membedakan stdout/stderr
+  (`readTTYLogs`) — dideteksi otomatis lewat `Config.Tty` dari container inspect sebelum
+  connect ke endpoint log-nya. Kedua jalur sudah diverifikasi langsung terhadap container
+  non-TTY dan TTY nyata (bukan cuma dibaca dari kode), tidak ada frame header/binary yang
+  bocor jadi teks.
 
 ### Images
 

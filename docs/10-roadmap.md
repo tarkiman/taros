@@ -1855,6 +1855,62 @@ user yang pilih mau ditampilkan di mana**, bukan setting global satu-satunya.
   assertion teks skrip ternyata cuma soal `text-transform: uppercase` CSS pada judul section,
   bukan bug — dikonfirmasi lewat screenshot render sebenarnya sebelum disimpulkan aman).
 
+### Log Container Docker (live-tail, dibatasi waktu ke belakang)
+
+Diminta user, tapi **didiskusikan dulu sebelum diimplementasikan** — pertanyaan awal: apakah
+fitur ini berat, dan apakah perlu realtime atau cukup on-demand (mirip Service Logs §4.3 yang
+sudah ada, cuma 50 baris sekali ambil). Keputusan akhir user: realtime lebih baik, dengan
+syarat backlog awal dibatasi rentang waktu supaya tidak berat.
+
+- **Kenapa tidak sekadar meniru Service Logs**: itu one-shot fetch (`journalctl`, 50 baris,
+  bukan live) — live-tail Docker butuh mekanisme streaming baru: baca `io.Reader` yang tidak
+  pernah "selesai" selama koneksi `follow=1` masih terbuka, bukan poll berkala kayak SSE metrics
+  yang sudah ada (`handleMetricsStream`, ticker-driven) atau one-shot fetch macam Service Logs.
+- **`internal/docker.Client`'s `do()` yang sudah ada tidak bisa dipakai** — selalu `io.ReadAll`
+  seluruh body, yang untuk request `follow=1` berarti menunggu selamanya (respons tidak pernah
+  "selesai" selama container hidup). Ditambah method baru `stream()` yang mengembalikan
+  `*http.Response` mentah, plus **http.Client kedua** (`streamHTTP`, share Transport/Unix
+  socket dialer yang sama, tapi **tanpa** `Timeout` client-level) — `http.Client.Timeout` yang
+  sudah ada di client utama (10 detik, cocok untuk request pendek) kalau dipakai juga untuk
+  streaming akan mematikan live-tail tepat 10 detik setelah connect, terlepas dari ada
+  aktivitas atau tidak. Cukup mengandalkan `context` request untuk cancellation (ditemukan
+  lewat baca dokumentasi `net/http`: context request memang sudah meng-cover seluruh siklus
+  hidup request **termasuk** membaca response body, jadi tidak perlu goroutine tambahan buat
+  `resp.Body.Close()` manual saat context dibatalkan).
+- **Docker log stream format** (container non-TTY, kasus paling umum): di-multiplex per-frame,
+  header 8-byte (`byte[0]`=stream type 1/2 stdout/stderr, `byte[4:8]`=size big-endian) diikuti
+  payload sepanjang itu — diimplementasikan manual (`internal/docker/logs.go`'s
+  `readMultiplexedLogs`, buffer per-stream terpisah supaya baris stdout/stderr yang datang
+  berselang-seling tidak saling potong). Container `Tty:true` **tidak** di-multiplex (raw
+  bytes, stdout+stderr tidak bisa dibedakan Docker sendiri) — dideteksi otomatis lewat
+  `Config.Tty` dari `GET /containers/{id}/json` sebelum tahu jalur parsing mana yang dipakai.
+  **Kedua jalur diverifikasi langsung** terhadap container non-TTY dan TTY nyata (`docker run`
+  biasa vs `docker run -t`), bukan cuma dibaca dari dokumentasi API — tidak ada frame
+  header/binary yang bocor jadi teks di kedua kasus.
+- **SSE endpoint baru, event-driven** (`handleDockerContainerLogsStream`) — beda dari
+  `handleMetricsStream` yang ticker-driven (push tiap interval tetap), di sini `for line :=
+  range ch` langsung push tiap kali ada baris baru dari goroutine pembaca stream Docker.
+- **Backlog dibatasi di server** (`tail` clamp 1–2000, `sinceMin` clamp 1–1440, sama semangat
+  cap sanity lain di codebase ini seperti `quicklinks.maxLinks`) — dropdown di UI (15m/1h/6h/
+  24h, default 15m) ganti pilihan = reconnect (`EventSource` baru) dengan backlog baru.
+- **Tidak ada proses yang jalan terus-menerus tanpa drawer terbuka** — dikonfirmasi bukan cuma
+  klaim desain: dibandingkan jumlah file descriptor proses `taros` sebelum, selama, dan setelah
+  satu sesi curl streaming — naik 2 saat aktif, balik ke angka semula persis setelah client
+  disconnect. Beda total dari fitur lain yang memang selalu polling (`internal/notify.Monitor`).
+- **Frontend**: `useContainerLogsStream.ts` (baru) — pola `EventSource` sama seperti
+  `useMetricsStream.ts`, tapi lifecycle dikontrol manual (`open()`/`close()`, bukan
+  `onMounted`/`onUnmounted` otomatis) karena hidupnya terikat buka-tutup drawer per container,
+  bukan umur halaman. Baris di-cap 5000 di sisi klien juga (mencegah tab browser makan memori
+  tak terbatas kalau drawer dibiarkan terbuka lama di container yang sangat cerewet nulis log).
+  Auto-scroll berhenti otomatis kalau user scroll ke atas baca baris lama, lanjut lagi begitu
+  balik ke bawah — pola umum log viewer, dideteksi dari `scrollTop`/`scrollHeight` manual.
+- **Diuji end-to-end nyata**: container `busybox` non-TTY yang sengaja nulis stdout+stderr
+  bergantian tiap detik (buat verifikasi demux benar dan live-tail benar-benar live, bukan cuma
+  snapshot sekali ambil), container `busybox -t` (TTY) terpisah untuk jalur raw, error handling
+  (container id tidak ada → 404 JSON biasa, bukan SSE kosong), drawer UI penuh via Puppeteer
+  (klik tombol Logs, baris bertambah live selama drawer terbuka, warna stderr beda, ganti
+  dropdown rentang waktu benar-benar reconnect, tutup drawer).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
