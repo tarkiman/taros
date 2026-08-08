@@ -173,7 +173,7 @@ export default {
       tempLabel: 'Suhu CPU',
       threshold: 'Threshold',
       duration: 'Bertahan selama',
-      minutes: '{count} menit',
+      durationUnit: 'menit',
       tempHint: 'Hanya berjalan di perangkat dengan sensor suhu yang terbaca.',
       save: 'Simpan pengaturan notifikasi',
       saved: 'Pengaturan notifikasi tersimpan.',

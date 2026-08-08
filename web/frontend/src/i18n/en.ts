@@ -172,7 +172,7 @@ const en = {
       tempLabel: 'CPU temperature',
       threshold: 'Threshold',
       duration: 'Sustained for',
-      minutes: '{count} min',
+      durationUnit: 'min',
       tempHint: 'Only fires on devices with a readable temperature sensor.',
       save: 'Save notification settings',
       saved: 'Notification settings saved.',
