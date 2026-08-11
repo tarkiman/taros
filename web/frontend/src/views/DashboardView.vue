@@ -439,7 +439,7 @@ async function deleteLink(link: QuickLink) {
                   :title="t('dashboard.viewTopRam')"
                   @click="metricSort = 'mem'"
                 >
-                  <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" />
+                  <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" :sublabel="`${formatBytes(snapshot.mem.usedBytes)} / ${formatBytes(snapshot.mem.totalBytes)}`" />
                 </button>
               </NGi>
               <NGi>
