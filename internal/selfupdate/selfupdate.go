@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -45,17 +44,30 @@ type githubRelease struct {
 	Assets  []githubAsset `json:"assets"`
 }
 
-// archSuffix maps GOARCH to the suffix release.yml uses in asset filenames
-// (taros-vX.Y.Z-<suffix>.tar.gz).
+// archSuffix maps GOOS/GOARCH to the suffix release.yml uses in asset
+// filenames (taros-vX.Y.Z-<suffix>.tar.gz). Keyed on GOOS too, not just
+// GOARCH — "arm64" alone is ambiguous between the linux and darwin
+// builds (release.yml names them "arm64" and "darwin-arm64").
 func archSuffix() (string, error) {
-	switch runtime.GOARCH {
-	case "arm64":
-		return "arm64", nil
-	case "arm":
-		return "armv7", nil
-	default:
-		return "", fmt.Errorf("selfupdate: tidak ada rilis siap pakai untuk arsitektur %s — build manual (docs/09-deployment.md §9.1)", runtime.GOARCH)
+	switch runtime.GOOS {
+	case "linux":
+		switch runtime.GOARCH {
+		case "amd64":
+			return "amd64", nil
+		case "arm64":
+			return "arm64", nil
+		case "arm":
+			return "armv7", nil
+		}
+	case "darwin":
+		switch runtime.GOARCH {
+		case "amd64":
+			return "darwin-amd64", nil
+		case "arm64":
+			return "darwin-arm64", nil
+		}
 	}
+	return "", fmt.Errorf("selfupdate: tidak ada rilis siap pakai untuk %s/%s — build manual (docs/09-deployment.md §9.1)", runtime.GOOS, runtime.GOARCH)
 }
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -88,13 +100,13 @@ func CheckLatest(ctx context.Context) (*ReleaseInfo, error) {
 		return nil, fmt.Errorf("selfupdate: parse response rilis: %w", err)
 	}
 
-	want := "-" + suffix + ".tar.gz"
+	want := fmt.Sprintf("taros-%s-%s.tar.gz", rel.TagName, suffix)
 	for _, a := range rel.Assets {
-		if strings.HasSuffix(a.Name, want) {
+		if a.Name == want {
 			return &ReleaseInfo{Version: rel.TagName, DownloadURL: a.BrowserDownloadURL}, nil
 		}
 	}
-	return nil, fmt.Errorf("selfupdate: rilis %s tidak punya asset untuk arsitektur %s", rel.TagName, suffix)
+	return nil, fmt.Errorf("selfupdate: rilis %s tidak punya asset %s", rel.TagName, want)
 }
 
 // Apply downloads the release tarball at downloadURL, extracts the `taros`
