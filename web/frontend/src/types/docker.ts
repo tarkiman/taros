@@ -78,3 +78,11 @@ export interface DockerUnavailable {
   error: string
   enabled: boolean
 }
+
+// Mirrors internal/docker.LogLine — one line pushed over
+// GET /api/docker/containers/{id}/logs/stream (SSE).
+export interface LogLine {
+  stream: 'stdout' | 'stderr'
+  timestamp: string // RFC3339Nano, or "" if the backend couldn't parse Docker's own timestamp prefix
+  text: string
+}
