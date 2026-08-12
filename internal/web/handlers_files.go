@@ -308,11 +308,33 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, fh := range files {
-		dstPath, err := s.deps.Jail.Resolve(filepath.Join(destDir, fh.Filename))
+	// relPath (one value per file, same order) carries the path relative
+	// to the dropped root for folder drag & drop — e.g. "myFolder/sub/
+	// photo.jpg" — so the directory structure gets recreated on the
+	// server. This can't just be fh.Filename: RFC 7578 §4.2 requires
+	// multipart clients/parsers to strip directory info from the
+	// filename param, and Go's mime/multipart enforces that itself
+	// (Part.FileName() runs filepath.Base() unconditionally), so a
+	// slash-containing filename is silently flattened to its base name
+	// by the time it reaches here.
+	relPaths := r.MultipartForm.Value["relPath"]
+
+	for i, fh := range files {
+		relPath := fh.Filename
+		if i < len(relPaths) && relPaths[i] != "" {
+			relPath = relPaths[i]
+		}
+		dstPath, err := s.deps.Jail.Resolve(filepath.Join(destDir, relPath))
 		if err != nil {
 			writeJSONError(w, http.StatusForbidden, apierr.PathInvalid, err.Error(), map[string]any{"detail": err.Error()})
 			return
+		}
+
+		if dir := filepath.Dir(dstPath); dir != destDir {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, apierr.UploadWriteFailed, err.Error(), map[string]any{"detail": err.Error()})
+				return
+			}
 		}
 
 		src, err := fh.Open()

@@ -399,15 +399,85 @@ function onUploadError() {
 }
 
 // --- lightweight whole-panel drag & drop, on top of NUpload's click path ---
+// Supports dropping whole folders, not just flat files — walked via the
+// (non-standard but universally supported) File and Directory Entries API
+// so the relative path survives and the server can recreate the folder
+// structure (see handleFilesUpload's fh.Filename handling).
 const dragActive = ref(false)
+
+interface DroppedFile {
+  file: File
+  relPath: string
+}
+
+// FileSystemDirectoryReader.readEntries() only returns entries in
+// batches (Chrome caps at 100) — must keep calling until it returns
+// empty, or large folders silently lose files past the first batch.
+function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    const all: FileSystemEntry[] = []
+    const readBatch = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) {
+          resolve(all)
+          return
+        }
+        all.push(...batch)
+        readBatch()
+      }, reject)
+    }
+    readBatch()
+  })
+}
+
+function readFileEntry(entry: FileSystemFileEntry): Promise<File> {
+  return new Promise((resolve, reject) => entry.file(resolve, reject))
+}
+
+async function walkEntry(entry: FileSystemEntry, prefix: string, out: DroppedFile[]): Promise<void> {
+  if (entry.isFile) {
+    const file = await readFileEntry(entry as FileSystemFileEntry)
+    out.push({ file, relPath: prefix + entry.name })
+    return
+  }
+  if (entry.isDirectory) {
+    const children = await readAllEntries((entry as FileSystemDirectoryEntry).createReader())
+    await Promise.all(children.map((child) => walkEntry(child, `${prefix}${entry.name}/`, out)))
+  }
+}
+
+async function collectDroppedFiles(dataTransfer: DataTransfer): Promise<DroppedFile[]> {
+  const items = dataTransfer.items
+  if (items && items.length > 0 && typeof items[0]?.webkitGetAsEntry === 'function') {
+    const entries = Array.from(items)
+      .map((item) => item.webkitGetAsEntry())
+      .filter((entry): entry is FileSystemEntry => entry !== null)
+    if (entries.length > 0) {
+      const out: DroppedFile[] = []
+      await Promise.all(entries.map((entry) => walkEntry(entry, '', out)))
+      return out
+    }
+  }
+  // Fallback for browsers without webkitGetAsEntry — flat files only.
+  return Array.from(dataTransfer.files).map((file) => ({ file, relPath: file.name }))
+}
+
 async function onDrop(e: DragEvent) {
   e.preventDefault()
   dragActive.value = false
-  const files = e.dataTransfer?.files
-  if (!files || files.length === 0) return
+  if (!e.dataTransfer) return
+  const dropped = await collectDroppedFiles(e.dataTransfer)
+  if (dropped.length === 0) return
   const form = new FormData()
-  for (const f of Array.from(files)) form.append('file', f)
-  const loadingMsg = message.loading(t('files.uploading', { count: files.length }), { duration: 0 })
+  // relPath goes in its own field, matched by position — the filename
+  // param on the file part itself gets its directory info stripped by
+  // any RFC 7578-compliant multipart parser (Go's stdlib included), so
+  // folder structure can't ride along on `file`'s filename.
+  for (const { file, relPath } of dropped) {
+    form.append('file', file, file.name)
+    form.append('relPath', relPath)
+  }
+  const loadingMsg = message.loading(t('files.uploading', { count: dropped.length }), { duration: 0 })
   try {
     const res = await fetch(uploadUrl.value, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken }, body: form })
     if (!res.ok) throw new Error(t('files.uploadFailedStatus', { status: res.status }))

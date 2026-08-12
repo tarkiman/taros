@@ -303,7 +303,15 @@ bukan error 500.
 - **Copy** dan **Cut → Paste**: pilih satu/banyak item, "salin"/"potong" disimpan di
   clipboard sisi server (state per-session), lalu "paste" di direktori tujuan.
 - Multi-select (checkbox) untuk operasi massal (copy/cut/delete banyak file sekaligus).
-- Upload file dari browser (drag & drop + tombol pilih file).
+- Upload file dari browser (drag & drop + tombol pilih file). Drag & drop mendukung **folder**
+  juga, bukan cuma file lepas — folder ditelusuri rekursif di sisi klien lewat File and
+  Directory Entries API (`webkitGetAsEntry`/`createReader().readEntries()`), lalu setiap file
+  dikirim dengan path relatif terhadap folder yang di-drop (field `relPath` terpisah dari
+  `filename` — RFC 7578 §4.2 mewajibkan parser multipart membuang info direktori dari
+  parameter `filename`, dan `mime/multipart` Go menegakkannya sendiri via `filepath.Base()`,
+  jadi menumpangkan path di situ tidak akan pernah sampai ke server). Server merekonstruksi
+  struktur foldernya (`os.MkdirAll` sebelum menulis tiap file), tetap lewat `Jail.Resolve` yang
+  sama untuk proteksi path traversal.
 - Download file/folder (folder di-zip on-the-fly saat request).
 - Search/filter by nama dalam direktori aktif.
 - **Kolom tabel bisa diurutkan** (klik header: Nama, Ukuran, Pemilik, Diubah) — sortir murni
