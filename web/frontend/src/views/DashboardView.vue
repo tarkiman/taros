@@ -443,7 +443,12 @@ async function deleteLink(link: QuickLink) {
                 </button>
               </NGi>
               <NGi>
-                <GaugeChart v-if="primaryDisk" :value="primaryDisk.usedPercent" :label="primaryDisk.mountPoint" />
+                <GaugeChart
+                  v-if="primaryDisk"
+                  :value="primaryDisk.usedPercent"
+                  :label="primaryDisk.mountPoint"
+                  :sublabel="`${formatBytes(primaryDisk.usedBytes)} / ${formatBytes(primaryDisk.totalBytes)}`"
+                />
                 <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
               </NGi>
               <NGi>
