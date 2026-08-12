@@ -62,7 +62,7 @@ const option = computed(() => ({
         // rendered text). The two-line label is built into data[0].name
         // below instead, which does render correctly, including the
         // {sub|...} rich-text token for the smaller second line.
-        rich: { sub: { fontSize: 10, opacity: 0.75, lineHeight: 14 } },
+        rich: { sub: { fontSize: 11, color: t.value.text, lineHeight: 15 } },
       },
       detail: {
         valueAnimation: true,
