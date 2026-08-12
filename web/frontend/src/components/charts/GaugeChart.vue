@@ -8,6 +8,10 @@ const props = withDefaults(
   defineProps<{
     value: number
     label: string
+    // Optional second line under label — e.g. "5.2 GB / 8.0 GB" for the RAM
+    // gauge, so the size behind the percentage is visible without hovering
+    // or navigating elsewhere.
+    sublabel?: string
     unit?: string
     max?: number
     // [warnAt, dangerAt] as fractions of max (0-1) — default 70%/90%, the
@@ -46,7 +50,20 @@ const option = computed(() => ({
       axisLabel: { show: false },
       pointer: { show: false },
       anchor: { show: false },
-      title: { show: true, offsetCenter: [0, '68%'], fontSize: 12, color: t.value.textMuted },
+      title: {
+        show: true,
+        offsetCenter: [0, props.sublabel ? '62%' : '68%'],
+        fontSize: 12,
+        color: t.value.textMuted,
+        // NOTE: title.formatter is silently ignored by this
+        // echarts/vue-echarts combination for gauge series (confirmed via
+        // direct testing — style props like color/fontSize apply fine,
+        // but neither a string nor function formatter ever overrides the
+        // rendered text). The two-line label is built into data[0].name
+        // below instead, which does render correctly, including the
+        // {sub|...} rich-text token for the smaller second line.
+        rich: { sub: { fontSize: 10, opacity: 0.75, lineHeight: 14 } },
+      },
       detail: {
         valueAnimation: true,
         offsetCenter: [0, '2%'],
@@ -55,7 +72,7 @@ const option = computed(() => ({
         color: t.value.text,
         formatter: props.formatter ?? ((v: number) => `${v.toFixed(0)}${props.unit}`),
       },
-      data: [{ value: props.value, name: props.label }],
+      data: [{ value: props.value, name: props.sublabel ? `${props.label}\n{sub|${props.sublabel}}` : props.label }],
     },
   ],
 }))
