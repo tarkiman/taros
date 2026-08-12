@@ -34,6 +34,7 @@ Endpoint dikelompokkan:
 | `GET /api/terminal/ws` | **WebSocket** — sesi PTY interaktif (stdin/stdout + resize control message) |
 | `GET /api/docker/{containers\|images\|volumes\|networks}` | List, dikonsumsi `DockerView.vue` per-tab (lazy: fetch pertama kali tab diaktifkan, bukan semua sekaligus di awal). 503 `{error, enabled}` kalau Docker off di config atau daemon tidak terjangkau — `enabled` membedakan dua kasus itu tanpa klien perlu parse teks pesan |
 | `POST /api/docker/containers/{id}/{start\|stop\|restart\|remove}` | Aksi container, return list container ter-refresh (sama seperti perilaku fragment lama, sekarang JSON) — error daemon (mis. 409 masih berjalan) diteruskan dengan status code aslinya, bukan diratakan jadi 500 |
+| `GET /api/docker/containers/{id}/logs/stream?tail=&sinceMin=` | **SSE** — live-tail log stdout/stderr container, satu event JSON (`{stream, timestamp, text}`) per baris. `tail` (default 500, clamp 1–2000) & `sinceMin` (default 15, clamp 1–1440) membatasi backlog awal sebelum live follow — lihat [04-features.md](04-features.md) §4.2 "Log Container" |
 | `POST /api/docker/images/{id}/remove` | Hapus image, return list image ter-refresh |
 | `POST /api/docker/volumes/{name}/remove` | Hapus volume, return list volume ter-refresh |
 | `POST /api/docker/networks/{id}/remove` | Hapus network, return list network ter-refresh |

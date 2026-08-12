@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NTabs,
@@ -14,12 +14,16 @@ import {
   NDescriptionsItem,
   NEmpty,
   NSpin,
+  NDrawer,
+  NDrawerContent,
+  NSelect,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
+import { useContainerLogsStream } from '../composables/useContainerLogsStream'
 import type { Container, DockerUnavailable, Image, Network, Volume } from '../types/docker'
 import { formatBytes, formatDate } from '../utils/format'
 
@@ -87,6 +91,107 @@ async function containerAction(id: string, action: 'start' | 'stop' | 'restart' 
   }
 }
 
+// --- Container logs drawer: live-tail via SSE, bounded initial backlog
+// (see internal/web/handlers_docker.go handleDockerContainerLogsStream and
+// docs/04-features.md §4.2 "Log Container" for why tail/sinceMin exist —
+// this was a deliberate design discussion with the user before building
+// it, not an assumption). ---
+const logDrawerOpen = ref(false)
+const logContainerId = ref('')
+const logContainerName = ref('')
+const logSinceMin = ref(5)
+const LOG_TAIL = 500
+const logSinceOptions = [
+  { label: t('docker.logs.last5m'), value: 5 },
+  { label: t('docker.logs.last10m'), value: 10 },
+  { label: t('docker.logs.last15m'), value: 15 },
+  { label: t('docker.logs.last1h'), value: 60 },
+  { label: t('docker.logs.last6h'), value: 360 },
+  { label: t('docker.logs.last24h'), value: 1440 },
+]
+
+const logsStream = useContainerLogsStream()
+const logScrollEl = ref<HTMLElement | null>(null)
+const autoScroll = ref(true)
+
+// If the connection hasn't opened within a few seconds — e.g. a container
+// with an unusually large log history taking longer than expected to
+// respond, or a dropped connection — show a hint plus a manual reconnect
+// button instead of leaving "Connecting…" up with no way out. Cleared as
+// soon as the SSE connection actually opens.
+const logConnectSlow = ref(false)
+let logConnectSlowTimer: ReturnType<typeof setTimeout> | undefined
+
+function startLogs(id: string, sinceMin: number) {
+  logConnectSlow.value = false
+  if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  logConnectSlowTimer = setTimeout(() => {
+    if (!logsStream.connected.value) logConnectSlow.value = true
+  }, 6000)
+  logsStream.open(id, sinceMin, LOG_TAIL)
+}
+
+function reconnectLogs() {
+  autoScroll.value = true
+  startLogs(logContainerId.value, logSinceMin.value)
+}
+
+function openLogs(container: Container) {
+  logContainerId.value = container.id
+  logContainerName.value = container.name
+  logDrawerOpen.value = true
+  autoScroll.value = true
+  startLogs(container.id, logSinceMin.value)
+}
+
+watch(logSinceMin, (min) => {
+  if (!logDrawerOpen.value) return
+  autoScroll.value = true
+  startLogs(logContainerId.value, min)
+})
+
+watch(logDrawerOpen, (open) => {
+  if (!open) {
+    logsStream.close()
+    if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  }
+})
+
+watch(logsStream.connected, (connected) => {
+  if (connected) {
+    logConnectSlow.value = false
+    if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  }
+})
+
+watch(
+  () => logsStream.lines.value.length,
+  async () => {
+    if (!autoScroll.value) return
+    await nextTick()
+    const el = logScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  },
+)
+
+// Auto-scroll pauses once the user scrolls away from the bottom (reading
+// older lines shouldn't get yanked back down by the next incoming line),
+// and resumes once they scroll back to the bottom themselves — standard
+// log-viewer behavior.
+function onLogScroll() {
+  const el = logScrollEl.value
+  if (!el) return
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  autoScroll.value = atBottom
+}
+
+function formatLogTimestamp(ts: string): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString()
+}
+
 const containerColumns = computed<DataTableColumns<Container>>(() => [
   { title: t('common.name'), key: 'name', width: 160, ellipsis: { tooltip: true }, sorter: (a, b) => a.name.localeCompare(b.name) },
   { title: 'Image', key: 'image', width: 180, ellipsis: { tooltip: true }, sorter: (a, b) => a.image.localeCompare(b.image) },
@@ -128,7 +233,7 @@ const containerColumns = computed<DataTableColumns<Container>>(() => [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 220,
+    width: 270,
     render: (row) =>
       h(NSpace, { size: 'small' }, () => [
         row.state === 'running'
@@ -137,6 +242,7 @@ const containerColumns = computed<DataTableColumns<Container>>(() => [
               h(NButton, { size: 'tiny', onClick: () => containerAction(row.id, 'restart') }, () => 'Restart'),
             ]
           : h(NButton, { size: 'tiny', type: 'primary', onClick: () => containerAction(row.id, 'start') }, () => 'Start'),
+        h(NButton, { size: 'tiny', quaternary: true, onClick: () => openLogs(row) }, () => t('docker.logs.button')),
         h(
           NPopconfirm,
           { onPositiveClick: () => containerAction(row.id, 'remove') },
@@ -382,6 +488,8 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (containersTimer) clearInterval(containersTimer)
+  if (logConnectSlowTimer) clearTimeout(logConnectSlowTimer)
+  logsStream.close()
 })
 </script>
 
@@ -451,6 +559,30 @@ onUnmounted(() => {
         </NSpace>
       </NTabPane>
     </NTabs>
+
+    <NDrawer v-model:show="logDrawerOpen" :width="640" placement="right">
+      <NDrawerContent :title="t('docker.logs.title', { name: logContainerName })" closable>
+        <NSelect
+          v-model:value="logSinceMin"
+          :options="logSinceOptions"
+          size="small"
+          style="width: 150px; margin-bottom: 10px"
+        />
+        <div v-if="logsStream.lines.value.length === 0 && !logsStream.connected.value" class="log-empty">
+          <p>{{ logConnectSlow ? t('docker.logs.connectingSlow') : t('docker.logs.connecting') }}</p>
+          <NButton v-if="logConnectSlow" size="tiny" @click="reconnectLogs">{{ t('docker.logs.reconnect') }}</NButton>
+        </div>
+        <div ref="logScrollEl" class="log-scroll" @scroll="onLogScroll">
+          <p v-if="logsStream.lines.value.length === 0 && logsStream.connected.value" class="log-empty">
+            {{ t('docker.logs.waiting') }}
+          </p>
+          <div v-for="(line, i) in logsStream.lines.value" :key="i" class="log-line" :class="{ 'log-line--stderr': line.stream === 'stderr' }">
+            <span v-if="line.timestamp" class="log-ts">{{ formatLogTimestamp(line.timestamp) }}</span>
+            <span class="log-text">{{ line.text }}</span>
+          </div>
+        </div>
+      </NDrawerContent>
+    </NDrawer>
   </AppShell>
 </template>
 
@@ -459,5 +591,36 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   padding: 60px 0;
+}
+.log-scroll {
+  height: calc(100vh - 160px);
+  overflow-y: auto;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.log-empty {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.log-line {
+  display: flex;
+  gap: 8px;
+}
+.log-line--stderr .log-text {
+  color: var(--danger, #ef5a5a);
+}
+.log-ts {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.log-text {
+  flex: 1;
+  min-width: 0;
 }
 </style>

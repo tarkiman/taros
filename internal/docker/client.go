@@ -15,19 +15,26 @@ import (
 
 type Client struct {
 	http *http.Client
+	// streamHTTP shares http's Transport (same Unix socket dialer) but has
+	// no client-level Timeout — used only by stream() for long-lived
+	// requests like follow=1 log tailing, where the response body is
+	// deliberately never "fully read" until the caller's context is
+	// canceled. http.Client.Timeout would otherwise kill a live log
+	// stream after that fixed duration regardless of activity, which
+	// do()'s short-request timeout is correctly sized for but this isn't.
+	streamHTTP *http.Client
 }
 
 func NewClient(socketPath string) *Client {
-	return &Client{
-		http: &http.Client{
-			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", socketPath)
-				},
-			},
-			Timeout: 10 * time.Second,
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", socketPath)
 		},
+	}
+	return &Client{
+		http:       &http.Client{Transport: transport, Timeout: 10 * time.Second},
+		streamHTTP: &http.Client{Transport: transport},
 	}
 }
 
@@ -67,6 +74,29 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) ([
 		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(data)}
 	}
 	return data, nil
+}
+
+// stream sends a request and returns the raw, still-open response for
+// long-lived/streaming reads (e.g. follow=1 container logs) — unlike do(),
+// it never reads the body itself. Callers must always close resp.Body,
+// and should do so promptly once their context is done or the response
+// won't be released back to the transport.
+func (c *Client) stream(ctx context.Context, method, path string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, "http://docker.sock"+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("docker: build request: %w", err)
+	}
+
+	resp, err := c.streamHTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("docker: %s %s: %w", method, path, err)
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, &APIError{StatusCode: resp.StatusCode, Message: string(data)}
+	}
+	return resp, nil
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, out any) error {
