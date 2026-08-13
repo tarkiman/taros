@@ -140,6 +140,10 @@ export default {
     savingRestarting: 'Menyimpan & me-restart servis…',
     waitingRestart: 'Menunggu servis kembali… halaman akan dimuat ulang otomatis.',
     terminalHint: 'Nonaktif secara default karena ini fitur dengan akses paling luas di aplikasi — lihat docs/07-security.md §7.6 kalau baca dari repo. Setelah aktif, menu Terminal muncul di topbar.',
+    diskAnalysisTitle: 'Analisis Disk',
+    diskAnalysisDesc: 'Laporan file/folder terbesar untuk membantu optimasi ruang penyimpanan',
+    diskAnalysisStatusFailed: 'Gagal membaca status Analisis Disk.',
+    diskAnalysisHint: 'Nonaktif secara default. Fitur ini cuma membaca ukuran file/folder (read-only) — penghapusan tetap lewat File Explorer dengan konfirmasi eksplisit, tidak ada yang dihapus otomatis. Setelah aktif, menu Disk Analysis muncul di sidebar.',
     portAppTitle: 'Port Aplikasi',
     portAccessedAt: 'Port dashboard ini diakses — saat ini',
     changePort: 'Ganti Port',
@@ -469,5 +473,6 @@ export default {
     folder_shortcuts_save_failed: 'Gagal menyimpan shortcut: {detail}',
     job_failed: 'Operasi gagal: {detail}',
     disk_analysis_scan_failed: 'Analisis disk gagal: {detail}',
+    disk_analysis_toggle_failed: 'Gagal mengubah pengaturan Analisis Disk: {detail}',
   },
 } satisfies MessageSchema

@@ -125,5 +125,6 @@ const (
 	// from apiErrorBody — see FilesView.vue's job panel).
 	JobFailed = "job_failed" // params: detail
 
-	DiskAnalysisScanFailed = "disk_analysis_scan_failed" // params: detail
+	DiskAnalysisScanFailed   = "disk_analysis_scan_failed"   // params: detail
+	DiskAnalysisToggleFailed = "disk_analysis_toggle_failed" // params: detail
 )

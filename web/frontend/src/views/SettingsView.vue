@@ -6,6 +6,7 @@ import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import { terminalApi } from '../api/terminal'
+import { diskAnalysisApi } from '../api/diskAnalysis'
 import { settingsApi } from '../api/settings'
 import { totpApi } from '../api/totp'
 import { notifyApi, type NotifySettings } from '../api/notify'
@@ -34,6 +35,7 @@ onMounted(() => {
   loadTotpStatus()
   loadPortStatus()
   loadNotifySettings()
+  loadDiskAnalysisStatus()
 })
 
 // --- toggle flow: switch never applies directly, always goes through a
@@ -84,6 +86,59 @@ async function waitForRestartThenReload() {
     await new Promise((r) => setTimeout(r, 1000))
     try {
       const res = await fetch('/api/terminal/status', { credentials: 'include' })
+      if (res.ok) {
+        location.reload()
+        return
+      }
+    } catch {
+      // still down — keep polling
+    }
+  }
+  location.reload()
+}
+
+// --- disk analysis toggle: simpler than Terminal's flow above — no
+// password re-confirm step (see internal/web/handlers_settings.go's
+// handleSettingsDiskAnalysis doc comment for why), but still needs the
+// same restart-and-reload since route registration is decided once at
+// startup. ---
+const diskAnalysisEnabled = ref(false)
+const diskAnalysisFlow = ref<'idle' | 'applying' | 'restarting' | 'error'>('idle')
+const diskAnalysisError = ref('')
+
+async function loadDiskAnalysisStatus() {
+  try {
+    const res = await diskAnalysisApi.status()
+    diskAnalysisEnabled.value = res.enabled
+  } catch {
+    message.error(t('settings.diskAnalysisStatusFailed'))
+  }
+}
+
+async function toggleDiskAnalysis(next: boolean) {
+  diskAnalysisFlow.value = 'applying'
+  diskAnalysisError.value = ''
+  try {
+    await settingsApi.setDiskAnalysisEnabled(next)
+    diskAnalysisFlow.value = 'restarting'
+    waitForDiskAnalysisRestartThenReload()
+  } catch (e) {
+    diskAnalysisError.value = e instanceof Error ? e.message : t('settings.saveSettingsFailed')
+    diskAnalysisFlow.value = 'error'
+  }
+}
+
+function retryDiskAnalysisToggle() {
+  diskAnalysisError.value = ''
+  diskAnalysisFlow.value = 'idle'
+}
+
+async function waitForDiskAnalysisRestartThenReload() {
+  // Same polling pattern as waitForRestartThenReload above.
+  for (let attempt = 0; attempt < 30; attempt++) {
+    await new Promise((r) => setTimeout(r, 1000))
+    try {
+      const res = await fetch('/api/disk-analysis/status', { credentials: 'include' })
       if (res.ok) {
         location.reload()
         return
@@ -372,6 +427,32 @@ async function sendNotifyTest() {
 
             <p class="text-muted">
               {{ t('settings.terminalHint') }}
+            </p>
+          </NSpace>
+        </NCard>
+
+        <NCard embedded size="small" :title="t('settings.diskAnalysisTitle')" style="margin-top: 16px">
+          <NSpace vertical :size="12">
+            <NSpace align="center" justify="space-between">
+              <span>{{ t('settings.diskAnalysisDesc') }}</span>
+              <NSwitch :value="diskAnalysisEnabled" :disabled="diskAnalysisFlow !== 'idle'" @update:value="toggleDiskAnalysis" />
+            </NSpace>
+
+            <div v-if="diskAnalysisFlow === 'applying'" class="flow-row">
+              <NSpin size="small" /> <span>{{ t('settings.savingRestarting') }}</span>
+            </div>
+            <div v-else-if="diskAnalysisFlow === 'restarting'" class="flow-row">
+              <NSpin size="small" /> <span>{{ t('settings.waitingRestart') }}</span>
+            </div>
+            <NAlert v-else-if="diskAnalysisFlow === 'error'" type="error" :show-icon="false">
+              <NSpace vertical :size="10">
+                <span><NIcon :component="TriangleAlert" size="14" /> {{ diskAnalysisError }}</span>
+                <NButton size="small" @click="retryDiskAnalysisToggle">{{ t('common.tryAgain') }}</NButton>
+              </NSpace>
+            </NAlert>
+
+            <p class="text-muted">
+              {{ t('settings.diskAnalysisHint') }}
             </p>
           </NSpace>
         </NCard>

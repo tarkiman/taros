@@ -59,9 +59,9 @@ terminal:
 
 diskAnalysis:
   # Halaman "Analisis Disk" — laporan file/folder terbesar di fileExplorer.rootDir
-  # untuk bantu optimasi ruang penyimpanan. OFF secara default (config-file only,
-  # belum ada live-toggle dari Settings) — lihat docs/04-features.md §4.12.
-  # Scan-nya read-only; penghapusan pakai endpoint file explorer yang sudah ada.
+  # untuk bantu optimasi ruang penyimpanan. OFF secara default — bisa diaktifkan
+  # dari sini atau lewat toggle live di halaman Settings. Lihat docs/04-features.md
+  # §4.12. Scan-nya read-only; penghapusan pakai endpoint file explorer yang sudah ada.
   enabled: false
 
 update:

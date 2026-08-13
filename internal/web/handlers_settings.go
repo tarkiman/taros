@@ -65,6 +65,39 @@ func (s *Server) handleSettingsTerminal(w http.ResponseWriter, r *http.Request) 
 	}()
 }
 
+type settingsDiskAnalysisRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+// handleSettingsDiskAnalysis flips diskAnalysis.enabled — same
+// restart-and-reload mechanism as handleSettingsTerminal above (route
+// registration is decided once at startup), but deliberately **no**
+// password re-confirmation step: see docs/04-features.md §4.12 — this
+// only exposes a read-only scan report, not a new destructive capability
+// (deletion already existed via File Explorer regardless of this
+// toggle), so it doesn't carry the same risk tier as Terminal/Port.
+func (s *Server) handleSettingsDiskAnalysis(w http.ResponseWriter, r *http.Request) {
+	var req settingsDiskAnalysisRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
+		return
+	}
+
+	if err := config.SetDiskAnalysisEnabled(s.deps.ConfigPath, req.Enabled); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, apierr.DiskAnalysisToggleFailed, err.Error(), map[string]any{"detail": err.Error()})
+		return
+	}
+
+	sess := sessionFromContext(r.Context())
+	slog.Info("settings: diskAnalysis.enabled diubah, restart", "enabled", req.Enabled, "username", sess.Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		os.Exit(0)
+	}()
+}
+
 type settingsPortRequest struct {
 	Port     int    `json:"port"`
 	Password string `json:"password"`

@@ -207,6 +207,10 @@ func (s *Server) Handler() http.Handler {
 	if s.deps.DiskAnalysisEnabled {
 		mux.HandleFunc("POST /api/disk-analysis/scan", s.requireAuth(s.handleDiskAnalysisScan))
 	}
+	// Always registered — this is exactly how someone with it off toggles
+	// it on. No password gate, unlike the terminal toggle above — see
+	// handleSettingsDiskAnalysis's doc comment.
+	mux.HandleFunc("POST /api/settings/disk-analysis", s.requireAuth(s.handleSettingsDiskAnalysis))
 
 	// Port config — same password-gated restart-and-reload mechanism as
 	// the terminal toggle above (changing this can lock someone out of
