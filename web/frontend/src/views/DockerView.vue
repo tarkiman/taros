@@ -99,7 +99,14 @@ async function containerAction(id: string, action: 'start' | 'stop' | 'restart' 
 const logDrawerOpen = ref(false)
 const logContainerId = ref('')
 const logContainerName = ref('')
-const logSinceMin = ref(5)
+// Default 15min, not one of the shorter 5m/10m options — those exist so
+// users CAN cut initial backlog for a container with a huge log history,
+// not to be the default. A short default meant most containers (anything
+// that doesn't log every few minutes — most DBs, proxies, request-driven
+// backends) showed an empty "waiting for new log lines" on open, reading
+// as a stuck connection rather than "no activity in this window" (found
+// via real testing against a real container fleet, not just guessed).
+const logSinceMin = ref(15)
 const LOG_TAIL = 500
 const logSinceOptions = [
   { label: t('docker.logs.last5m'), value: 5 },
