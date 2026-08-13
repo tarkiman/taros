@@ -3,9 +3,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin } from 'naive-ui'
-import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings } from '@lucide/vue'
+import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings, HardDrive } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
+import { useDiskAnalysisStore } from '../stores/diskAnalysis'
 import { usePlayerStore } from '../stores/player'
 import { useThemeMode, type ThemeMode } from '../composables/useTheme'
 import { updateApi } from '../api/update'
@@ -15,6 +16,7 @@ import LocaleSwitcher from '../components/LocaleSwitcher.vue'
 const { t } = useI18n()
 const auth = useAuthStore()
 const terminal = useTerminalStore()
+const diskAnalysis = useDiskAnalysisStore()
 const player = usePlayerStore()
 const router = useRouter()
 const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
@@ -39,12 +41,14 @@ const navLinks = computed(() => {
     { to: '/files', label: t('nav.files'), icon: FolderOpen },
   ]
   if (terminal.enabled) links.push({ to: '/terminal', label: t('nav.terminal'), icon: SquareTerminal })
+  if (diskAnalysis.enabled) links.push({ to: '/disk-analysis', label: t('nav.diskAnalysis'), icon: HardDrive })
   links.push({ to: '/settings', label: t('nav.settings'), icon: Settings })
   return links
 })
 
 onMounted(() => {
   terminal.ensureLoaded()
+  diskAnalysis.ensureLoaded()
 })
 
 async function handleLogout() {

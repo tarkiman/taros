@@ -1911,6 +1911,48 @@ syarat backlog awal dibatasi rentang waktu supaya tidak berat.
   (klik tombol Logs, baris bertambah live selama drawer terbuka, warna stderr beda, ganti
   dropdown rentang waktu benar-benar reconnect, tutup drawer).
 
+### Analisis Disk (file/folder terbesar, hapus atas persetujuan admin)
+
+Diminta user sebagai "analisis resource server untuk optimasi — yang tidak diperlukan bisa
+dihapus atas persetujuan admin" — **didiskusikan dulu sebelum diimplementasikan** karena
+scope-nya berpotensi sangat luas (disk, Docker, service, proses sekaligus). Disepakati mulai
+sempit dari analisis disk usage (file/folder besar) dulu; kategori lain (Docker unused
+images/volumes, service systemd gagal terus-menerus, log rotation) sengaja belum digarap —
+dicatat sebagai ide lanjutan di Fase 6 di bawah.
+
+- **Backend 100% read-only** — `internal/fileexplorer.Scan` (baru) cuma melaporkan; penghapusan
+  memakai endpoint file explorer yang **sudah ada** (`POST /api/files/op`
+  `{"action":"delete"}`), bukan endpoint delete baru. Diverifikasi eksplisit lewat curl langsung
+  ke endpoint itu dengan path hasil scan, dan lewat klik tombol beneran di UI (checkbox pilih
+  file → "Delete Selected" → konfirmasi `NPopconfirm`) — keduanya berhasil menghapus file
+  sungguhan dari disk dan file itu hilang dari hasil scan ulang.
+- **Reuse `Jail` yang sama dengan File Explorer** (root & blocklist) — diverifikasi terhadap
+  filesystem nyata (bukan sekadar baca kode): `/etc/shadow`, `/proc`, `/sys`, dan direktori
+  `.ssh` (dikonfirmasi ada secara nyata di home directory device test) **tidak pernah muncul**
+  di hasil scan sama sekali.
+- **Skip mount point lain** (`st_dev` dibandingkan ke root, pola `du -x`) — diverifikasi
+  terhadap device test yang punya mount nyata beragam: HDD eksternal (`fuseblk`), network share
+  SMB, `vfat` (`/boot/firmware`), dan beberapa `tmpfs` (`/tmp`, `/dev`, `/run`) — semuanya
+  terdeteksi & masuk `skippedMounts`, tidak ikut ke-walk.
+- **Top 50 file terbesar via min-heap ukuran tetap**, breakdown folder cuma satu level (anak
+  langsung root) dengan tombol deep-link "Buka di File Explorer" (`/files?path=...`).
+- **Nonaktif secara default** (`diskAnalysis.enabled: false`), route scan tidak didaftarkan
+  sama sekali kalau off (pola sama Web Terminal) — diverifikasi: `GET
+  /api/disk-analysis/status` selalu merespons `{"enabled":false}`, tapi `POST
+  /api/disk-analysis/scan` benar-benar 404 (bukan 403), dan nav item tidak muncul di sidebar.
+- **Waktu scan nyata**: `/` penuh (~114GB terpakai, isi device development sungguhan — repo
+  git, dependency Node/Python, video, dll) selesai dalam **11–26 detik** tergantung cache
+  filesystem OS (percobaan pertama 26.3s, percobaan berikutnya dengan cache hangat 11.5s) — cukup
+  cepat untuk request HTTP biasa (bukan job/SSE) di v1, tapi dicatat sebagai sesuatu yang perlu
+  dipantau kalau dipakai di device dengan storage jauh lebih lambat (eMMC/SD STB) atau tree file
+  yang jauh lebih besar — jalur job/SSE ala `internal/fileexplorer/job.go` jadi opsi kalau
+  ternyata perlu.
+- **Diuji end-to-end nyata** (bukan cuma unit-level): scan sungguhan terhadap root `/` device
+  development (bukan direktori sintetis kecil), delete lewat curl langsung DAN lewat klik UI
+  penuh via Chromium headless (CDP mentah, tanpa Puppeteer) — login sungguhan, klik "Run
+  Analysis", pilih file lewat checkbox, klik "Delete Selected", konfirmasi popup, verifikasi file
+  hilang dari disk (`ls` gagal) dan hilang dari hasil scan ulang di UI.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
@@ -1929,6 +1971,11 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
   explorer, daftar unit systemd "terproteksi". Toggle Terminal dan TOTP (2FA) sudah ada
   (lihat entri "Halaman Pengaturan (awal)" dan "TOTP (2FA), opsional dari Pengaturan" di
   atas) — sisanya belum.
+- Kategori tambahan untuk Analisis Disk (lihat entri di atas), sengaja belum digarap di v1:
+  Docker unused images/volumes (sebagian sudah ada lewat tombol Cleanup di §4.2, belum
+  terintegrasi ke laporan analisis), service systemd yang gagal terus-menerus (data-nya sudah
+  ada lewat `systemd.List()` + filter `Active == "failed"`, tinggal disatukan ke laporan), log
+  rotation/cache buildup dengan pola nama file spesifik (bukan cuma ranking ukuran mentah).
 
 ## Definisi "Selesai" per Fase
 

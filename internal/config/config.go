@@ -24,6 +24,7 @@ type Config struct {
 	Dashboard       DashboardConfig       `yaml:"dashboard"`
 	Notify          NotifyConfig          `yaml:"notify"`
 	FolderShortcuts FolderShortcutsConfig `yaml:"folderShortcuts"`
+	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
 type ServerConfig struct {
@@ -100,6 +101,17 @@ type TerminalConfig struct {
 	Shell                 string `yaml:"shell"`
 	IdleTimeoutMin        int    `yaml:"idleTimeoutMin"`
 	MaxConcurrentSessions int    `yaml:"maxConcurrentSessions"`
+}
+
+// DiskAnalysisConfig — see docs/04-features.md §4.12 & docs/07-security.md.
+// Disabled by default: it scans the same fileExplorer.rootDir tree looking
+// for the largest files/directories, which is read-only on its own, but
+// the report exists specifically to point an admin at things worth
+// deleting — a deliberate opt-in, not an implicit default, same
+// conservative bar as Terminal. Deletion itself reuses the existing file
+// explorer delete endpoint, not a new capability gated here.
+type DiskAnalysisConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // UpdateConfig — see docs/09-deployment.md §9.5 & docs/07-security.md.
@@ -190,6 +202,9 @@ func Default() Config {
 			Shell:                 "/bin/bash",
 			IdleTimeoutMin:        15,
 			MaxConcurrentSessions: 1,
+		},
+		DiskAnalysis: DiskAnalysisConfig{
+			Enabled: false,
 		},
 		Update: UpdateConfig{
 			Enabled: true,

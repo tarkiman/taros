@@ -961,3 +961,45 @@ slider di halaman Settings.
   recovery, biru untuk pesan test, berisi nilai saat ini/threshold/durasi bertahan, footer
   `TarOS · <hostname>`. Bahasa pesan Bahasa Indonesia tetap (bukan ikut sistem i18n UI Vue di
   §4.10) — ini pesan langsung ke channel Discord milik user sendiri, bukan bagian UI aplikasi.
+
+## 4.12 Analisis Disk
+
+Laporan file/folder terbesar di server untuk membantu optimasi ruang penyimpanan — user diminta
+lewat diskusi eksplisit ("analisis resource untuk optimasi, yang tidak diperlukan bisa dihapus
+atas persetujuan admin"), dan scope-nya sengaja disempitkan ke disk usage dulu (bukan langsung
+jadi "resource analyzer" umum lintas Docker/service/proses sekaligus) — kategori lain (Docker
+unused images/volumes, service systemd yang gagal terus-menerus, log rotation) sengaja belum
+digarap, dicatat sebagai ide lanjutan di [10-roadmap.md](10-roadmap.md).
+
+- **100% read-only di sisi scan.** `POST /api/disk-analysis/scan` (`internal/fileexplorer.Scan`)
+  cuma melaporkan — tidak pernah menghapus apa pun sendiri. Penghapusan pakai endpoint file
+  explorer yang **sudah ada** (`POST /api/files/op` `{"action":"delete"}`, sama Jail-scoped, sama
+  konfirmasi `NPopconfirm` yang dipakai File Explorer/Docker Cleanup), jadi permukaan risiko baru
+  fitur ini murni "bisa membaca & meranking ukuran," bukan "bisa menghapus dengan cara baru yang
+  belum teruji."
+- **Scan root = `fileExplorer.rootDir` yang sama, lewat `Jail` yang sama** — otomatis mewarisi
+  blocklist (`/etc/shadow`, `/proc`, `/sys`, aturan `.ssh` otomatis) tanpa config keamanan
+  terpisah yang bisa divergen dari File Explorer.
+- **Skip mount point lain** (pola `du -x`): `st_dev` tiap direktori dibandingkan terhadap `st_dev`
+  root sebelum descend — hasil scan tidak menyeret masuk disk lain yang ke-mount di bawah root.
+  Path yang dilewati dicatat di `skippedMounts` (transparansi ke user, bukan didiamkan).
+  Direktori yang gagal dibaca (permission denied) juga dilewati + dihitung
+  (`permissionErrors`), tidak menggagalkan seluruh scan.
+- **Top 50 file terbesar via min-heap ukuran tetap** (`container/heap`) selama satu kali
+  `filepath.WalkDir`, bukan kumpulkan semua file lalu sort — memori terkendali walau tree-nya
+  berisi jutaan file, relevan buat device kecil (Pi/STB).
+- **Breakdown folder cuma satu level**: ukuran teragregasi tiap anak langsung dari root (mis.
+  `/var`, `/home`, `/opt` kalau root `/`), bukan rekursif banyak level — daftar anak langsung
+  root biasanya sudah pendek & predictable, dan admin bisa "masuk lebih dalam" lewat File
+  Explorer yang sudah ada (tombol "Buka di File Explorer" deep-link ke `/files?path=...`, pola
+  sama yang dipakai folder shortcuts di Dashboard) alih-alih membangun browser tree baru dari
+  nol.
+- **On-demand, bukan background/scheduled** — satu tombol "Jalankan Analisis" per kunjungan
+  halaman, menghindari beban scan rutin di device kecil dan sejalan dengan permintaan "hasil
+  ditampilkan dulu" sebelum ada aksi apa pun.
+- **Nonaktif secara default** (`diskAnalysis.enabled: false`) — pola gating sama Web Terminal:
+  route scan-nya **tidak didaftarkan sama sekali** kalau disabled (bukan didaftarkan-tapi-403),
+  nav item disembunyikan total. `GET /api/disk-analysis/status` selalu terdaftar supaya frontend
+  tahu status tanpa perlu route utamanya aktif. Beda dari Terminal, toggle-nya config-file-only
+  untuk v1 — belum ada live-toggle dari Settings (risikonya lebih rendah dari akses shell, jadi
+  belum butuh ceremony password-reconfirm yang sama).

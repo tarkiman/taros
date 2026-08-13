@@ -176,6 +176,7 @@ func runServer(args []string) {
 		QuickLinks:                quickLinks,
 		Notify:                    notifySettings,
 		FolderShortcuts:           folderShortcuts,
+		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
