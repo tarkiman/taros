@@ -227,7 +227,7 @@ export default {
     logs: {
       button: 'Log',
       title: 'Log — {name}',
-      waiting: 'Terhubung, menunggu baris log baru…',
+      waiting: 'Terhubung — belum ada baris log di rentang waktu ini. Menunggu aktivitas baru… (container ini mungkin memang jarang menulis log; coba rentang waktu lebih panjang di atas kalau perlu riwayat lebih jauh.)',
       connecting: 'Menghubungkan…',
       connectingSlow: 'Masih menghubungkan — bisa lebih lama untuk container dengan riwayat log besar.',
       reconnect: 'Sambung ulang',

@@ -226,7 +226,7 @@ const en = {
     logs: {
       button: 'Logs',
       title: 'Logs — {name}',
-      waiting: 'Connected, waiting for new log lines…',
+      waiting: 'Connected — no log lines in this time range yet. Waiting for new activity… (this container may just log infrequently; try a longer range above if you need older history.)',
       connecting: 'Connecting…',
       connectingSlow: 'Still connecting — this can take longer for containers with a large log history.',
       reconnect: 'Reconnect',
