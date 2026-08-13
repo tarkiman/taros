@@ -57,6 +57,13 @@ terminal:
   idleTimeoutMin: 15
   maxConcurrentSessions: 1
 
+diskAnalysis:
+  # Halaman "Analisis Disk" — laporan file/folder terbesar di fileExplorer.rootDir
+  # untuk bantu optimasi ruang penyimpanan. OFF secara default (config-file only,
+  # belum ada live-toggle dari Settings) — lihat docs/04-features.md §4.12.
+  # Scan-nya read-only; penghapusan pakai endpoint file explorer yang sudah ada.
+  enabled: false
+
 update:
   # Tombol "Update" di topbar dashboard — cek & pasang rilis GitHub
   # terbaru sendiri, restart otomatis (lihat docs/09-deployment.md §9.5).

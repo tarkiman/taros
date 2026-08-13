@@ -124,4 +124,6 @@ const (
 	// SSE job errors (internal/fileexplorer.JobSnapshot, separate transport
 	// from apiErrorBody — see FilesView.vue's job panel).
 	JobFailed = "job_failed" // params: detail
+
+	DiskAnalysisScanFailed = "disk_analysis_scan_failed" // params: detail
 )

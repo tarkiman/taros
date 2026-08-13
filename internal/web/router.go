@@ -48,6 +48,15 @@ type Deps struct {
 	TerminalEnabled bool
 	TerminalManager *terminal.Manager
 
+	// DiskAnalysisEnabled gates the disk-usage scan endpoint the same way
+	// TerminalEnabled gates the WS endpoint above — route not registered
+	// at all when off (see Handler below), not just a 403. Off by default
+	// (config-file toggle only for now, no live Settings-page switch like
+	// terminal gets) — see docs/04-features.md §4.12. Deletion itself
+	// isn't gated separately: it reuses the always-available file-op
+	// delete endpoint, which is already Jail-scoped.
+	DiskAnalysisEnabled bool
+
 	// Version is this build's version string ("dev" for a plain local
 	// build) — see cmd/taros/main.go. UpdateEnabled gates
 	// /api/update/apply; /api/update/check stays registered either way so
@@ -131,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /files", s.serveSPA)
 	mux.HandleFunc("GET /files/edit", s.serveSPA)
 	mux.HandleFunc("GET /terminal", s.serveSPA)
+	mux.HandleFunc("GET /disk-analysis", s.serveSPA)
 	mux.HandleFunc("GET /settings", s.serveSPA)
 	mux.Handle("GET /assets/", spaAssets)
 
@@ -190,6 +200,13 @@ func (s *Server) Handler() http.Handler {
 	// session alone isn't enough, same as the docker-group/root-mode
 	// install-time prompts require a conscious "yes", not a default.
 	mux.HandleFunc("POST /api/settings/terminal", s.requireAuth(s.handleSettingsTerminal))
+
+	// Same "always registered status, gated main endpoint" shape as
+	// terminal above — see docs/04-features.md §4.12.
+	mux.HandleFunc("GET /api/disk-analysis/status", s.requireAuth(s.handleDiskAnalysisStatus))
+	if s.deps.DiskAnalysisEnabled {
+		mux.HandleFunc("POST /api/disk-analysis/scan", s.requireAuth(s.handleDiskAnalysisScan))
+	}
 
 	// Port config — same password-gated restart-and-reload mechanism as
 	// the terminal toggle above (changing this can lock someone out of

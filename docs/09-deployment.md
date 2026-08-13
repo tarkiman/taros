@@ -477,6 +477,9 @@ terminal:
   idleTimeoutMin: 15
   maxConcurrentSessions: 1
 
+diskAnalysis:
+  enabled: false   # lihat docs/04-features.md §4.12 — scan read-only, delete lewat file explorer
+
 thresholds:
   cpuWarnPct: 70
   cpuCriticalPct: 90
