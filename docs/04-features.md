@@ -1000,6 +1000,15 @@ digarap, dicatat sebagai ide lanjutan di [10-roadmap.md](10-roadmap.md).
 - **Nonaktif secara default** (`diskAnalysis.enabled: false`) — pola gating sama Web Terminal:
   route scan-nya **tidak didaftarkan sama sekali** kalau disabled (bukan didaftarkan-tapi-403),
   nav item disembunyikan total. `GET /api/disk-analysis/status` selalu terdaftar supaya frontend
-  tahu status tanpa perlu route utamanya aktif. Beda dari Terminal, toggle-nya config-file-only
-  untuk v1 — belum ada live-toggle dari Settings (risikonya lebih rendah dari akses shell, jadi
-  belum butuh ceremony password-reconfirm yang sama).
+  tahu status tanpa perlu route utamanya aktif.
+- **Toggle live dari halaman Settings** (`POST /api/settings/disk-analysis`, kartu "Disk
+  Analysis") — sama mekanisme restart-and-reload dengan toggle Terminal (edit `config.yaml` lalu
+  proses keluar sendiri, systemd `Restart=always` menghidupkannya lagi baca nilai baru; route
+  registration diputuskan sekali saat startup, tidak bisa di-unregister dari `*http.ServeMux`
+  yang sedang berjalan). **Beda dari Terminal, sengaja tanpa re-konfirmasi password** — fitur
+  ini cuma menambahkan kapabilitas *read-only* (scan), bukan kapabilitas destruktif baru
+  (penghapusan sudah ada duluan lewat File Explorer terlepas dari toggle ini), jadi tidak masuk
+  tingkat risiko yang sama dengan akses shell. Diuji end-to-end nyata: toggle lewat klik switch
+  sungguhan di UI (bukan cuma panggil API), tunggu restart+reload otomatis, sesi login hilang
+  (in-memory, sama seperti efek toggle Terminal), login ulang, status berubah persis sesuai
+  yang di-klik — dua arah (aktifkan dan nonaktifkan).

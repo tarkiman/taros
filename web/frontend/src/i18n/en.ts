@@ -139,6 +139,10 @@ const en = {
     savingRestarting: 'Saving & restarting the service…',
     waitingRestart: 'Waiting for the service to come back… the page will reload automatically.',
     terminalHint: 'Off by default — this is the highest-access feature in the app (see docs/07-security.md §7.6 in the repo). Once enabled, the Terminal menu appears in the topbar.',
+    diskAnalysisTitle: 'Disk Analysis',
+    diskAnalysisDesc: 'Report of the largest files/folders to help optimize storage space',
+    diskAnalysisStatusFailed: 'Failed to read Disk Analysis status.',
+    diskAnalysisHint: 'Off by default. This feature only reads file/folder sizes (read-only) — deletion still goes through File Explorer with explicit confirmation, nothing is deleted automatically. Once enabled, the Disk Analysis menu appears in the sidebar.',
     portAppTitle: 'Application Port',
     portAccessedAt: 'Port this dashboard is accessed on — currently',
     changePort: 'Change Port',
@@ -468,6 +472,7 @@ const en = {
     folder_shortcuts_save_failed: 'Failed to save the shortcut: {detail}',
     job_failed: 'Operation failed: {detail}',
     disk_analysis_scan_failed: 'Disk analysis failed: {detail}',
+    disk_analysis_toggle_failed: 'Failed to change Disk Analysis setting: {detail}',
   },
 }
 

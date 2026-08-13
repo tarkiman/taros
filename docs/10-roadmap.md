@@ -1952,6 +1952,15 @@ dicatat sebagai ide lanjutan di Fase 6 di bawah.
   penuh via Chromium headless (CDP mentah, tanpa Puppeteer) — login sungguhan, klik "Run
   Analysis", pilih file lewat checkbox, klik "Delete Selected", konfirmasi popup, verifikasi file
   hilang dari disk (`ls` gagal) dan hilang dari hasil scan ulang di UI.
+- **Follow-up hari yang sama**: user minta toggle live dari Settings (awalnya sengaja
+  config-file-only). Ditambahkan `handleSettingsDiskAnalysis` (`POST
+  /api/settings/disk-analysis`) + `config.SetDiskAnalysisEnabled` — pola restart-and-reload
+  persis toggle Terminal, tapi **tanpa** re-konfirmasi password (beda tingkat risiko: fitur ini
+  cuma menambah kapabilitas baca, bukan kapabilitas hapus baru). Diuji lewat klik switch
+  sungguhan di UI (bukan panggil API langsung) dengan simulasi `Restart=always` (loop bash
+  restart proses tiap keluar, meniru systemd di device dev) — konfirmasi dua arah: aktifkan lalu
+  nonaktifkan, keduanya benar ter-restart & ter-refleksi di status setelah login ulang (sesi
+  hilang setelah restart, sama seperti efek toggle Terminal).
 
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
