@@ -158,8 +158,15 @@ supaya connect pertama tetap ringan.
   yang memang selalu polling (mis. `internal/notify.Monitor`). Drawer ditutup → koneksi
   ditutup bersih (diverifikasi lewat perbandingan jumlah file descriptor proses sebelum/
   sesudah, bukan cuma dari tampilan UI).
-- **Warna stdout vs stderr** berbeda (stderr kemerahan) buat bantu visual saat nyari error,
-  plus timestamp per baris (format lokal, bukan RFC3339Nano mentah dari Docker).
+- **Baris error/warning diberi warna** (merah/kuning) buat bantu visual saat nyari masalah,
+  plus timestamp per baris (format lokal, bukan RFC3339Nano mentah dari Docker). Klasifikasinya
+  dari **isi teks** baris (regex `\b(error|fatal|panic|exception|critical)\b` dan `\bwarn(ing)?\b`,
+  case-insensitive), bukan cuma dari stream stdout/stderr — banyak container nyatanya menulis
+  level "ERROR" ke stdout (dikonfirmasi lewat pengujian nyata: container ramai yang jadi kasus
+  uji fitur ini nulis error ffmpeg-nya ke stdout, bukan stderr), jadi warna berbasis stream saja
+  akan melewatkan mayoritas baris yang justru paling ingin dilihat pembaca. Baris stderr tetap
+  otomatis dianggap error terlepas dari kata-katanya (stream itu sendiri sinyal yang cukup
+  kuat).
 - **Auto-scroll pintar**: ikut baris terbaru secara default, otomatis berhenti kalau user
   scroll ke atas buat baca baris lama (tidak ke-tarik paksa ke bawah), lanjut lagi begitu balik
   scroll ke bawah — pola umum log viewer.

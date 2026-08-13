@@ -24,7 +24,7 @@ import AppShell from '../layouts/AppShell.vue'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
 import { useContainerLogsStream } from '../composables/useContainerLogsStream'
-import type { Container, DockerUnavailable, Image, Network, Volume } from '../types/docker'
+import type { Container, DockerUnavailable, Image, LogLine, Network, Volume } from '../types/docker'
 import { formatBytes, formatDate } from '../utils/format'
 
 const { t } = useI18n()
@@ -197,6 +197,21 @@ function formatLogTimestamp(ts: string): string {
   const d = new Date(ts)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleTimeString()
+}
+
+// Coloring by stream (stdout/stderr) alone isn't enough — plenty of real
+// containers log at "ERROR" level to stdout (confirmed against a real
+// container while investigating a different log-drawer report), so
+// stderr would miss most of what a reader actually wants highlighted.
+// Classify by the line's own text instead, stderr still counts as an
+// error regardless of wording since that's its own strong signal.
+const LOG_ERROR_RE = /\b(error|fatal|panic|exception|critical)\b/i
+const LOG_WARN_RE = /\bwarn(?:ing)?\b/i
+
+function logLevelClass(line: LogLine): string {
+  if (line.stream === 'stderr' || LOG_ERROR_RE.test(line.text)) return 'log-line--error'
+  if (LOG_WARN_RE.test(line.text)) return 'log-line--warn'
+  return ''
 }
 
 const containerColumns = computed<DataTableColumns<Container>>(() => [
@@ -583,7 +598,7 @@ onUnmounted(() => {
           <p v-if="logsStream.lines.value.length === 0 && logsStream.connected.value" class="log-empty">
             {{ t('docker.logs.waiting') }}
           </p>
-          <div v-for="(line, i) in logsStream.lines.value" :key="i" class="log-line" :class="{ 'log-line--stderr': line.stream === 'stderr' }">
+          <div v-for="(line, i) in logsStream.lines.value" :key="i" class="log-line" :class="logLevelClass(line)">
             <span v-if="line.timestamp" class="log-ts">{{ formatLogTimestamp(line.timestamp) }}</span>
             <span class="log-text">{{ line.text }}</span>
           </div>
@@ -618,8 +633,11 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
 }
-.log-line--stderr .log-text {
+.log-line--error .log-text {
   color: var(--danger, #ef5a5a);
+}
+.log-line--warn .log-text {
+  color: var(--warning, #e0a83e);
 }
 .log-ts {
   flex: 0 0 auto;
