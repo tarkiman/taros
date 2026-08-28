@@ -473,6 +473,8 @@ export default {
     folder_shortcuts_save_failed: 'Gagal menyimpan shortcut: {detail}',
     job_failed: 'Operasi gagal: {detail}',
     disk_analysis_scan_failed: 'Analisis disk gagal: {detail}',
+    disk_analysis_scan_busy: 'Analisis disk sedang berjalan — tunggu sampai selesai.',
+    disk_analysis_scan_timeout: 'Analisis disk terlalu lama dan dihentikan — kemungkinan filesystem-nya sangat besar atau storage lambat. Coba lagi, atau persempit fileExplorer.rootDir ke direktori yang lebih kecil.',
     disk_analysis_toggle_failed: 'Gagal mengubah pengaturan Analisis Disk: {detail}',
   },
 } satisfies MessageSchema

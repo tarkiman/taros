@@ -1012,3 +1012,21 @@ digarap, dicatat sebagai ide lanjutan di [10-roadmap.md](10-roadmap.md).
   sungguhan di UI (bukan cuma panggil API), tunggu restart+reload otomatis, sesi login hilang
   (in-memory, sama seperti efek toggle Terminal), login ulang, status berubah persis sesuai
   yang di-klik — dua arah (aktifkan dan nonaktifkan).
+- **Throttled, serialized, dan timeout-bounded (2026-08-28 fix).** Ditemukan di device nyata:
+  scan tanpa batas apa pun (rootDir default `"/"`, satu `filepath.WalkDir` penuh, tanpa jeda,
+  tanpa timeout, tanpa penjagaan concurrent) membuat seluruh Raspberry Pi macet/tidak bisa
+  diakses selama scan berjalan — persis kelas masalah CasaOS-hang yang jadi alasan proyek ini
+  ada ([01-overview.md](01-overview.md)), hanya saja lewat jalur read, bukan write, dan tidak
+  pernah dipasangi pengaman seperti `fileExplorer.copyThrottleMBps`/`JobQueue` punya copy-move.
+  Perbaikan (`internal/fileexplorer.DiskAnalysisScanner`):
+  - `diskAnalysis.throttleEveryFiles` + `diskAnalysis.throttleSleepMs` — `Scan` tidur sebentar
+    tiap N entry (file maupun direktori) yang dikunjungi, supaya tidak menghajar disk di duty
+    cycle 100% terus-menerus selama scan (default 200 entry / jeda 5ms — root fs berisi
+    ratusan ribu file jadi beberapa detik lebih lambat, jauh lebih baik daripada bikin seluruh
+    device hang).
+  - `diskAnalysis.timeoutSec` (default 180) — scan yang tidak selesai dalam batas ini dihentikan
+    lewat context timeout, request mengembalikan error jelas (`disk_analysis_scan_timeout`)
+    alih-alih menggantung selamanya.
+  - Hanya satu scan berjalan di satu waktu — permintaan scan kedua saat satu masih berjalan
+    langsung ditolak (`disk_analysis_scan_busy`, HTTP 409) alih-alih menjalankan dua walk
+    penuh sekaligus (dua kali beban I/O yang justru sedang coba dibatasi).

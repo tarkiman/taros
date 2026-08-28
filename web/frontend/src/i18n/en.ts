@@ -472,6 +472,8 @@ const en = {
     folder_shortcuts_save_failed: 'Failed to save the shortcut: {detail}',
     job_failed: 'Operation failed: {detail}',
     disk_analysis_scan_failed: 'Disk analysis failed: {detail}',
+    disk_analysis_scan_busy: 'A disk analysis scan is already running — wait for it to finish.',
+    disk_analysis_scan_timeout: 'Disk analysis took too long and was stopped — the filesystem may be very large or storage is slow. Try again, or scope fileExplorer.rootDir to a smaller directory.',
     disk_analysis_toggle_failed: 'Failed to change Disk Analysis setting: {detail}',
   },
 }
