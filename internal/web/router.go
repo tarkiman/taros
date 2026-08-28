@@ -56,6 +56,11 @@ type Deps struct {
 	// isn't gated separately: it reuses the always-available file-op
 	// delete endpoint, which is already Jail-scoped.
 	DiskAnalysisEnabled bool
+	// DiskAnalysisScanner runs the actual scan — throttled, serialized,
+	// and timeout-bounded, see its doc comment in internal/fileexplorer.
+	// nil when DiskAnalysisEnabled is false (route not registered, so
+	// handlers never need to nil-check this).
+	DiskAnalysisScanner *fileexplorer.DiskAnalysisScanner
 
 	// Version is this build's version string ("dev" for a plain local
 	// build) — see cmd/taros/main.go. UpdateEnabled gates

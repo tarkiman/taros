@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -38,6 +39,21 @@ type ScanResult struct {
 	PermissionErrors int         `json:"permissionErrors,omitempty"`
 }
 
+// ScanOptions paces Scan's filesystem walk — see DiskAnalysisConfig's doc
+// comment in internal/config for why this exists: a full
+// fileExplorer.rootDir walk (rootDir defaults to "/") with no throttle at
+// all is exactly the kind of unbounded I/O burst that made CasaOS hang
+// (see JobQueue's doc comment) — it just hadn't been applied to the scan
+// path until this was found to reproduce that same hang on real hardware.
+type ScanOptions struct {
+	// YieldEveryFiles entries visited (files and directories both — every
+	// filepath.WalkDir callback invocation counts, since even a skipped
+	// entry costs a stat/dirent syscall), Scan sleeps YieldSleep. 0 means
+	// no throttling.
+	YieldEveryFiles int
+	YieldSleep      time.Duration
+}
+
 // entryHeap is a min-heap on SizeBytes — Scan keeps only the topFilesLimit
 // largest files seen so far, evicting the current smallest whenever a
 // bigger one shows up, instead of collecting every file in memory before
@@ -63,7 +79,7 @@ func (h *entryHeap) Pop() any {
 // existing capability (Delete, reached through the same Jail via the
 // regular file-op endpoint) so this function's only failure mode is
 // "couldn't read/report," never "deleted something."
-func Scan(ctx context.Context, j *Jail) (ScanResult, error) {
+func Scan(ctx context.Context, j *Jail, opts ScanOptions) (ScanResult, error) {
 	start := time.Now()
 
 	rootInfo, err := os.Lstat(j.Root)
@@ -81,11 +97,19 @@ func Scan(ctx context.Context, j *Jail) (ScanResult, error) {
 		skippedMounts    []string
 		dirTotals        = make(map[string]int64)
 		topFiles         entryHeap
+		visited          int
 	)
 
 	walkErr := filepath.WalkDir(j.Root, func(path string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
+		}
+
+		if opts.YieldEveryFiles > 0 {
+			visited++
+			if visited%opts.YieldEveryFiles == 0 {
+				time.Sleep(opts.YieldSleep)
+			}
 		}
 
 		if err != nil {
@@ -171,6 +195,58 @@ func Scan(ctx context.Context, j *Jail) (ScanResult, error) {
 		SkippedMounts:    skippedMounts,
 		PermissionErrors: permissionErrors,
 	}, nil
+}
+
+// ErrScanInProgress is returned by DiskAnalysisScanner.Scan when a scan is
+// already running.
+var ErrScanInProgress = errors.New("fileexplorer: disk analysis scan already in progress")
+
+// DiskAnalysisScanner wraps Scan with the two guards a raw, on-demand,
+// whole-filesystem walk needs on a resource-constrained device:
+//
+//   - Serialization: only one scan runs at a time. Two full
+//     fileExplorer.rootDir walks running concurrently (e.g. a user
+//     double-clicking "Jalankan Analisis", or retrying after a slow
+//     response) would double the exact I/O burst ScanOptions is throttling.
+//   - A hard wall-clock timeout, so a huge/slow tree can't hold the request
+//     — and keep hammering the disk — indefinitely.
+type DiskAnalysisScanner struct {
+	jail    *Jail
+	opts    ScanOptions
+	timeout time.Duration
+
+	mu      sync.Mutex
+	running bool
+}
+
+// NewDiskAnalysisScanner builds a scanner for jail. timeout <= 0 falls
+// back to a conservative 3-minute default.
+func NewDiskAnalysisScanner(jail *Jail, opts ScanOptions, timeout time.Duration) *DiskAnalysisScanner {
+	if timeout <= 0 {
+		timeout = 3 * time.Minute
+	}
+	return &DiskAnalysisScanner{jail: jail, opts: opts, timeout: timeout}
+}
+
+// Scan runs a single disk-analysis scan bounded by s.timeout, or returns
+// ErrScanInProgress immediately if one is already running.
+func (s *DiskAnalysisScanner) Scan(ctx context.Context) (ScanResult, error) {
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return ScanResult{}, ErrScanInProgress
+	}
+	s.running = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+	}()
+
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	return Scan(ctx, s.jail, s.opts)
 }
 
 // topLevelBucket returns the absolute path of path's immediate ancestor

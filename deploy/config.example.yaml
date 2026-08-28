@@ -63,6 +63,14 @@ diskAnalysis:
   # dari sini atau lewat toggle live di halaman Settings. Lihat docs/04-features.md
   # §4.12. Scan-nya read-only; penghapusan pakai endpoint file explorer yang sudah ada.
   enabled: false
+  # Scan men-walk seluruh fileExplorer.rootDir (default "/") sekali jalan —
+  # throttleEveryFiles/throttleSleepMs menjeda scan tiap N entry supaya tidak
+  # membebani I/O 100% terus-menerus di storage lambat (SD/eMMC), sama alasan
+  # dengan fileExplorer.copyThrottleMBps. timeoutSec membatasi durasi satu scan
+  # supaya tree yang sangat besar/lambat tidak menggantung request selamanya.
+  throttleEveryFiles: 200
+  throttleSleepMs: 5
+  timeoutSec: 180
 
 update:
   # Tombol "Update" di topbar dashboard — cek & pasang rilis GitHub

@@ -479,6 +479,9 @@ terminal:
 
 diskAnalysis:
   enabled: false   # lihat docs/04-features.md §4.12 — scan read-only, delete lewat file explorer
+  throttleEveryFiles: 200   # jeda scan tiap N entry — hindari 100% I/O duty cycle di storage lambat
+  throttleSleepMs: 5
+  timeoutSec: 180           # batas wall-clock satu scan
 
 thresholds:
   cpuWarnPct: 70

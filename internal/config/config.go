@@ -112,6 +112,25 @@ type TerminalConfig struct {
 // explorer delete endpoint, not a new capability gated here.
 type DiskAnalysisConfig struct {
 	Enabled bool `yaml:"enabled"`
+
+	// ThrottleEveryFiles/ThrottleSleepMs pace fileexplorer.Scan's
+	// filepath.WalkDir so a full fileExplorer.rootDir walk (rootDir
+	// defaults to "/" — the whole root filesystem) doesn't run at 100%
+	// I/O duty cycle for its entire duration — same "don't saturate slow
+	// storage" reasoning as fileExplorer.copyThrottleMBps and JobQueue's
+	// bounded concurrency, just never applied to the scan path before.
+	// Every ThrottleEveryFiles entries visited, Scan sleeps
+	// ThrottleSleepMs to give the rest of the system (SSH, journald,
+	// dockerd, ...) a turn at the disk. 0 = unbounded — don't set that on
+	// real hardware, only useful for tests.
+	ThrottleEveryFiles int `yaml:"throttleEveryFiles"`
+	ThrottleSleepMs    int `yaml:"throttleSleepMs"`
+
+	// TimeoutSec bounds one scan's wall-clock duration. Without this, a
+	// huge/slow tree holds the HTTP request — and keeps hammering the
+	// disk — indefinitely. 0 = a conservative built-in default is used
+	// (see fileexplorer.NewDiskAnalysisScanner).
+	TimeoutSec int `yaml:"timeoutSec"`
 }
 
 // UpdateConfig — see docs/09-deployment.md §9.5 & docs/07-security.md.
@@ -204,7 +223,10 @@ func Default() Config {
 			MaxConcurrentSessions: 1,
 		},
 		DiskAnalysis: DiskAnalysisConfig{
-			Enabled: false,
+			Enabled:            false,
+			ThrottleEveryFiles: 200,
+			ThrottleSleepMs:    5,
+			TimeoutSec:         180,
 		},
 		Update: UpdateConfig{
 			Enabled: true,

@@ -193,6 +193,16 @@ func runServer(args []string) {
 			time.Duration(cfg.Terminal.IdleTimeoutMin)*time.Minute,
 		)
 	}
+	if cfg.DiskAnalysis.Enabled {
+		deps.DiskAnalysisScanner = fileexplorer.NewDiskAnalysisScanner(
+			jail,
+			fileexplorer.ScanOptions{
+				YieldEveryFiles: cfg.DiskAnalysis.ThrottleEveryFiles,
+				YieldSleep:      time.Duration(cfg.DiskAnalysis.ThrottleSleepMs) * time.Millisecond,
+			},
+			time.Duration(cfg.DiskAnalysis.TimeoutSec)*time.Second,
+		)
+	}
 
 	srv := web.NewServer(deps)
 

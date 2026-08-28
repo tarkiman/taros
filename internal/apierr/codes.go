@@ -126,5 +126,7 @@ const (
 	JobFailed = "job_failed" // params: detail
 
 	DiskAnalysisScanFailed   = "disk_analysis_scan_failed"   // params: detail
+	DiskAnalysisScanBusy     = "disk_analysis_scan_busy"     // a scan is already running
+	DiskAnalysisScanTimeout  = "disk_analysis_scan_timeout"  // scan exceeded diskAnalysis.timeoutSec
 	DiskAnalysisToggleFailed = "disk_analysis_toggle_failed" // params: detail
 )
