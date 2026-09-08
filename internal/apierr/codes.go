@@ -40,6 +40,15 @@ const (
 	TOTPConfirmFailed = "totp_confirm_failed" // params: detail
 	TOTPDisableFailed = "totp_disable_failed" // params: detail
 
+	// handlers_users.go
+	UsernameRequired      = "username_required"
+	UsernameAlreadyExists = "username_already_exists"
+	PasswordTooShort      = "password_too_short" // params: min
+	UserNotFound          = "user_not_found"
+	CannotRemoveLastUser  = "cannot_remove_last_user"
+	CannotRemoveSelf      = "cannot_remove_self"
+	UsersSaveFailed       = "users_save_failed" // params: detail
+
 	// handlers_files.go
 	PathInvalid         = "path_invalid"          // params: detail
 	DirectoryReadFailed = "directory_read_failed" // params: detail

@@ -22,9 +22,10 @@ type totpStatusResponse struct {
 }
 
 func (s *Server) handleSettingsTOTPStatus(w http.ResponseWriter, r *http.Request) {
-	resp := totpStatusResponse{Enabled: s.deps.Creds.TOTPEnabled()}
+	sess := sessionFromContext(r.Context())
+	resp := totpStatusResponse{Enabled: s.deps.Creds.TOTPEnabled(sess.Username)}
 	if resp.Enabled {
-		resp.RemainingBackupCodes = s.deps.Creds.RemainingBackupCodes()
+		resp.RemainingBackupCodes = s.deps.Creds.RemainingBackupCodes(sess.Username)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -82,12 +83,12 @@ func (s *Server) handleSettingsTOTPConfirm(w http.ResponseWriter, r *http.Reques
 		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPConfirmFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
-	if err := s.deps.Creds.SetTOTP(s.deps.CredentialsPath, req.Secret, backupCodes); err != nil {
+	sess := sessionFromContext(r.Context())
+	if err := s.deps.Creds.SetTOTP(s.deps.CredentialsPath, sess.Username, req.Secret, backupCodes); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPConfirmFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}
 
-	sess := sessionFromContext(r.Context())
 	slog.Info("settings: TOTP diaktifkan", "username", sess.Username)
 	writeJSON(w, http.StatusOK, totpConfirmResponse{BackupCodes: backupCodes})
 }
@@ -111,7 +112,7 @@ func (s *Server) handleSettingsTOTPDisable(w http.ResponseWriter, r *http.Reques
 		writeJSONError(w, http.StatusForbidden, apierr.WrongPassword, "password salah", nil) // 403, not 401 — see handlers_settings.go
 		return
 	}
-	if err := s.deps.Creds.ClearTOTP(s.deps.CredentialsPath); err != nil {
+	if err := s.deps.Creds.ClearTOTP(s.deps.CredentialsPath, sess.Username); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, apierr.TOTPDisableFailed, err.Error(), map[string]any{"detail": err.Error()})
 		return
 	}

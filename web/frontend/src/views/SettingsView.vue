@@ -11,9 +11,11 @@ import { settingsApi } from '../api/settings'
 import { totpApi } from '../api/totp'
 import { notifyApi, type NotifySettings } from '../api/notify'
 import { ApiError } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const { t } = useI18n()
 const message = useMessage()
+const auth = useAuthStore()
 
 // --- current state ---
 const loading = ref(true)
@@ -36,6 +38,7 @@ onMounted(() => {
   loadPortStatus()
   loadNotifySettings()
   loadDiskAnalysisStatus()
+  loadUsers()
 })
 
 // --- toggle flow: switch never applies directly, always goes through a
@@ -327,6 +330,86 @@ function cancelTotpFlow() {
   totpError.value = ''
 }
 
+// --- Kelola Pengguna (multi-user, akses sama rata) --- same "no restart,
+// re-confirm own password" shape as TOTP disable above, not the
+// restart-and-reload shape Terminal/Port use — see
+// internal/web/handlers_users.go.
+type UsersFlow = 'idle' | 'add' | 'removeConfirm' | 'applying' | 'error'
+const usernames = ref<string[]>([])
+const usersFlow = ref<UsersFlow>('idle')
+const usersError = ref('')
+const newUsername = ref('')
+const newPassword = ref('')
+const newPasswordConfirm = ref('')
+const usersPassword = ref('')
+const pendingRemoveUsername = ref('')
+
+async function loadUsers() {
+  try {
+    const res = await settingsApi.listUsers()
+    usernames.value = res.usernames
+  } catch {
+    message.error(t('settings.usersStatusFailed'))
+  }
+}
+
+function requestAddUser() {
+  newUsername.value = ''
+  newPassword.value = ''
+  newPasswordConfirm.value = ''
+  usersPassword.value = ''
+  usersError.value = ''
+  usersFlow.value = 'add'
+}
+
+async function confirmAddUser() {
+  if (newPassword.value !== newPasswordConfirm.value) {
+    usersError.value = t('settings.passwordMismatch')
+    return
+  }
+  usersFlow.value = 'applying'
+  usersError.value = ''
+  try {
+    const res = await settingsApi.addUser(newUsername.value, newPassword.value, usersPassword.value)
+    usernames.value = res.usernames
+    usersFlow.value = 'idle'
+  } catch (e) {
+    usersError.value = e instanceof ApiError && e.status === 403 ? t('common.wrongPassword') : e instanceof Error ? e.message : t('settings.addUserFailed')
+    usersFlow.value = 'error'
+  }
+}
+
+function requestRemoveUser(username: string) {
+  pendingRemoveUsername.value = username
+  usersPassword.value = ''
+  usersError.value = ''
+  usersFlow.value = 'removeConfirm'
+}
+
+async function confirmRemoveUser() {
+  if (!usersPassword.value) return
+  usersFlow.value = 'applying'
+  usersError.value = ''
+  try {
+    const res = await settingsApi.removeUser(pendingRemoveUsername.value, usersPassword.value)
+    usernames.value = res.usernames
+    usersFlow.value = 'idle'
+  } catch (e) {
+    usersError.value = e instanceof ApiError && e.status === 403 ? t('common.wrongPassword') : e instanceof Error ? e.message : t('settings.removeUserFailed')
+    usersFlow.value = 'error'
+  }
+}
+
+function cancelUsersFlow() {
+  usersFlow.value = 'idle'
+  newUsername.value = ''
+  newPassword.value = ''
+  newPasswordConfirm.value = ''
+  usersPassword.value = ''
+  pendingRemoveUsername.value = ''
+  usersError.value = ''
+}
+
 // --- Discord notifications ---
 // No password-confirm flow like Terminal/Port above (see router.go's
 // comment on these routes) — saving here neither restarts the service nor
@@ -595,6 +678,73 @@ async function sendNotifyTest() {
           </NSpace>
         </NCard>
 
+        <NCard embedded size="small" :title="t('settings.usersTitle')" style="margin-top: 16px">
+          <NSpace vertical :size="12">
+            <template v-if="usersFlow === 'idle'">
+              <p class="text-muted">{{ t('settings.usersDesc') }}</p>
+              <ul class="users-list">
+                <li v-for="u in usernames" :key="u" class="users-row">
+                  <span>{{ u }}</span>
+                  <NTag v-if="u === auth.username" size="small">{{ t('settings.usersYou') }}</NTag>
+                  <NButton
+                    v-else
+                    size="tiny"
+                    type="error"
+                    ghost
+                    @click="requestRemoveUser(u)"
+                  >{{ t('settings.removeUser') }}</NButton>
+                </li>
+              </ul>
+              <NButton size="small" type="primary" @click="requestAddUser">{{ t('settings.addUser') }}</NButton>
+            </template>
+
+            <template v-else-if="usersFlow === 'add'">
+              <NSpace vertical :size="10">
+                <NInput v-model:value="newUsername" :placeholder="t('settings.newUsername')" autofocus />
+                <NInput v-model:value="newPassword" type="password" show-password-on="click" :placeholder="t('settings.newPassword')" autocomplete="new-password" />
+                <NInput v-model:value="newPasswordConfirm" type="password" show-password-on="click" :placeholder="t('settings.confirmNewPassword')" autocomplete="new-password" @keyup.enter="confirmAddUser" />
+                <NInput v-model:value="usersPassword" type="password" show-password-on="click" :placeholder="t('common.dashboardPassword')" autocomplete="current-password" @keyup.enter="confirmAddUser" />
+                <NAlert v-if="usersError" type="error" :show-icon="false">{{ usersError }}</NAlert>
+                <NSpace>
+                  <NButton size="small" @click="cancelUsersFlow">{{ t('common.cancel') }}</NButton>
+                  <NButton size="small" type="primary" :disabled="!newUsername || !newPassword || !usersPassword" @click="confirmAddUser">{{ t('settings.addUser') }}</NButton>
+                </NSpace>
+              </NSpace>
+            </template>
+
+            <template v-else-if="usersFlow === 'removeConfirm'">
+              <NAlert type="warning" :show-icon="false">
+                <NSpace vertical :size="10">
+                  <span>{{ t('settings.confirmRemoveUser', { username: pendingRemoveUsername }) }}</span>
+                  <NInput
+                    v-model:value="usersPassword"
+                    type="password"
+                    show-password-on="click"
+                    :placeholder="t('common.dashboardPassword')"
+                    autocomplete="current-password"
+                    @keyup.enter="confirmRemoveUser"
+                  />
+                  <NSpace>
+                    <NButton size="small" @click="cancelUsersFlow">{{ t('common.cancel') }}</NButton>
+                    <NButton size="small" type="error" :disabled="!usersPassword" @click="confirmRemoveUser">{{ t('settings.removeUser') }}</NButton>
+                  </NSpace>
+                </NSpace>
+              </NAlert>
+            </template>
+
+            <div v-else-if="usersFlow === 'applying'" class="flow-row">
+              <NSpin size="small" /> <span>{{ t('common.processing') }}</span>
+            </div>
+
+            <NAlert v-else-if="usersFlow === 'error'" type="error" :show-icon="false">
+              <NSpace vertical :size="10">
+                <span><NIcon :component="TriangleAlert" size="14" /> {{ usersError }}</span>
+                <NButton size="small" @click="cancelUsersFlow">{{ t('common.close') }}</NButton>
+              </NSpace>
+            </NAlert>
+          </NSpace>
+        </NCard>
+
         <NCard embedded size="small" :title="t('settings.notify.title')" style="margin-top: 16px">
           <div v-if="notifyLoading" class="loading"><NSpin size="small" /></div>
           <NSpace v-else vertical :size="16">
@@ -750,6 +900,20 @@ async function sendNotifyTest() {
   gap: 6px 16px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.88rem;
+}
+.users-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.users-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
 }
 .notify-rule {
   display: flex;

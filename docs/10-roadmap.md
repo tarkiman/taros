@@ -1962,6 +1962,41 @@ dicatat sebagai ide lanjutan di Fase 6 di bawah.
   nonaktifkan, keduanya benar ter-restart & ter-refleksi di status setelah login ulang (sesi
   hilang setelah restart, sama seperti efek toggle Terminal).
 
+### Multi-user (akses sama rata, tanpa role-based access)
+
+Diminta user lewat WhatsApp (agent latar belakang di Pi, bukan sesi code-server) — sempat
+didiskusikan dulu lewat `AskUserQuestion` karena "tambah username/password" awalnya ambigu
+(bisa berarti ganti kredensial admin yang sudah ada, akun service lain di Pi, atau memang
+multi-user TarOS) — akhirnya discope: multi-user TarOS sendiri, semua akun **akses sama
+rata** (role-based access eksplisit tetap di luar scope, lihat Fase 6 di bawah).
+
+- **`internal/auth.Credentials` tetap satu tipe** (bukan tipe baru) — isi internalnya diganti
+  dari field akun flat jadi `accounts []account`, supaya ~15 call site existing di
+  `internal/web/*.go` tidak perlu refactor besar, cuma beberapa method yang tadinya
+  implicit-single-account sekarang terima parameter `username` (`TOTPEnabled`, `SetTOTP`,
+  `ClearTOTP`, `VerifyTOTPOrBackupCode`, `RemainingBackupCodes`). `Verify(username, password)`
+  kebetulan sudah bentuk yang tepat dari awal, tidak perlu ganti signature.
+- **Migrasi format lama → baru transparan, sekali jalan** — `LoadCredentials` baca format
+  lama (field flat di top level `credentials.yaml`) *dan* baru (`users: [...]`) dari satu
+  struct yang sama; ketemu format lama langsung dibungkus jadi satu entri lalu ditulis ulang
+  saat itu juga. Tidak ada langkah manual, tidak ada config baru.
+- **`taros setup` CLI jadi bootstrap-only** — dulu diam-diam overwrite `credentials.yaml`
+  tiap dijalankan (aman waktu single-user, cuma reset akun sendiri); sekarang **menolak**
+  jalan kalau file sudah ada (bisa menghapus akun ORANG LAIN kalau tetap overwrite), arahkan
+  ke Settings > Kelola Pengguna untuk tambah akun.
+- **Tambah/hapus akun re-confirm password sendiri**, pola persis toggle Terminal/Port/
+  nonaktifkan TOTP — tapi **tanpa restart** (pola sama TOTP setup/confirm/disable, mutasi
+  langsung ke file). Guard: tidak bisa hapus akun sendiri yang sedang login (cegah lockout
+  tengah sesi), tidak bisa hapus akun terakhir (cegah instance tanpa akun sama sekali).
+  Anti-enumeration timing tetap dijaga (`Verify` selalu jalankan bcrypt meski username tidak
+  ketemu, compare ke hash dummy) — sama seperti versi single-user, cuma sekarang berlaku
+  untuk N akun bukan 1.
+- **Layer session ternyata sudah siap dari awal** (ditemukan lewat eksplorasi sebelum
+  desain, bukan asumsi) — `auth.Session.Username` sudah cuma string bebas, tidak pernah
+  divalidasi ulang terhadap `Credentials.Username`; constraint "cuma satu akun" murni ada di
+  `Credentials`. Form login juga sudah minta username dari awal (bukan cuma password) — jadi
+  `LoginView.vue` tidak perlu perubahan sama sekali untuk mendukung multi-user.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
@@ -1975,11 +2010,12 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
 - Login terminal berbasis PAM/user sistem asli (bukan lagi user service `taros` tunggal) —
   dipertimbangkan lagi kalau kebutuhannya berkembang jadi multi-user administrasi penuh.
 - Log viewer streaming (bukan tail on-demand) untuk container & systemd unit.
-- Multi-user dengan role-based access.
-- Halaman Pengaturan lengkap — ganti password admin, interval polling, root direktori file
-  explorer, daftar unit systemd "terproteksi". Toggle Terminal dan TOTP (2FA) sudah ada
-  (lihat entri "Halaman Pengaturan (awal)" dan "TOTP (2FA), opsional dari Pengaturan" di
-  atas) — sisanya belum.
+- Role-based access untuk multi-user (mis. akun viewer read-only vs admin) — multi-user
+  sendiri (akses sama rata) sudah selesai, lihat entri "Multi-user (akses sama rata, tanpa
+  role-based access)" di atas.
+- Halaman Pengaturan lengkap — ganti password akun sendiri, interval polling, root direktori
+  file explorer, daftar unit systemd "terproteksi". Toggle Terminal, TOTP (2FA), dan Kelola
+  Pengguna sudah ada (lihat entri terkait di atas) — sisanya belum.
 - Kategori tambahan untuk Analisis Disk (lihat entri di atas), sengaja belum digarap di v1:
   Docker unused images/volumes (sebagian sudah ada lewat tombol Cleanup di §4.2, belum
   terintegrasi ke laporan analisis), service systemd yang gagal terus-menerus (data-nya sudah
