@@ -232,6 +232,19 @@ func runSetup(args []string) {
 		os.Exit(1)
 	}
 
+	// `taros setup` only ever bootstraps the *first* account now — TarOS
+	// supports multiple accounts (see docs/10-roadmap.md), and letting
+	// this overwrite an existing credentials.yaml would silently delete
+	// every other account, not just reset "the" one admin like before.
+	// Adding accounts after the first goes through Settings > Kelola
+	// Pengguna instead (docs/04-features.md §4.7).
+	if _, err := os.Stat(cfg.Auth.CredentialsFile); err == nil {
+		fmt.Fprintln(os.Stderr, "credentials.yaml sudah ada di", cfg.Auth.CredentialsFile)
+		fmt.Fprintln(os.Stderr, "untuk tambah akun baru, login lalu buka Settings > Kelola Pengguna.")
+		fmt.Fprintln(os.Stderr, "untuk reset total, hapus file itu dulu lalu jalankan ulang perintah ini.")
+		os.Exit(1)
+	}
+
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Username admin: ")
 	username, _ := reader.ReadString('\n')

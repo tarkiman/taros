@@ -234,6 +234,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/settings/totp/confirm", s.requireAuth(s.handleSettingsTOTPConfirm))
 	mux.HandleFunc("POST /api/settings/totp/disable", s.requireAuth(s.handleSettingsTOTPDisable))
 
+	// User management (multi-user, all equal access — see
+	// docs/10-roadmap.md and docs/04-features.md §4.7 "Kelola Pengguna").
+	// Always registered, no enabled-gating: unlike Terminal/Disk Analysis
+	// this isn't an optional/risky feature, it's core auth. Add/remove
+	// both re-confirm the caller's own password, same pattern as
+	// terminal/port/TOTP-disable above, but need no restart — mutated
+	// directly like TOTP setup/confirm/disable.
+	mux.HandleFunc("GET /api/settings/users", s.requireAuth(s.handleSettingsUsersList))
+	mux.HandleFunc("POST /api/settings/users", s.requireAuth(s.handleSettingsUsersAdd))
+	mux.HandleFunc("POST /api/settings/users/{username}/remove", s.requireAuth(s.handleSettingsUsersRemove))
+
 	// /api/update/check always registered (same "show a clear disabled
 	// state" reasoning as terminal/status above); /apply checks
 	// UpdateEnabled itself rather than being conditionally routed, since

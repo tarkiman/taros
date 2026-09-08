@@ -5,9 +5,22 @@ permukaan risikonya besar jika tidak dijaga. Bagian ini mendefinisikan pagar pen
 
 ## 7.1 Autentikasi & Session
 
-- **Single admin user**, kredensial dikonfigurasi saat first-run (setup wizard sederhana
-  di CLI: `taros setup` — set username & password) atau via `config.yaml` (password
-  disimpan sebagai **bcrypt hash**, tidak pernah plaintext).
+- **Multi-user, akses sama rata** (belum ada role-based access — dicatat sebagai ide lanjutan
+  di [10-roadmap.md](10-roadmap.md)). Akun pertama dikonfigurasi saat first-run (`taros setup`
+  — CLI, set username & password); akun berikutnya ditambah dari halaman Settings > Kelola
+  Pengguna (`internal/web/handlers_users.go`), bukan lewat CLI (`taros setup` sekarang menolak
+  jalan lagi kalau `credentials.yaml` sudah ada, persis supaya tidak diam-diam menghapus akun
+  orang lain — dulu, waktu masih single-user, menjalankan ulang `taros setup` memang meng-reset
+  satu-satunya akun; sekarang itu terlalu berbahaya). Semua password disimpan sebagai
+  **bcrypt hash**, tidak pernah plaintext, di file yang sama (`credentials.yaml`, satu daftar
+  akun, bukan lagi satu akun flat — `internal/auth/credentials.go` migrasi format lama secara
+  otomatis & transparan saat file pertama kali dibaca, tidak perlu langkah manual).
+- **Tambah/hapus akun butuh re-konfirmasi password akun yang sedang login** — pola sama dengan
+  toggle Terminal/Port/nonaktifkan TOTP. Dua guard tambahan: tidak bisa menghapus akun sendiri
+  yang sedang login (hindari lockout tengah sesi), dan tidak bisa menghapus akun terakhir yang
+  tersisa (hindari instance tanpa akun sama sekali). `Verify(username, password)` tetap
+  menjalankan bcrypt compare (ke hash dummy) meski username tidak ditemukan — anti-enumeration
+  yang sama seperti versi single-user, cuma sekarang berlaku untuk N akun, bukan 1.
 - Login via form → cek bcrypt → jika valid, buat session token random (32 byte,
   `crypto/rand`), simpan di map in-memory `token → session`, set sebagai **cookie
   HTTP-only, Secure (jika HTTPS aktif), SameSite=Strict**.

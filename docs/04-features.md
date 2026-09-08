@@ -782,8 +782,21 @@ ke server).
   reload halaman yang sama — origin lama sudah tidak ada yang dengar sama sekali begitu
   servis pindah port), lalu diminta login ulang seperti biasa karena sesi cookie tidak ikut
   pindah lintas port (port berbeda dihitung origin berbeda oleh browser).
-- Ganti password admin, konfigurasi interval polling, root direktori file explorer, daftar
-  unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
+- **Kelola Pengguna** — TarOS sekarang multi-user, semua akun **akses sama rata** (belum ada
+  role-based access, lihat [10-roadmap.md](10-roadmap.md) Fase 6). Kartu "Kelola Pengguna" di
+  Settings menampilkan daftar username (akun sendiri ditandai, tombol hapus disembunyikan
+  untuk baris itu), tombol "Tambah Pengguna" (username + password + password akun sendiri
+  untuk konfirmasi — pola sama toggle Terminal/Port/nonaktifkan TOTP), dan tombol hapus per
+  baris (password akun sendiri lagi untuk konfirmasi). Dua guard: tidak bisa hapus akun
+  sendiri yang sedang login, tidak bisa hapus akun terakhir yang tersisa. **Tidak ada restart
+  service** untuk tambah/hapus akun (beda dari toggle Terminal/Port) — mutasi langsung ke
+  `credentials.yaml` + in-memory, sama seperti setup/konfirmasi/nonaktifkan TOTP di atas.
+  Instalasi lama (single-user) otomatis ter-migrasi ke format multi-user begitu file pertama
+  kali dibaca, transparan tanpa langkah manual — lihat [07-security.md](07-security.md) §7.1.
+  TOTP sekarang juga per-akun (dulu satu akun jadi satu TOTP global secara implisit) — tiap
+  akun independen, aktifkan TOTP di satu akun tidak memaksa akun lain ikut pakai 2FA.
+- Ganti password akun sendiri, konfigurasi interval polling, root direktori file explorer,
+  daftar unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
   [10-roadmap.md](10-roadmap.md) Fase 6.
 
 ## 4.8 Update Aplikasi

@@ -66,7 +66,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.deps.Creds.TOTPEnabled() {
+	if s.deps.Creds.TOTPEnabled(req.Username) {
 		if req.TOTPCode == "" {
 			// Password alone was correct, but that's only half of what
 			// this account needs — don't count it as a failure (it
@@ -74,7 +74,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, sessionResponse{Authenticated: false, TOTPRequired: true, Version: s.deps.Version})
 			return
 		}
-		ok, err := s.deps.Creds.VerifyTOTPOrBackupCode(s.deps.CredentialsPath, req.TOTPCode, time.Now())
+		ok, err := s.deps.Creds.VerifyTOTPOrBackupCode(s.deps.CredentialsPath, req.Username, req.TOTPCode, time.Now())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, apierr.TOTPVerifyFailed, "Gagal memverifikasi kode TOTP.", map[string]any{"detail": err.Error()})
 			return

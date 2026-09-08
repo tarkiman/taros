@@ -8,4 +8,9 @@ export const settingsApi = {
   getPort: () => api.get<{ listen: string }>('/api/settings/port'),
   setPort: (port: number, password: string) =>
     api.post<{ listen: string }>('/api/settings/port', { port, password }),
+  listUsers: () => api.get<{ usernames: string[] }>('/api/settings/users'),
+  addUser: (newUsername: string, newPassword: string, password: string) =>
+    api.post<{ usernames: string[] }>('/api/settings/users', { newUsername, newPassword, password }),
+  removeUser: (username: string, password: string) =>
+    api.post<{ usernames: string[] }>(`/api/settings/users/${encodeURIComponent(username)}/remove`, { password }),
 }
