@@ -15,6 +15,7 @@ type rawContainer struct {
 	State   string
 	Status  string
 	Created int64
+	Labels  map[string]string
 	Ports   []struct {
 		PrivatePort int
 		PublicPort  int
@@ -31,6 +32,16 @@ type Container struct {
 	Status  string    `json:"status"` // human string, e.g. "Up 3 hours"
 	Created time.Time `json:"created"`
 	Ports   string    `json:"ports"` // pre-formatted "8080->80/tcp, ..." for simplicity in the template
+
+	// Compose grouping — read from the com.docker.compose.* labels Docker
+	// already returns with every container (no extra API call), empty for
+	// containers not started by `docker compose`. Powers the "Aplikasi"
+	// tab (docs/04-features.md §4.2). Health is parsed out of Status, since
+	// /containers/json has no separate health field.
+	Project    string `json:"project"`
+	Service    string `json:"service"`
+	WorkingDir string `json:"workingDir"`
+	Health     string `json:"health"` // healthy | unhealthy | starting | "" (no healthcheck)
 
 	// Populated only for running containers — see ListWithStats.
 	HasStats bool           `json:"hasStats"`
@@ -67,9 +78,30 @@ func (c *Client) ListContainers(ctx context.Context, all bool) ([]Container, err
 			Status:  r.Status,
 			Created: time.Unix(r.Created, 0),
 			Ports:   strings.Join(ports, ", "),
+
+			Project:    r.Labels["com.docker.compose.project"],
+			Service:    r.Labels["com.docker.compose.service"],
+			WorkingDir: r.Labels["com.docker.compose.project.working_dir"],
+			Health:     parseHealth(r.Status),
 		}
 	}
 	return out, nil
+}
+
+// parseHealth extracts the healthcheck state from a container's Status
+// string ("Up 2 hours (healthy)", "Up 5 seconds (health: starting)",
+// "Up 1 hour (unhealthy)"). Docker's list endpoint only exposes it there.
+func parseHealth(status string) string {
+	switch {
+	case strings.Contains(status, "(unhealthy)"):
+		return "unhealthy"
+	case strings.Contains(status, "(healthy)"):
+		return "healthy"
+	case strings.Contains(status, "(health: starting)"):
+		return "starting"
+	default:
+		return ""
+	}
 }
 
 // ListWithStats lists every container and fetches live stats for the

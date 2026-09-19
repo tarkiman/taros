@@ -20,6 +20,11 @@ export interface Container {
   ports: string
   hasStats: boolean
   stats: ContainerStats
+  // docker compose grouping (empty for containers not started by compose)
+  project: string
+  service: string
+  workingDir: string
+  health: '' | 'healthy' | 'unhealthy' | 'starting'
 }
 
 export interface Image {
