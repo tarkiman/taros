@@ -549,7 +549,7 @@ async function deleteLink(link: QuickLink) {
 
         <template v-if="dockerAvailable && runningProjects > 0">
           <p class="eyebrow section">{{ t('dashboard.apps.title') }}</p>
-          <DashboardApps :containers="containers" class="apps-block" />
+          <DashboardApps :containers="containers" />
         </template>
 
         <p class="eyebrow section">{{ t('dashboard.quickAccess') }}</p>
@@ -724,9 +724,11 @@ async function deleteLink(link: QuickLink) {
 .section {
   margin-top: 24px;
 }
-
-.apps-block {
-  margin-bottom: 22px;
+/* .eyebrow (declared below) resets margin to 0 0 12px, and same specificity
+   + later order wins — so a plain .section never actually gave section
+   labels any space above them. Higher specificity restores it. */
+.eyebrow.section {
+  margin-top: 30px;
 }
 
 .eyebrow {
