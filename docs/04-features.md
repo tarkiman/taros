@@ -685,6 +685,19 @@ untuk langkah setup & [07-security.md](07-security.md) §7.6 untuk pembahasan ri
 - Ringkasan sekilas (summary cards) di halaman utama: CPU%, RAM%, disk terpenuh, suhu
   tertinggi, jumlah container running, jumlah service failed — semua real-time via SSE.
 - Indikator status koneksi (misal badge kecil kalau SSE terputus & sedang reconnect).
+- **Kartu "Alamat Host"**: daftar IPv4 host per interface (Ethernet/Wi-Fi/ZeroTier/Tailscale),
+  klik untuk salin — berguna buat tahu alamat mana yang dipakai SSH/buka dashboard dari
+  perangkat lain. `GET /api/system/addresses` (`internal/netinfo`, cuma `net.Interfaces()` stdlib,
+  jadi ikut jalan di build macOS). Klasifikasi jenis interface **berdasarkan nama** (`wlan*`/`wlp*`
+  Wi-Fi, `eth*`/`enp*` Ethernet, `zt*` ZeroTier, `tailscale*`), diurutkan alamat "yang dituju
+  orang" dulu. Bridge/veth Docker (`docker0`, `br-*`, `veth*`) **disembunyikan default** —
+  di host dengan puluhan container itu 14 dari 17 alamat cuma noise — tapi bisa dimunculkan
+  lewat switch "Tampilkan semua". IPv6 sengaja tidak ditampilkan (entri link-local `fe80::`
+  cuma bikin ramai untuk pertanyaan "alamat mana yang kuhubungi"). Diambil sekali saat
+  Dashboard dibuka (tidak polling) — nol beban tambahan. Tombol salin punya fallback
+  `execCommand('copy')` karena `navigator.clipboard` **tidak ada** di konteks non-secure, dan
+  TarOS biasanya dibuka lewat `http://192.168.x.x:8090` (diverifikasi langsung: `isSecureContext
+  === false` di alamat LAN, salin tetap berhasil dengan klik asli).
 
 ### Pemilihan Jenis Grafik per Metric
 

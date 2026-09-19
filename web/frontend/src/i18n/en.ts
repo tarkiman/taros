@@ -70,6 +70,23 @@ const en = {
     wrongTotp: 'Incorrect code — try again, or use one of your backup codes.',
   },
   dashboard: {
+    hostAddresses: {
+      title: 'Host Addresses',
+      showAll: 'Show all',
+      copied: '{ip} copied',
+      copyFailed: 'Failed to copy.',
+      loadFailed: 'Failed to load addresses.',
+      none: 'No active network address.',
+      clickToCopy: 'Click to copy',
+      kind: {
+        ethernet: 'Ethernet',
+        wifi: 'Wi-Fi',
+        zerotier: 'ZeroTier',
+        tailscale: 'Tailscale',
+        docker: 'Docker',
+        other: 'Other',
+      },
+    },
     read: 'Read',
     write: 'Write',
     containersActive: '{running}/{total} containers active',
@@ -494,6 +511,7 @@ const en = {
     disk_analysis_scan_failed: 'Disk analysis failed: {detail}',
     disk_analysis_scan_busy: 'A disk analysis scan is already running — wait for it to finish.',
     disk_analysis_scan_timeout: 'Disk analysis took too long and was stopped — the filesystem may be very large or storage is slow. Try again, or scope fileExplorer.rootDir to a smaller directory.',
+    net_info_failed: 'Failed to read network addresses: {detail}',
     disk_analysis_toggle_failed: 'Failed to change Disk Analysis setting: {detail}',
   },
 }

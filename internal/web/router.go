@@ -160,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 	// (a 503 from the stream endpoint itself just makes the browser retry
 	// forever) — see docs/04-features.md §4.2 "Graceful Degradation".
 	mux.HandleFunc("GET /api/system/monitoring-status", s.requireAuth(s.handleSystemMonitoringStatus))
+	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
 	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))
 	mux.HandleFunc("GET /api/processes", s.requireAuth(s.handleProcesses))

@@ -22,6 +22,7 @@ import {
 } from '@lucide/vue'
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
+import HostAddressesCard from '../components/HostAddressesCard.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
 import { useMetricsStream } from '../composables/useMetricsStream'
 import { fetchHistory } from '../api/metrics'
@@ -532,6 +533,8 @@ async function deleteLink(link: QuickLink) {
               </template>
               <p v-else class="text-muted empty-note">{{ t('dashboard.dockerDisabled') }}</p>
             </NCard>
+
+            <HostAddressesCard />
           </div>
         </div>
         </template>
