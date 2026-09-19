@@ -138,6 +138,34 @@ punya bentuk "konsumsi resource" yang berbeda dan tidak masuk akal digabung satu
   list + live stats + aksi dasar dulu — log viewer (dicadangkan di sini) menyusul, lihat
   "Log Container" di bawah.
 
+### Tab "Aplikasi" (grup per compose project)
+
+Satu aplikasi sering terdiri dari banyak container; tab **Aplikasi** mengelompokkannya per
+*docker compose project* supaya status satu aplikasi terbaca sekilas. Didiskusikan dulu (bukan
+langsung dibangun): CasaOS (app store, sumber alasan TarOS dibuat) dan Coolify (PaaS Git-deploy,
+berat) dinilai melenceng dari kebutuhan "kelola app buatan sendiri di repo" — yang dibutuhkan
+cuma tampilan berpusat pada project, tahap 1 sengaja **read-only** (tanpa Start/Stop project).
+
+- **Sumber data = label yang sudah dikirim Docker**, bukan panggilan API baru:
+  `com.docker.compose.project` / `.service` / `.project.working_dir` dibaca dari
+  `/containers/json` (`internal/docker.ListContainers`). Nol beban tambahan, nol migrasi, dan
+  berlaku untuk project yang dibuat lewat CLI. Container tanpa label compose masuk grup
+  "Lainnya" (tidak ada yang hilang).
+- **Health** di-parse dari string `Status` ("Up 2 hours (healthy)", "(unhealthy)",
+  "(health: starting)") karena endpoint list tidak punya field health terpisah.
+- **Status per aplikasi**: *Perlu perhatian* (ada container `unhealthy` / restart-loop),
+  *Terganggu* (sebagian tidak jalan / health masih starting / paused), *Berhenti*, *Sehat*.
+  Aplikasi bermasalah diurutkan paling atas dan terbuka otomatis; "Lainnya" selalu terakhir.
+  Ringkasan tiap kartu: `jalan/total` dan total CPU/RAM gabungan.
+- Detail per service: status, health, uptime, CPU/RAM, tombol Logs (memakai ulang drawer log
+  di bawah), dan link **Buka folder project** ke File Explorer (dari `working_dir`).
+- **Batasan jujur**: "running" tanpa `HEALTHCHECK` di compose file belum berarti sehat — hint di
+  bawah daftar mengingatkan ini. Aksi per-project (Start/Stop/Restart, update image) sengaja
+  belum ada; Start/Stop lewat API Docker juga tidak menghormati `depends_on`.
+- Diuji di device nyata (7 project sungguhan) plus project sementara berisi service sehat,
+  `unhealthy`, restart-loop, dan satu container non-compose — semua status & pengurutan
+  terverifikasi lewat Chromium headless (CDP).
+
 ### Log Container
 
 Live-tail log stdout/stderr container langsung dari dashboard — dibuka lewat tombol "Logs" di

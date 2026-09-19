@@ -21,6 +21,7 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
+import DockerProjectsPanel from '../components/DockerProjectsPanel.vue'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
 import { useContainerLogsStream } from '../composables/useContainerLogsStream'
@@ -73,7 +74,8 @@ let containersTimer: ReturnType<typeof setInterval> | undefined
 async function loadContainers() {
   try {
     const res = await dockerApi.containers()
-    containers.value = res.containers
+    // null until the server-side watcher's first refresh lands
+    containers.value = res.containers ?? []
     containersUnavailable.value = null
   } catch (e) {
     if (isUnavailable(e)) containersUnavailable.value = e.body
@@ -528,6 +530,10 @@ onUnmounted(() => {
           :row-key="(r: Container) => r.id"
           :scroll-x="1200"
         />
+      </NTabPane>
+      <NTabPane name="apps" :tab="t('docker.apps.tab')">
+        <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
+        <DockerProjectsPanel v-else :containers="containers" @logs="openLogs" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />

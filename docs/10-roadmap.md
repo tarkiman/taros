@@ -2008,6 +2008,18 @@ memunculkan 16; UI dicek lewat Chromium headless (CDP) dari alamat LAN non-secur
 ketahuan `navigator.clipboard` tidak tersedia dan fallback `execCommand` perlu klik user asli
 (klik sintetis `.click()` ditolak browser, bukan bug fitur).
 
+### Docker: tab "Aplikasi" (grup container per compose project)
+
+Kebutuhan user: aplikasi buatan sendiri (project di `~/repository`) terdiri dari banyak
+container, dan yang paling merepotkan adalah **melihat status satu aplikasi**. Didiskusikan
+dulu dengan membandingkan CasaOS vs Coolify — keduanya ditolak sebagai model (CasaOS = alasan
+TarOS ada; Coolify = PaaS berat) dan dipilih tampilan berpusat pada compose project, tahap 1
+read-only. Detail & batasan di `docs/04-features.md` §4.2. Sisi backend hanya menambah
+pembacaan label + parsing health dari data list yang sudah ada. Temuan sampingan saat tes:
+respons `/api/docker/containers` bisa `null` sebelum watcher selesai refresh pertama — frontend
+sekarang menormalkannya ke daftar kosong. Kandidat lanjutan (belum dikerjakan, tunggu dipakai
+dulu): Start/Stop/Restart per project, update image (`compose pull && up -d`).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
