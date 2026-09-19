@@ -8,7 +8,7 @@ import { formatBytes } from '../utils/format'
 import { groupProjects, type ProjectGroup, type Verdict } from '../utils/dockerProjects'
 
 const props = defineProps<{ containers: Container[]; focus?: string }>()
-const emit = defineEmits<{ (e: 'logs', c: Container): void }>()
+const emit = defineEmits<{ (e: 'logs', c: Container): void; (e: 'env', c: Container): void }>()
 const { t } = useI18n()
 
 const groups = computed<ProjectGroup[]>(() => groupProjects(props.containers))
@@ -80,7 +80,10 @@ function dot(c: Container): string {
             <span v-if="containerNote(c)" class="svc-note" :class="{ danger: c.health === 'unhealthy' || c.state === 'restarting' }">{{ containerNote(c) }}</span>
             <span class="svc-status text-muted">{{ c.status }}</span>
             <span class="svc-res mono text-muted">{{ c.hasStats ? `${c.stats.cpuPercent.toFixed(1)}% · ${formatBytes(c.stats.memUsageBytes)}` : '—' }}</span>
-            <NButton size="tiny" quaternary @click="emit('logs', c)">{{ t('docker.logs.button') }}</NButton>
+            <span class="svc-btns">
+              <NButton size="tiny" quaternary @click="emit('env', c)">{{ t('docker.env.button') }}</NButton>
+              <NButton size="tiny" quaternary @click="emit('logs', c)">{{ t('docker.logs.button') }}</NButton>
+            </span>
           </li>
         </ul>
       </div>
@@ -112,6 +115,7 @@ function dot(c: Container): string {
 .svc-note.danger { color: var(--danger); }
 .svc-status { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .svc-res { font-size: 0.78rem; text-align: right; white-space: nowrap; }
+.svc-btns { display: inline-flex; gap: 2px; }
 .hint { font-size: 0.78rem; margin: 4px 0 0; }
 .text-muted { color: var(--text-muted); }
 @media (max-width: 720px) { .svc-list li { grid-template-columns: 10px 1fr auto; } .svc-status, .svc-res { display: none; } }

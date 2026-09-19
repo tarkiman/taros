@@ -1,0 +1,1 @@
+import{l as e}from"./auth-137O9KW4.js";var t={list:(t,n=5)=>e.get(`/api/processes?sortBy=${t}&limit=${n}`)};export{t};

@@ -83,6 +83,7 @@ const (
 	DockerNetworkRemoveFailed   = "docker_network_remove_failed"   // params: detail
 	DockerPruneFailed           = "docker_prune_failed"            // params: kind, detail
 	DockerLogsFailed            = "docker_logs_failed"             // params: detail
+	DockerEnvFailed             = "docker_env_failed"              // params: detail
 
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"

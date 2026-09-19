@@ -2032,6 +2032,16 @@ setelah restart. Efek samping berguna: begitu Dashboard menampilkan status per a
 kelihatan dua container yang ternyata restart-loop di host dev (`aiplatform-redis`,
 `deploy-backend-1`) — yang sebelumnya tenggelam di daftar 30+ container.
 
+### Docker: viewer environment variable (rahasia ditahan, buka = re-konfirmasi password)
+
+Permintaan user setelah section Aplikasi; keputusan keamanannya didiskusikan dulu dan
+opsi yang direkomendasikan dipilih (samarkan nilai rahasia, buka lewat password, dicatat di log).
+Detail di `docs/04-features.md` §4.2 dan `docs/07-security.md`. Diuji di device nyata dengan
+container yang sengaja punya `DB_PASSWORD`, `JWT_SECRET` dan `DATABASE_URL` berkredensial:
+respons default memuat **0** nilai rahasia, password salah → 403, log audit tanpa nilai, `PATH`
+terdeteksi sebagai bawaan image, rahasia hilang lagi setelah drawer ditutup. Sengaja belum ada:
+edit env (itu urusan compose file).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
