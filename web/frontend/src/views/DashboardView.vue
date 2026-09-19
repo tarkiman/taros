@@ -426,70 +426,73 @@ async function deleteLink(link: QuickLink) {
         </div>
 
         <div class="main-grid">
-          <NCard class="status-card">
-            <template #header>{{ t('dashboard.systemSummary') }}</template>
-            <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
-              <NGi>
-                <button
-                  type="button"
-                  class="gauge-btn"
-                  :class="{ active: metricSort === 'cpu' }"
-                  :title="t('dashboard.viewTopCpu')"
-                  @click="metricSort = 'cpu'"
-                >
-                  <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
-                </button>
-              </NGi>
-              <NGi>
-                <button
-                  type="button"
-                  class="gauge-btn"
-                  :class="{ active: metricSort === 'mem' }"
-                  :title="t('dashboard.viewTopRam')"
-                  @click="metricSort = 'mem'"
-                >
-                  <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" :sublabel="`${formatBytes(snapshot.mem.usedBytes)} / ${formatBytes(snapshot.mem.totalBytes)}`" />
-                </button>
-              </NGi>
-              <NGi>
-                <GaugeChart
-                  v-if="primaryDisk"
-                  :value="primaryDisk.usedPercent"
-                  :label="primaryDisk.mountPoint"
-                  :sublabel="`${formatBytes(primaryDisk.usedBytes)} / ${formatBytes(primaryDisk.totalBytes)}`"
-                />
-                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
-              </NGi>
-              <NGi>
-                <GaugeChart
-                  v-if="maxTemp"
-                  :value="maxTemp.celsius"
-                  :max="100"
-                  :thresholds="[0.7, 0.85]"
-                  :label="maxTemp.label"
-                  :formatter="(v: number) => v.toFixed(0) + '°'"
-                />
-                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noTempSensor') }}</div>
-              </NGi>
-            </NGrid>
+          <div class="main-col">
+            <NCard class="status-card">
+              <template #header>{{ t('dashboard.systemSummary') }}</template>
+              <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
+                <NGi>
+                  <button
+                    type="button"
+                    class="gauge-btn"
+                    :class="{ active: metricSort === 'cpu' }"
+                    :title="t('dashboard.viewTopCpu')"
+                    @click="metricSort = 'cpu'"
+                  >
+                    <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
+                  </button>
+                </NGi>
+                <NGi>
+                  <button
+                    type="button"
+                    class="gauge-btn"
+                    :class="{ active: metricSort === 'mem' }"
+                    :title="t('dashboard.viewTopRam')"
+                    @click="metricSort = 'mem'"
+                  >
+                    <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" :sublabel="`${formatBytes(snapshot.mem.usedBytes)} / ${formatBytes(snapshot.mem.totalBytes)}`" />
+                  </button>
+                </NGi>
+                <NGi>
+                  <GaugeChart
+                    v-if="primaryDisk"
+                    :value="primaryDisk.usedPercent"
+                    :label="primaryDisk.mountPoint"
+                    :sublabel="`${formatBytes(primaryDisk.usedBytes)} / ${formatBytes(primaryDisk.totalBytes)}`"
+                  />
+                  <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
+                </NGi>
+                <NGi>
+                  <GaugeChart
+                    v-if="maxTemp"
+                    :value="maxTemp.celsius"
+                    :max="100"
+                    :thresholds="[0.7, 0.85]"
+                    :label="maxTemp.label"
+                    :formatter="(v: number) => v.toFixed(0) + '°'"
+                  />
+                  <div v-else class="text-muted empty-gauge">{{ t('dashboard.noTempSensor') }}</div>
+                </NGi>
+              </NGrid>
 
-            <div class="io-strip">
-              <div class="io-tile">
-                <NIcon :component="HardDrive" size="18" />
-                <div>
-                  <div class="io-label">{{ t('dashboard.diskIo') }}</div>
-                  <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
+              <div class="io-strip">
+                <div class="io-tile">
+                  <NIcon :component="HardDrive" size="18" />
+                  <div>
+                    <div class="io-label">{{ t('dashboard.diskIo') }}</div>
+                    <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
+                  </div>
+                </div>
+                <div class="io-tile">
+                  <NIcon :component="Wifi" size="18" />
+                  <div>
+                    <div class="io-label">{{ t('dashboard.network') }}</div>
+                    <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
+                  </div>
                 </div>
               </div>
-              <div class="io-tile">
-                <NIcon :component="Wifi" size="18" />
-                <div>
-                  <div class="io-label">{{ t('dashboard.network') }}</div>
-                  <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
-                </div>
-              </div>
-            </div>
-          </NCard>
+            </NCard>
+            <HostAddressesCard />
+          </div>
 
           <div class="side-col">
             <NCard class="proc-card">
@@ -542,7 +545,6 @@ async function deleteLink(link: QuickLink) {
               <p v-else class="text-muted empty-note">{{ t('dashboard.dockerDisabled') }}</p>
             </NCard>
 
-            <HostAddressesCard />
           </div>
         </div>
         </template>
@@ -891,6 +893,19 @@ async function deleteLink(link: QuickLink) {
   font-size: 0.86rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* The grid stretches this column to the taller right column; letting the
+   last card grow (instead of the summary card) keeps both bottoms flush
+   without leaving a blank band inside System Summary. */
+.main-col > :last-child {
+  flex: 1;
 }
 
 .side-col {
