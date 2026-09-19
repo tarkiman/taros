@@ -2042,6 +2042,20 @@ respons default memuat **0** nilai rahasia, password salah → 403, log audit ta
 terdeteksi sebagai bawaan image, rahasia hilang lagi setelah drawer ditutup. Sengaja belum ada:
 edit env (itu urusan compose file).
 
+### Docker: Uninstall aplikasi (compose project)
+
+Permintaan user setelah tab Aplikasi ("sediakan juga fitur untuk uninstall-nya"). Desain: hapus
+container + network lewat label compose, **data (volume) dan image opt-in, default dipertahankan**;
+stop baik-baik dulu (bukan force-kill) setelah insiden AOF Redis rusak di host yang sama;
+konfirmasi = ketik nama + password. Detail di `docs/04-features.md` §4.2 dan `docs/07-security.md`.
+Diuji di device nyata dengan project sementara (2 service + volume + network): password salah →
+403, nama salah → 400 (tak ada yang tersentuh), uninstall default menyisakan volume, hapus data
+lewat opsi, ulang → 404, plus alur UI penuh lewat Chromium headless. Unit test memakai Docker
+palsu di unix socket (urutan stop→hapus→network, opsi default tidak menyentuh volume/image,
+kegagalan parsial tidak menghentikan sisanya). Catatan: `StopContainer` lama memakai timeout HTTP
+10 dtk yang bisa berbenturan dengan stop-timeout Docker (10 dtk) — kode baru memakai jalur tanpa
+timeout klien; jalur lama belum diubah.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

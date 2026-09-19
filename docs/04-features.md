@@ -160,8 +160,9 @@ cuma tampilan berpusat pada project, tahap 1 sengaja **read-only** (tanpa Start/
 - Detail per service: status, health, uptime, CPU/RAM, tombol Logs (memakai ulang drawer log
   di bawah), dan link **Buka folder project** ke File Explorer (dari `working_dir`).
 - **Batasan jujur**: "running" tanpa `HEALTHCHECK` di compose file belum berarti sehat — hint di
-  bawah daftar mengingatkan ini. Aksi per-project (Start/Stop/Restart, update image) sengaja
-  belum ada; Start/Stop lewat API Docker juga tidak menghormati `depends_on`.
+  bawah daftar mengingatkan ini. Aksi per-project Start/Stop/Restart dan update image sengaja
+  belum ada (Start/Stop lewat API Docker tidak menghormati `depends_on`); satu-satunya aksi
+  per-project adalah **Uninstall** (di bawah).
 - Diuji di device nyata (7 project sungguhan) plus project sementara berisi service sehat,
   `unhealthy`, restart-loop, dan satu container non-compose — semua status & pengurutan
   terverifikasi lewat Chromium headless (CDP).
@@ -190,6 +191,36 @@ compose file.
   image-nya (satu panggilan Docker tambahan, hanya saat drawer dibuka) dan disembunyikan default
   supaya yang terlihat cuma konfigurasi aplikasimu; checkbox untuk memunculkannya. Rahasia tidak
   pernah ikut disembunyikan sebagai "bawaan image". Ada filter nama dan tombol salin per nilai.
+
+### Uninstall aplikasi (satu compose project)
+
+Tombol **Uninstall** di bagian bawah kartu aplikasi (tab Aplikasi) — hanya untuk project
+compose bernama, tidak untuk grup "Lainnya". Tidak ada CLI `docker compose` di host, jadi
+uninstall dikerjakan lewat Docker API dengan label `com.docker.compose.project`
+(`internal/docker/project.go`), setara `docker compose down`:
+
+- **Selalu dihapus**: semua container project (termasuk yang sudah berhenti) dan network-nya.
+  Container dihentikan dulu **paralel dan baik-baik** (SIGTERM, menunggu stop-timeout masing-
+  masing) baru dihapus — database dapat kesempatan flush; force-kill itulah yang merusak
+  AOF/WAL. Karena itu satu uninstall bisa makan puluhan detik (dialog menampilkan status
+  "sedang berjalan" dan tidak bisa ditutup di tengah jalan).
+- **Opt-in, default mati**: *hapus juga datanya (volume)* — bertanda merah + daftar nama volume,
+  juga menghapus volume anonim milik container; dan *hapus juga image* (bebaskan ruang; image
+  yang masih dipakai container lain otomatis dilewati oleh Docker dengan 409).
+  Data adalah satu-satunya bagian yang tidak bisa di-download ulang, jadi default-nya aman:
+  pasang ulang aplikasi → datanya ketemu lagi.
+- **Tidak pernah disentuh**: folder project & file compose di disk, network/volume yang
+  dideklarasikan `external: true` (tidak berlabel project, jadi tidak pernah masuk daftar).
+- **Dry-run dulu**: dialog memanggil `GET /api/docker/projects/{name}/uninstall-plan` dan
+  menampilkan persis apa yang akan hilang; project tanpa apa pun → 404 (sudah ter-uninstall).
+- **Konfirmasi berlapis**: ketik nama aplikasi **dan** password akun sendiri (`POST
+  .../uninstall`, 403 kalau salah; nama dicek ulang di server, jadi pemanggilan skrip tidak bisa
+  melewatinya). Detail keamanan di `docs/07-security.md`.
+- **Kegagalan parsial dilaporkan, tidak fatal**: tiap langkah punya hasil sendiri (mis. volume
+  masih dipakai container project lain → pesan daemon ditampilkan) dan sisanya tetap jalan.
+- **Penjaga diri sendiri**: kalau TarOS ternyata berjalan sebagai container di project itu,
+  uninstall ditolak (`docker_project_runs_this`) — bukan bunuh diri di tengah jalan.
+- Kustomisasi tile Dashboard (icon/URL) ikut dihapus begitu semua container berhasil dihapus.
 
 ### Log Container
 

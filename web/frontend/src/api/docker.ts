@@ -20,6 +20,27 @@ export interface EnvVar {
   imageDefault: boolean
 }
 
+// Mirrors internal/docker.ProjectPlan / UninstallResult.
+export interface ProjectPlan {
+  name: string
+  containers: { id: string; name: string; service: string; state: string }[]
+  networks: string[]
+  volumes: string[]
+  images: { id: string; ref: string }[]
+}
+export interface UninstallStep {
+  kind: 'container' | 'network' | 'volume' | 'image'
+  name: string
+  ok: boolean
+  error?: string
+}
+export interface UninstallBody {
+  password: string
+  confirmName: string
+  removeVolumes: boolean
+  removeImages: boolean
+}
+
 export const dockerApi = {
   containers: () => api.get<ContainersResponse>('/api/docker/containers'),
   containerAction: (id: string, action: 'start' | 'stop' | 'restart' | 'remove') =>
@@ -31,6 +52,12 @@ export const dockerApi = {
   // withheld secret values.
   revealEnv: (id: string, password: string) =>
     api.post<{ values: Record<string, string> }>(`/api/docker/containers/${encodeURIComponent(id)}/env/reveal`, { password }),
+
+  uninstallPlan: (name: string) =>
+    api.get<ProjectPlan>(`/api/docker/projects/${encodeURIComponent(name)}/uninstall-plan`),
+  // Re-confirms the caller's password + the typed app name server-side.
+  uninstallProject: (name: string, body: UninstallBody) =>
+    api.post<{ steps: UninstallStep[] }>(`/api/docker/projects/${encodeURIComponent(name)}/uninstall`, body),
 
   images: () => api.get<{ images: Image[] }>('/api/docker/images'),
   removeImage: (id: string) => api.post<{ images: Image[] }>(`/api/docker/images/${encodeURIComponent(id)}/remove`),

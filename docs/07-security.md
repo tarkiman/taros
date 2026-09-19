@@ -163,6 +163,20 @@ berapa rahasia — tidak pernah nilainya). Catatan jujur: akses ke Docker socket
 tujuannya mencegah kebocoran kebetulan (screenshot, screen-sharing, orang di belakang layar),
 bukan menyekat pengguna yang memang berhak atas host ini.
 
+### Uninstall aplikasi (compose project)
+
+Aksi paling destruktif di area Docker (hapus semua container + network satu aplikasi, opsional
+datanya), jadi bar-nya lebih tinggi dari aksi per-container: **password akun sendiri** (403,
+bukan 401, sama seperti toggle sensitif lain) **dan** mengetik ulang nama aplikasi — keduanya
+dicek di server, bukan hanya UI. Volume (data) dan image opt-in dan default-nya **tidak**
+dihapus. Setiap percobaan tercatat di log: siapa, project apa, berapa container/network/
+volume/image terhapus, berapa yang gagal, dan apakah opsi data/image dinyalakan (uninstall yang
+ditolak juga dicatat, `WARN`). Ruang lingkupnya dibatasi label compose — resource `external`
+atau milik project lain tidak masuk daftar, dan volume/image yang masih dipakai container di
+luar project ditolak Docker sendiri (409), tidak di-force. Diakui jujur: siapa pun yang
+memegang akun sudah bisa menghapus container satu per satu; ini bukan celah baru, hanya jalan
+pintas yang diberi pagar yang setara.
+
 ## 7.5 Jaringan
 
 - Rekomendasi default: bind ke `0.0.0.0` port custom (misal `8090`), **tanpa TLS built-in**

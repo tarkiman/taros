@@ -12,6 +12,7 @@ type rawContainer struct {
 	ID      string `json:"Id"`
 	Names   []string
 	Image   string
+	ImageID string
 	State   string
 	Status  string
 	Created int64

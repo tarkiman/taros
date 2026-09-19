@@ -182,6 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/docker/containers/{id}/logs/stream", s.requireAuth(s.handleDockerContainerLogsStream))
 	mux.HandleFunc("GET /api/docker/containers/{id}/env", s.requireAuth(s.handleDockerContainerEnv))
 	mux.HandleFunc("POST /api/docker/containers/{id}/env/reveal", s.requireAuth(s.handleDockerContainerEnvReveal))
+	mux.HandleFunc("GET /api/docker/projects/{name}/uninstall-plan", s.requireAuth(s.handleDockerProjectPlan))
+	mux.HandleFunc("POST /api/docker/projects/{name}/uninstall", s.requireAuth(s.handleDockerProjectUninstall))
 	mux.HandleFunc("POST /api/docker/images/{id}/remove", s.requireAuth(s.handleAPIDockerImageRemove))
 	mux.HandleFunc("POST /api/docker/volumes/{name}/remove", s.requireAuth(s.handleAPIDockerVolumeRemove))
 	mux.HandleFunc("POST /api/docker/networks/{id}/remove", s.requireAuth(s.handleAPIDockerNetworkRemove))
