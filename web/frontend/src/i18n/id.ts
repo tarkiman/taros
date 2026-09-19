@@ -71,6 +71,23 @@ export default {
     wrongTotp: 'Kode salah — coba lagi, atau pakai salah satu kode cadangan.',
   },
   dashboard: {
+    hostAddresses: {
+      title: 'Alamat Host',
+      showAll: 'Tampilkan semua',
+      copied: '{ip} disalin',
+      copyFailed: 'Gagal menyalin.',
+      loadFailed: 'Gagal memuat alamat.',
+      none: 'Tidak ada alamat jaringan aktif.',
+      clickToCopy: 'Klik untuk menyalin',
+      kind: {
+        ethernet: 'Ethernet',
+        wifi: 'Wi-Fi',
+        zerotier: 'ZeroTier',
+        tailscale: 'Tailscale',
+        docker: 'Docker',
+        other: 'Lainnya',
+      },
+    },
     read: 'Baca',
     write: 'Tulis',
     containersActive: '{running}/{total} container aktif',
@@ -495,6 +512,7 @@ export default {
     disk_analysis_scan_failed: 'Analisis disk gagal: {detail}',
     disk_analysis_scan_busy: 'Analisis disk sedang berjalan — tunggu sampai selesai.',
     disk_analysis_scan_timeout: 'Analisis disk terlalu lama dan dihentikan — kemungkinan filesystem-nya sangat besar atau storage lambat. Coba lagi, atau persempit fileExplorer.rootDir ke direktori yang lebih kecil.',
+    net_info_failed: 'Gagal membaca alamat jaringan: {detail}',
     disk_analysis_toggle_failed: 'Gagal mengubah pengaturan Analisis Disk: {detail}',
   },
 } satisfies MessageSchema

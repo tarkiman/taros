@@ -1997,6 +1997,17 @@ rata** (role-based access eksplisit tetap di luar scope, lihat Fase 6 di bawah).
   `Credentials`. Form login juga sudah minta username dari awal (bukan cuma password) — jadi
   `LoginView.vue` tidak perlu perubahan sama sekali untuk mendukung multi-user.
 
+### Dashboard: kartu Alamat Host (IP per interface)
+
+Diminta user ("tambahkan di dashboard list IP dari hostnya — wifi/ethernet, zerotier"), dijawab
+dulu dengan rekomendasi sebelum dikerjakan: di host dengan banyak container, `ip addr` penuh
+bridge Docker (14 dari 17 alamat di device dev), jadi ditampilkan hanya interface yang relevan
+secara default, plus switch "Tampilkan semua". Detail desain di `docs/04-features.md` §4.6.
+Diuji nyata di device dev (bukan mock): default hanya `wlan0` + ZeroTier (2 alamat), "semua"
+memunculkan 16; UI dicek lewat Chromium headless (CDP) dari alamat LAN non-secure — di situ
+ketahuan `navigator.clipboard` tidak tersedia dan fallback `execCommand` perlu klik user asli
+(klik sintetis `.click()` ditolak browser, bukan bug fitur).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
