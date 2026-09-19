@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import {
   NTabs,
   NTabPane,
@@ -494,7 +495,10 @@ async function prune(kind: 'containers' | 'images' | 'volumes' | 'networks' | 'a
 }
 
 // --- Tab lifecycle ---
-const activeTab = ref('containers')
+// Dashboard "Aplikasi" tiles link here as /docker?tab=apps&app=<project>.
+const route = useRoute()
+const focusApp = typeof route.query.app === 'string' ? route.query.app : undefined
+const activeTab = ref(route.query.tab === 'apps' ? 'apps' : 'containers')
 const loadedTabs = new Set<string>(['containers'])
 
 watch(activeTab, (tab) => {
@@ -533,7 +537,7 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="apps" :tab="t('docker.apps.tab')">
         <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
-        <DockerProjectsPanel v-else :containers="containers" @logs="openLogs" />
+        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />

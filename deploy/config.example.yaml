@@ -88,6 +88,8 @@ dashboard:
   # instalasi tambahan (beda dari /etc/taros, yang cuma file config.yaml/
   # credentials.yaml spesifiknya yang di-chown, bukan direktorinya).
   quickLinksFile: "/opt/taros/quick-links.yaml"
+  # Kustomisasi tile "Aplikasi" (icon custom + URL app, per nama compose project)
+  appsFile: "/opt/taros/apps.yaml"
 
 notify:
   # Threshold/durasi/URL webhook Discord (lihat docs/04-features.md §4.11)

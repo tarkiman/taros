@@ -1,0 +1,1 @@
+import{Gt as e}from"./auth-D5QNH05D.js";var t=e(`n-message-api`),n=e(`n-message-provider`);export{n,t};

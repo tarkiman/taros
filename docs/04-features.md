@@ -713,6 +713,25 @@ untuk langkah setup & [07-security.md](07-security.md) §7.6 untuk pembahasan ri
 - Ringkasan sekilas (summary cards) di halaman utama: CPU%, RAM%, disk terpenuh, suhu
   tertinggi, jumlah container running, jumlah service failed — semua real-time via SSE.
 - Indikator status koneksi (misal badge kecil kalau SSE terputus & sedang reconnect).
+- **Section "Aplikasi"** (di atas Akses Cepat): satu tile per compose project — icon, nama, titik
+  status (hijau/kuning/merah/abu) dan `jalan/total`. Project bermasalah diurutkan paling depan
+  dan berbingkai merah/kuning; container non-compose tidak ditampilkan di sini (tidak punya nama
+  stabil untuk ditempeli icon; tetap ada di Docker > Aplikasi). Logika status **dipakai bersama**
+  dengan tab Aplikasi di halaman Docker (`web/frontend/src/utils/dockerProjects.ts`) supaya kedua
+  tempat selalu sepakat soal arti "sehat". Data container di-refresh tiap 10 detik dari cache
+  watcher server (murah). Klik tile → `/docker?tab=apps&app=<project>` (tab Aplikasi terbuka,
+  kartu project itu terbuka & di-scroll ke tengah).
+  - **Icon default = huruf inisial berwarna**, warna diturunkan deterministik dari nama project
+    (hash → hue), jadi konsisten antar reload tanpa menyimpan apa pun. **Custom icon** (upload
+    gambar / URL, tombol pensil saat hover, "Pakai icon default" untuk membatalkan) plus **URL
+    aplikasi opsional** (tombol ikon panah keluar di tile membuka aplikasinya di tab baru).
+  - Disimpan di file sendiri `apps.yaml` (`dashboard.appsFile`, `internal/appmeta`), **dikunci
+    dengan nama compose project**, bukan ID container — jadi icon bertahan saat container dibuat
+    ulang/di-update. Live tanpa restart (pola quick-links). Validasi icon/URL **memakai fungsi yang
+    sama dengan Akses Cepat** (`quicklinks.NormalizeIcon/NormalizeURL`: hanya http(s), sniff format
+    gambar, batas 150KB), bukan salinan yang bisa melenceng. Instalasi lama tanpa `appsFile` di
+    config otomatis menaruh `apps.yaml` di folder yang sama dengan `quickLinksFile` — upgrade
+    tidak butuh edit config.
 - **Kartu "Alamat Host"**: daftar IPv4 host per interface (Ethernet/Wi-Fi/ZeroTier/Tailscale),
   klik untuk salin — berguna buat tahu alamat mana yang dipakai SSH/buka dashboard dari
   perangkat lain. `GET /api/system/addresses` (`internal/netinfo`, cuma `net.Interfaces()` stdlib,

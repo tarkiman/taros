@@ -2020,6 +2020,18 @@ respons `/api/docker/containers` bisa `null` sebelum watcher selesai refresh per
 sekarang menormalkannya ke daftar kosong. Kandidat lanjutan (belum dikerjakan, tunggu dipakai
 dulu): Start/Stop/Restart per project, update image (`compose pull && up -d`).
 
+### Dashboard: section "Aplikasi" (tile per compose project, icon bisa dikustom)
+
+Lanjutan tab Aplikasi di Docker atas permintaan user ("tampilkan juga di halaman utama, tambahkan
+icon default yang bisa di-custom"). Dua keputusan didiskusikan dulu dan disetujui: klik tile
+membuka tab Aplikasi (bukan langsung ke URL) plus field URL opsional per aplikasi, dan icon
+default berupa huruf inisial berwarna. Detail di `docs/04-features.md` §4.6. Diuji di device nyata:
+tile dari 8 project sungguhan + project uji, kustomisasi lewat modal UI, validasi (URL
+`javascript:`, icon bukan gambar, nama kosong ditolak dengan kode error terjemahan), bertahan
+setelah restart. Efek samping berguna: begitu Dashboard menampilkan status per aplikasi, langsung
+kelihatan dua container yang ternyata restart-loop di host dev (`aiplatform-redis`,
+`deploy-backend-1`) — yang sebelumnya tenggelam di daftar 30+ container.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
