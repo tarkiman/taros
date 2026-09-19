@@ -23,6 +23,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import DockerProjectsPanel from '../components/DockerProjectsPanel.vue'
+import ContainerEnvDrawer from '../components/ContainerEnvDrawer.vue'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
 import { useContainerLogsStream } from '../composables/useContainerLogsStream'
@@ -119,6 +120,15 @@ const logSinceOptions = [
   { label: t('docker.logs.last6h'), value: 360 },
   { label: t('docker.logs.last24h'), value: 1440 },
 ]
+
+// --- Container environment viewer (read-only, secrets withheld until the
+// user re-confirms their password — see ContainerEnvDrawer.vue) ---
+const envShow = ref(false)
+const envContainer = ref<Container | null>(null)
+function openEnv(c: Container) {
+  envContainer.value = c
+  envShow.value = true
+}
 
 const logsStream = useContainerLogsStream()
 const logScrollEl = ref<HTMLElement | null>(null)
@@ -537,7 +547,7 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="apps" :tab="t('docker.apps.tab')">
         <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
-        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" />
+        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />
@@ -591,6 +601,8 @@ onUnmounted(() => {
         </NSpace>
       </NTabPane>
     </NTabs>
+
+    <ContainerEnvDrawer v-model:show="envShow" :container="envContainer" />
 
     <NDrawer v-model:show="logDrawerOpen" :width="640" placement="right">
       <NDrawerContent :title="t('docker.logs.title', { name: logContainerName })" closable>

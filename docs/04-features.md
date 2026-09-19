@@ -166,6 +166,31 @@ cuma tampilan berpusat pada project, tahap 1 sengaja **read-only** (tanpa Start/
   `unhealthy`, restart-loop, dan satu container non-compose — semua status & pengurutan
   terverifikasi lewat Chromium headless (CDP).
 
+### Environment variable container (read-only, rahasia ditahan)
+
+Tombol **Env** di baris service (tab Aplikasi) membuka drawer berisi environment variable
+yang **benar-benar dipakai** container (`Config.Env` dari inspect, hasil gabungan compose/`.env`/
+image). Sengaja **hanya-baca** — mengubah env berarti membuat ulang container, itu tempatnya di
+compose file.
+
+- **Rahasia ditahan di server, bukan sekadar disembunyikan UI.** Nilai variabel yang tampak
+  rahasia **tidak ikut** di respons `GET .../env` sama sekali (diverifikasi: 0 kemunculan nilai
+  di body respons), jadi tidak ada di memori/devtools/network log browser sebelum diminta.
+  Deteksi (`internal/docker.IsSecret`): nama mengandung `password/pass/secret/token/api_key/
+  access_key/private/credential/auth/salt/jwt/cert/dsn/connection_string/key` **atau** nilainya
+  URL berkredensial (`postgres://user:pass@host`) — kunci `DATABASE_URL`/`BROKER` apa pun
+  namanya tetap tertangkap. Sengaja luas: menyamarkan nilai yang tidak sensitif cuma butuh satu
+  klik, membocorkan kredensial asli ke layar tidak bisa di-undo.
+- **Buka nilai rahasia = ketik ulang password akun** (`POST .../env/reveal`, 403 kalau salah) —
+  bar konfirmasi yang sama dengan toggle Terminal/Port/hapus TOTP/kelola user. Tiap pembukaan
+  yang berhasil dicatat ke log (`docker: nilai environment rahasia dibuka container=… count=…
+  by=…`) — **tanpa nilainya**. Nilai yang sudah dibuka hidup hanya di memori komponen dan
+  dibuang saat drawer ditutup (diuji: tutup lalu buka lagi → kembali tertutup).
+- **Variabel bawaan image** (`PATH`, versi bahasa, dst.) ditandai lewat diff dengan `Config.Env`
+  image-nya (satu panggilan Docker tambahan, hanya saat drawer dibuka) dan disembunyikan default
+  supaya yang terlihat cuma konfigurasi aplikasimu; checkbox untuk memunculkannya. Rahasia tidak
+  pernah ikut disembunyikan sebagai "bawaan image". Ada filter nama dan tombol salin per nilai.
+
 ### Log Container
 
 Live-tail log stdout/stderr container langsung dari dashboard — dibuka lewat tombol "Logs" di
