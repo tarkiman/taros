@@ -70,6 +70,14 @@ const en = {
     wrongTotp: 'Incorrect code — try again, or use one of your backup codes.',
   },
   dashboard: {
+    apps: {
+      title: 'Apps',
+      openApp: 'Open app',
+      editTitle: 'Customize “{name}”',
+      urlLabel: 'App URL (optional)',
+      resetDefault: 'Use default icon',
+      saveFailed: 'Failed to save.',
+    },
     hostAddresses: {
       title: 'Host Addresses',
       showAll: 'Show all',
@@ -526,6 +534,9 @@ const en = {
     disk_analysis_scan_failed: 'Disk analysis failed: {detail}',
     disk_analysis_scan_busy: 'A disk analysis scan is already running — wait for it to finish.',
     disk_analysis_scan_timeout: 'Disk analysis took too long and was stopped — the filesystem may be very large or storage is slow. Try again, or scope fileExplorer.rootDir to a smaller directory.',
+    app_meta_save_failed: 'App customization save failed: {detail}',
+    app_name_invalid: 'Invalid app name.',
+    max_apps_reached: 'Too many customized apps (max {max}).',
     net_info_failed: 'Failed to read network addresses: {detail}',
     disk_analysis_toggle_failed: 'Failed to change Disk Analysis setting: {detail}',
   },

@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/tarkiman/taros/internal/appmeta"
 	"github.com/tarkiman/taros/internal/auth"
 	"github.com/tarkiman/taros/internal/collector"
 	"github.com/tarkiman/taros/internal/config"
@@ -128,6 +129,12 @@ func runServer(args []string) {
 	// app; falling back to an empty, unsaved store lets the rest of TarOS
 	// come up normally instead of the whole service refusing to start over
 	// a broken quick-links.yaml.
+	appMeta, err := appmeta.Load(cfg.Dashboard.AppsFile)
+	if err != nil {
+		slog.Warn("gagal load kustomisasi aplikasi, mulai kosong", "path", cfg.Dashboard.AppsFile, "err", err)
+		appMeta = appmeta.New(cfg.Dashboard.AppsFile)
+	}
+
 	quickLinks, err := quicklinks.Load(cfg.Dashboard.QuickLinksFile)
 	if err != nil {
 		slog.Warn("gagal load quick links, mulai dengan daftar kosong", "path", cfg.Dashboard.QuickLinksFile, "err", err)
@@ -174,6 +181,7 @@ func runServer(args []string) {
 		Listen:                    cfg.Server.Listen,
 		SystemMonitoringSupported: systemMonitoringSupported,
 		QuickLinks:                quickLinks,
+		AppMeta:                   appMeta,
 		Notify:                    notifySettings,
 		FolderShortcuts:           folderShortcuts,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,

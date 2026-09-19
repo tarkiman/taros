@@ -23,6 +23,7 @@ import {
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import HostAddressesCard from '../components/HostAddressesCard.vue'
+import DashboardApps from '../components/DashboardApps.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
 import { useMetricsStream } from '../composables/useMetricsStream'
 import { fetchHistory } from '../api/metrics'
@@ -118,6 +119,9 @@ const netTotal = computed(() => {
 const clockTime = ref('')
 const clockDate = ref('')
 let clockTimer: ReturnType<typeof setInterval> | undefined
+// Keeps the "Aplikasi" tiles' status live — the endpoint serves the
+// server-side watcher's cache, so this is cheap.
+let dockerTimer: ReturnType<typeof setInterval> | undefined
 
 function tickClock() {
   const now = new Date()
@@ -136,7 +140,8 @@ const dockerChecked = ref(false)
 async function loadDockerSummary() {
   try {
     const res = await dockerApi.containers()
-    containers.value = res.containers
+    // null until the server-side watcher's first refresh lands
+    containers.value = res.containers ?? []
     dockerAvailable.value = true
   } catch {
     dockerAvailable.value = false
@@ -145,6 +150,7 @@ async function loadDockerSummary() {
   }
 }
 
+const runningProjects = computed(() => new Set(containers.value.filter((c) => c.project).map((c) => c.project)).size)
 const runningCount = computed(() => containers.value.filter((c) => c.state === 'running').length)
 
 // --- "Pemakai Teratas": which resource (clicking the CPU/RAM gauge below
@@ -238,6 +244,7 @@ watch(locale, tickClock)
 onMounted(async () => {
   tickClock()
   clockTimer = setInterval(tickClock, 15000)
+  dockerTimer = setInterval(loadDockerSummary, 10000)
   await Promise.allSettled([
     fetchHistory('cpu').then((s) => { cpuHistory.value = toPoints(s) }),
     fetchHistory('diskRead').then((s) => { diskReadHistory.value = toPoints(s, 1 / 1024 / 1024) }),
@@ -250,6 +257,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
+  if (dockerTimer) clearInterval(dockerTimer)
   if (processesTimer) clearInterval(processesTimer)
 })
 
@@ -539,6 +547,11 @@ async function deleteLink(link: QuickLink) {
         </div>
         </template>
 
+        <template v-if="dockerAvailable && runningProjects > 0">
+          <p class="eyebrow section">{{ t('dashboard.apps.title') }}</p>
+          <DashboardApps :containers="containers" class="apps-block" />
+        </template>
+
         <p class="eyebrow section">{{ t('dashboard.quickAccess') }}</p>
         <div class="quick-grid">
           <RouterLink v-for="link in quickLinks" :key="link.to" :to="link.to" class="glass-card quick-tile">
@@ -710,6 +723,10 @@ async function deleteLink(link: QuickLink) {
 
 .section {
   margin-top: 24px;
+}
+
+.apps-block {
+  margin-bottom: 22px;
 }
 
 .eyebrow {

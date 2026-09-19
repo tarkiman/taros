@@ -141,4 +141,10 @@ const (
 
 	// handlers_system.go
 	NetInfoFailed = "net_info_failed" // params: detail
+
+	// handlers_appmeta.go / internal/appmeta (URL/icon errors reuse the
+	// quicklinks ones: URLInvalid, URLScheme, Icon*)
+	AppNameInvalid    = "app_name_invalid"     // params: max
+	MaxAppsReached    = "max_apps_reached"     // params: max
+	AppMetaSaveFailed = "app_meta_save_failed" // params: detail
 )

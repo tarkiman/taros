@@ -71,6 +71,14 @@ export default {
     wrongTotp: 'Kode salah — coba lagi, atau pakai salah satu kode cadangan.',
   },
   dashboard: {
+    apps: {
+      title: 'Aplikasi',
+      openApp: 'Buka aplikasi',
+      editTitle: 'Kustomisasi “{name}”',
+      urlLabel: 'URL aplikasi (opsional)',
+      resetDefault: 'Pakai icon default',
+      saveFailed: 'Gagal menyimpan.',
+    },
     hostAddresses: {
       title: 'Alamat Host',
       showAll: 'Tampilkan semua',
@@ -527,6 +535,9 @@ export default {
     disk_analysis_scan_failed: 'Analisis disk gagal: {detail}',
     disk_analysis_scan_busy: 'Analisis disk sedang berjalan — tunggu sampai selesai.',
     disk_analysis_scan_timeout: 'Analisis disk terlalu lama dan dihentikan — kemungkinan filesystem-nya sangat besar atau storage lambat. Coba lagi, atau persempit fileExplorer.rootDir ke direktori yang lebih kecil.',
+    app_meta_save_failed: 'Gagal menyimpan kustomisasi aplikasi: {detail}',
+    app_name_invalid: 'Nama aplikasi tidak valid.',
+    max_apps_reached: 'Terlalu banyak aplikasi dikustomisasi (maks {max}).',
     net_info_failed: 'Gagal membaca alamat jaringan: {detail}',
     disk_analysis_toggle_failed: 'Gagal mengubah pengaturan Analisis Disk: {detail}',
   },

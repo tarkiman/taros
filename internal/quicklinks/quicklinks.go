@@ -363,3 +363,10 @@ func randomID() (string, error) {
 	}
 	return hex.EncodeToString(b), nil
 }
+
+// NormalizeURL and NormalizeIcon expose this package's input validation to
+// other Dashboard tile stores (internal/appmeta) so the same rules — http(s)
+// only, image sniffing, size cap — apply everywhere a user-supplied tile
+// URL/icon is stored, instead of a second copy drifting out of sync.
+func NormalizeURL(raw string) (string, error)  { return normalizeURL(raw) }
+func NormalizeIcon(raw string) (string, error) { return normalizeIcon(raw) }
