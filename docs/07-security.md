@@ -151,6 +151,18 @@ tidak ada jalur kode yang lupa memvalidasi:
   dan untuk tombol "Bersihkan semua"), dan **tercatat ke audit log** (§7.7) — bukan hanya
   start/stop/restart yang dicatat.
 
+### Environment variable container
+
+Viewer env container (docs/04-features.md §4.2) menampilkan data paling sensitif yang pernah
+disajikan TarOS — password DB, API key, token — kepada **semua akun** (multi-user, akses sama
+rata, lihat §7.1). Mitigasinya berlapis: nilai yang tampak rahasia **ditahan di server** (tidak
+pernah ada di respons default), membukanya butuh **re-konfirmasi password akun sendiri** (pola
+yang sama dengan aksi sensitif lain), dan tiap pembukaan dicatat ke log (siapa, container mana,
+berapa rahasia — tidak pernah nilainya). Catatan jujur: akses ke Docker socket dan File Explorer
+(`.env` di folder project) sudah bisa membaca hal serupa, jadi ini bukan celah baru —
+tujuannya mencegah kebocoran kebetulan (screenshot, screen-sharing, orang di belakang layar),
+bukan menyekat pengguna yang memang berhak atas host ini.
+
 ## 7.5 Jaringan
 
 - Rekomendasi default: bind ke `0.0.0.0` port custom (misal `8090`), **tanpa TLS built-in**

@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NCard, NSwitch, NSpin, useMessage } from 'naive-ui'
 import { systemApi, type HostAddress } from '../api/system'
+import { copyText } from '../utils/clipboard'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -26,24 +27,9 @@ async function load() {
 onMounted(load)
 watch(showAll, load)
 
-// navigator.clipboard only exists in secure contexts (https/localhost) —
-// TarOS is usually opened over plain http on the LAN (http://192.168.x.x:8090),
-// where it's undefined, so fall back to the old execCommand path.
 async function copy(text: string) {
   try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text)
-    } else {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      const ok = document.execCommand('copy')
-      document.body.removeChild(ta)
-      if (!ok) throw new Error('copy failed')
-    }
+    await copyText(text)
     message.success(t('dashboard.hostAddresses.copied', { ip: text }))
   } catch {
     message.error(t('dashboard.hostAddresses.copyFailed'))

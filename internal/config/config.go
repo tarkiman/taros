@@ -8,6 +8,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -156,6 +157,11 @@ type DashboardConfig struct {
 	// this to an absolute, already-service-user-writable path for the
 	// packaged Linux install (see docs/09-deployment.md).
 	QuickLinksFile string `yaml:"quickLinksFile"`
+	// AppsFile holds per-compose-project tile customization (custom icon,
+	// optional app URL) shown in the Dashboard "Aplikasi" section — see
+	// internal/appmeta. Same reasoning and same default-path convention as
+	// QuickLinksFile above.
+	AppsFile string `yaml:"appsFile"`
 }
 
 // NotifyConfig — see docs/04-features.md §4.11 "Notifikasi Discord". Like
@@ -233,6 +239,7 @@ func Default() Config {
 		},
 		Dashboard: DashboardConfig{
 			QuickLinksFile: "./quick-links.yaml",
+			AppsFile:       "./apps.yaml",
 		},
 		Notify: NotifyConfig{
 			SettingsFile: "./notify.yaml",
@@ -259,6 +266,16 @@ func Load(path string) (Config, error) {
 
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("config: parse %s: %w", path, err)
+	}
+
+	// Installs that predate dashboard.appsFile have no such key, so they'd
+	// get the relative default — which resolves against the service's
+	// working directory and usually isn't writable. When quickLinksFile
+	// was already pointed at an absolute, service-writable location (what
+	// deploy/config.example.yaml does), put apps.yaml beside it instead so
+	// upgrading needs no config edit.
+	if cfg.Dashboard.AppsFile == Default().Dashboard.AppsFile && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
+		cfg.Dashboard.AppsFile = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "apps.yaml")
 	}
 	return cfg, nil
 }

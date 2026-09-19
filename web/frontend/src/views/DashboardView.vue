@@ -23,6 +23,7 @@ import {
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import HostAddressesCard from '../components/HostAddressesCard.vue'
+import DashboardApps from '../components/DashboardApps.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
 import { useMetricsStream } from '../composables/useMetricsStream'
 import { fetchHistory } from '../api/metrics'
@@ -118,6 +119,9 @@ const netTotal = computed(() => {
 const clockTime = ref('')
 const clockDate = ref('')
 let clockTimer: ReturnType<typeof setInterval> | undefined
+// Keeps the "Aplikasi" tiles' status live — the endpoint serves the
+// server-side watcher's cache, so this is cheap.
+let dockerTimer: ReturnType<typeof setInterval> | undefined
 
 function tickClock() {
   const now = new Date()
@@ -136,7 +140,8 @@ const dockerChecked = ref(false)
 async function loadDockerSummary() {
   try {
     const res = await dockerApi.containers()
-    containers.value = res.containers
+    // null until the server-side watcher's first refresh lands
+    containers.value = res.containers ?? []
     dockerAvailable.value = true
   } catch {
     dockerAvailable.value = false
@@ -145,6 +150,7 @@ async function loadDockerSummary() {
   }
 }
 
+const runningProjects = computed(() => new Set(containers.value.filter((c) => c.project).map((c) => c.project)).size)
 const runningCount = computed(() => containers.value.filter((c) => c.state === 'running').length)
 
 // --- "Pemakai Teratas": which resource (clicking the CPU/RAM gauge below
@@ -238,6 +244,7 @@ watch(locale, tickClock)
 onMounted(async () => {
   tickClock()
   clockTimer = setInterval(tickClock, 15000)
+  dockerTimer = setInterval(loadDockerSummary, 10000)
   await Promise.allSettled([
     fetchHistory('cpu').then((s) => { cpuHistory.value = toPoints(s) }),
     fetchHistory('diskRead').then((s) => { diskReadHistory.value = toPoints(s, 1 / 1024 / 1024) }),
@@ -250,6 +257,7 @@ onMounted(async () => {
 })
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
+  if (dockerTimer) clearInterval(dockerTimer)
   if (processesTimer) clearInterval(processesTimer)
 })
 
@@ -418,70 +426,73 @@ async function deleteLink(link: QuickLink) {
         </div>
 
         <div class="main-grid">
-          <NCard class="status-card">
-            <template #header>{{ t('dashboard.systemSummary') }}</template>
-            <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
-              <NGi>
-                <button
-                  type="button"
-                  class="gauge-btn"
-                  :class="{ active: metricSort === 'cpu' }"
-                  :title="t('dashboard.viewTopCpu')"
-                  @click="metricSort = 'cpu'"
-                >
-                  <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
-                </button>
-              </NGi>
-              <NGi>
-                <button
-                  type="button"
-                  class="gauge-btn"
-                  :class="{ active: metricSort === 'mem' }"
-                  :title="t('dashboard.viewTopRam')"
-                  @click="metricSort = 'mem'"
-                >
-                  <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" :sublabel="`${formatBytes(snapshot.mem.usedBytes)} / ${formatBytes(snapshot.mem.totalBytes)}`" />
-                </button>
-              </NGi>
-              <NGi>
-                <GaugeChart
-                  v-if="primaryDisk"
-                  :value="primaryDisk.usedPercent"
-                  :label="primaryDisk.mountPoint"
-                  :sublabel="`${formatBytes(primaryDisk.usedBytes)} / ${formatBytes(primaryDisk.totalBytes)}`"
-                />
-                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
-              </NGi>
-              <NGi>
-                <GaugeChart
-                  v-if="maxTemp"
-                  :value="maxTemp.celsius"
-                  :max="100"
-                  :thresholds="[0.7, 0.85]"
-                  :label="maxTemp.label"
-                  :formatter="(v: number) => v.toFixed(0) + '°'"
-                />
-                <div v-else class="text-muted empty-gauge">{{ t('dashboard.noTempSensor') }}</div>
-              </NGi>
-            </NGrid>
+          <div class="main-col">
+            <NCard class="status-card">
+              <template #header>{{ t('dashboard.systemSummary') }}</template>
+              <NGrid cols="2 s:4" :x-gap="12" :y-gap="12" responsive="screen">
+                <NGi>
+                  <button
+                    type="button"
+                    class="gauge-btn"
+                    :class="{ active: metricSort === 'cpu' }"
+                    :title="t('dashboard.viewTopCpu')"
+                    @click="metricSort = 'cpu'"
+                  >
+                    <GaugeChart :value="snapshot.cpu.totalPercent" label="CPU" />
+                  </button>
+                </NGi>
+                <NGi>
+                  <button
+                    type="button"
+                    class="gauge-btn"
+                    :class="{ active: metricSort === 'mem' }"
+                    :title="t('dashboard.viewTopRam')"
+                    @click="metricSort = 'mem'"
+                  >
+                    <GaugeChart :value="snapshot.mem.usedPercent" label="RAM" :sublabel="`${formatBytes(snapshot.mem.usedBytes)} / ${formatBytes(snapshot.mem.totalBytes)}`" />
+                  </button>
+                </NGi>
+                <NGi>
+                  <GaugeChart
+                    v-if="primaryDisk"
+                    :value="primaryDisk.usedPercent"
+                    :label="primaryDisk.mountPoint"
+                    :sublabel="`${formatBytes(primaryDisk.usedBytes)} / ${formatBytes(primaryDisk.totalBytes)}`"
+                  />
+                  <div v-else class="text-muted empty-gauge">{{ t('dashboard.noDiskData') }}</div>
+                </NGi>
+                <NGi>
+                  <GaugeChart
+                    v-if="maxTemp"
+                    :value="maxTemp.celsius"
+                    :max="100"
+                    :thresholds="[0.7, 0.85]"
+                    :label="maxTemp.label"
+                    :formatter="(v: number) => v.toFixed(0) + '°'"
+                  />
+                  <div v-else class="text-muted empty-gauge">{{ t('dashboard.noTempSensor') }}</div>
+                </NGi>
+              </NGrid>
 
-            <div class="io-strip">
-              <div class="io-tile">
-                <NIcon :component="HardDrive" size="18" />
-                <div>
-                  <div class="io-label">{{ t('dashboard.diskIo') }}</div>
-                  <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
+              <div class="io-strip">
+                <div class="io-tile">
+                  <NIcon :component="HardDrive" size="18" />
+                  <div>
+                    <div class="io-label">{{ t('dashboard.diskIo') }}</div>
+                    <div class="io-value">↓ {{ formatBytes(snapshot.diskIO.readBytesPerSec) }}/s ↑ {{ formatBytes(snapshot.diskIO.writeBytesPerSec) }}/s</div>
+                  </div>
+                </div>
+                <div class="io-tile">
+                  <NIcon :component="Wifi" size="18" />
+                  <div>
+                    <div class="io-label">{{ t('dashboard.network') }}</div>
+                    <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
+                  </div>
                 </div>
               </div>
-              <div class="io-tile">
-                <NIcon :component="Wifi" size="18" />
-                <div>
-                  <div class="io-label">{{ t('dashboard.network') }}</div>
-                  <div class="io-value">↓ {{ formatBytes(netTotal.rx) }}/s ↑ {{ formatBytes(netTotal.tx) }}/s</div>
-                </div>
-              </div>
-            </div>
-          </NCard>
+            </NCard>
+            <HostAddressesCard />
+          </div>
 
           <div class="side-col">
             <NCard class="proc-card">
@@ -534,9 +545,13 @@ async function deleteLink(link: QuickLink) {
               <p v-else class="text-muted empty-note">{{ t('dashboard.dockerDisabled') }}</p>
             </NCard>
 
-            <HostAddressesCard />
           </div>
         </div>
+        </template>
+
+        <template v-if="dockerAvailable && runningProjects > 0">
+          <p class="eyebrow section">{{ t('dashboard.apps.title') }}</p>
+          <DashboardApps :containers="containers" />
         </template>
 
         <p class="eyebrow section">{{ t('dashboard.quickAccess') }}</p>
@@ -711,6 +726,12 @@ async function deleteLink(link: QuickLink) {
 .section {
   margin-top: 24px;
 }
+/* .eyebrow (declared below) resets margin to 0 0 12px, and same specificity
+   + later order wins — so a plain .section never actually gave section
+   labels any space above them. Higher specificity restores it. */
+.eyebrow.section {
+  margin-top: 30px;
+}
 
 .eyebrow {
   font-size: 0.72rem;
@@ -872,6 +893,19 @@ async function deleteLink(link: QuickLink) {
   font-size: 0.86rem;
   font-weight: 600;
   color: var(--text);
+}
+
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* The grid stretches this column to the taller right column; letting the
+   last card grow (instead of the summary card) keeps both bottoms flush
+   without leaving a blank band inside System Summary. */
+.main-col > :last-child {
+  flex: 1;
 }
 
 .side-col {

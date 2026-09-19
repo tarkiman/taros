@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/tarkiman/taros/internal/appmeta"
 	"github.com/tarkiman/taros/internal/auth"
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
@@ -107,6 +108,11 @@ type Deps struct {
 	// handlers (no restart-and-reload), so it's always non-nil.
 	QuickLinks *quicklinks.Store
 
+	// AppMeta holds per-compose-project tile customization for the
+	// Dashboard "Aplikasi" section — see internal/appmeta. Same "mutated
+	// directly, no restart" shape as QuickLinks, always non-nil.
+	AppMeta *appmeta.Store
+
 	// Notify holds Discord alert settings (webhook URL, CPU/RAM/temp
 	// thresholds+durations) — see internal/notify and
 	// docs/04-features.md §4.11. Same "mutated directly, no restart"
@@ -161,6 +167,8 @@ func (s *Server) Handler() http.Handler {
 	// forever) — see docs/04-features.md §4.2 "Graceful Degradation".
 	mux.HandleFunc("GET /api/system/monitoring-status", s.requireAuth(s.handleSystemMonitoringStatus))
 	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
+	mux.HandleFunc("GET /api/apps/meta", s.requireAuth(s.handleAppMetaList))
+	mux.HandleFunc("PUT /api/apps/meta/{project}", s.requireAuth(s.handleAppMetaSet))
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
 	mux.HandleFunc("GET /api/metrics/history", s.requireAuth(s.handleMetricsHistory))
 	mux.HandleFunc("GET /api/processes", s.requireAuth(s.handleProcesses))
@@ -172,6 +180,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/docker/settings", s.requireAuth(s.handleAPIDockerSettings))
 	mux.HandleFunc("POST /api/docker/containers/{id}/{action}", s.requireAuth(s.handleAPIDockerContainerAction))
 	mux.HandleFunc("GET /api/docker/containers/{id}/logs/stream", s.requireAuth(s.handleDockerContainerLogsStream))
+	mux.HandleFunc("GET /api/docker/containers/{id}/env", s.requireAuth(s.handleDockerContainerEnv))
+	mux.HandleFunc("POST /api/docker/containers/{id}/env/reveal", s.requireAuth(s.handleDockerContainerEnvReveal))
 	mux.HandleFunc("POST /api/docker/images/{id}/remove", s.requireAuth(s.handleAPIDockerImageRemove))
 	mux.HandleFunc("POST /api/docker/volumes/{name}/remove", s.requireAuth(s.handleAPIDockerVolumeRemove))
 	mux.HandleFunc("POST /api/docker/networks/{id}/remove", s.requireAuth(s.handleAPIDockerNetworkRemove))

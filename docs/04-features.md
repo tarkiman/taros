@@ -166,6 +166,31 @@ cuma tampilan berpusat pada project, tahap 1 sengaja **read-only** (tanpa Start/
   `unhealthy`, restart-loop, dan satu container non-compose — semua status & pengurutan
   terverifikasi lewat Chromium headless (CDP).
 
+### Environment variable container (read-only, rahasia ditahan)
+
+Tombol **Env** di baris service (tab Aplikasi) membuka drawer berisi environment variable
+yang **benar-benar dipakai** container (`Config.Env` dari inspect, hasil gabungan compose/`.env`/
+image). Sengaja **hanya-baca** — mengubah env berarti membuat ulang container, itu tempatnya di
+compose file.
+
+- **Rahasia ditahan di server, bukan sekadar disembunyikan UI.** Nilai variabel yang tampak
+  rahasia **tidak ikut** di respons `GET .../env` sama sekali (diverifikasi: 0 kemunculan nilai
+  di body respons), jadi tidak ada di memori/devtools/network log browser sebelum diminta.
+  Deteksi (`internal/docker.IsSecret`): nama mengandung `password/pass/secret/token/api_key/
+  access_key/private/credential/auth/salt/jwt/cert/dsn/connection_string/key` **atau** nilainya
+  URL berkredensial (`postgres://user:pass@host`) — kunci `DATABASE_URL`/`BROKER` apa pun
+  namanya tetap tertangkap. Sengaja luas: menyamarkan nilai yang tidak sensitif cuma butuh satu
+  klik, membocorkan kredensial asli ke layar tidak bisa di-undo.
+- **Buka nilai rahasia = ketik ulang password akun** (`POST .../env/reveal`, 403 kalau salah) —
+  bar konfirmasi yang sama dengan toggle Terminal/Port/hapus TOTP/kelola user. Tiap pembukaan
+  yang berhasil dicatat ke log (`docker: nilai environment rahasia dibuka container=… count=…
+  by=…`) — **tanpa nilainya**. Nilai yang sudah dibuka hidup hanya di memori komponen dan
+  dibuang saat drawer ditutup (diuji: tutup lalu buka lagi → kembali tertutup).
+- **Variabel bawaan image** (`PATH`, versi bahasa, dst.) ditandai lewat diff dengan `Config.Env`
+  image-nya (satu panggilan Docker tambahan, hanya saat drawer dibuka) dan disembunyikan default
+  supaya yang terlihat cuma konfigurasi aplikasimu; checkbox untuk memunculkannya. Rahasia tidak
+  pernah ikut disembunyikan sebagai "bawaan image". Ada filter nama dan tombol salin per nilai.
+
 ### Log Container
 
 Live-tail log stdout/stderr container langsung dari dashboard — dibuka lewat tombol "Logs" di
@@ -713,6 +738,25 @@ untuk langkah setup & [07-security.md](07-security.md) §7.6 untuk pembahasan ri
 - Ringkasan sekilas (summary cards) di halaman utama: CPU%, RAM%, disk terpenuh, suhu
   tertinggi, jumlah container running, jumlah service failed — semua real-time via SSE.
 - Indikator status koneksi (misal badge kecil kalau SSE terputus & sedang reconnect).
+- **Section "Aplikasi"** (di atas Akses Cepat): satu tile per compose project — icon, nama, titik
+  status (hijau/kuning/merah/abu) dan `jalan/total`. Project bermasalah diurutkan paling depan
+  dan berbingkai merah/kuning; container non-compose tidak ditampilkan di sini (tidak punya nama
+  stabil untuk ditempeli icon; tetap ada di Docker > Aplikasi). Logika status **dipakai bersama**
+  dengan tab Aplikasi di halaman Docker (`web/frontend/src/utils/dockerProjects.ts`) supaya kedua
+  tempat selalu sepakat soal arti "sehat". Data container di-refresh tiap 10 detik dari cache
+  watcher server (murah). Klik tile → `/docker?tab=apps&app=<project>` (tab Aplikasi terbuka,
+  kartu project itu terbuka & di-scroll ke tengah).
+  - **Icon default = huruf inisial berwarna**, warna diturunkan deterministik dari nama project
+    (hash → hue), jadi konsisten antar reload tanpa menyimpan apa pun. **Custom icon** (upload
+    gambar / URL, tombol pensil saat hover, "Pakai icon default" untuk membatalkan) plus **URL
+    aplikasi opsional** (tombol ikon panah keluar di tile membuka aplikasinya di tab baru).
+  - Disimpan di file sendiri `apps.yaml` (`dashboard.appsFile`, `internal/appmeta`), **dikunci
+    dengan nama compose project**, bukan ID container — jadi icon bertahan saat container dibuat
+    ulang/di-update. Live tanpa restart (pola quick-links). Validasi icon/URL **memakai fungsi yang
+    sama dengan Akses Cepat** (`quicklinks.NormalizeIcon/NormalizeURL`: hanya http(s), sniff format
+    gambar, batas 150KB), bukan salinan yang bisa melenceng. Instalasi lama tanpa `appsFile` di
+    config otomatis menaruh `apps.yaml` di folder yang sama dengan `quickLinksFile` — upgrade
+    tidak butuh edit config.
 - **Kartu "Alamat Host"**: daftar IPv4 host per interface (Ethernet/Wi-Fi/ZeroTier/Tailscale),
   klik untuk salin — berguna buat tahu alamat mana yang dipakai SSH/buka dashboard dari
   perangkat lain. `GET /api/system/addresses` (`internal/netinfo`, cuma `net.Interfaces()` stdlib,
