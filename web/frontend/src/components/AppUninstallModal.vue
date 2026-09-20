@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NCheckbox, NInput, NModal, NSpin } from 'naive-ui'
 import { dockerApi, type ProjectPlan, type UninstallStep } from '../api/docker'
 import { ApiError } from '../api/client'
+import { currentPassword, noAutofill } from '../utils/inputProps'
 
 // Uninstalls one docker compose project. Containers + networks always go;
 // volumes (the app's data) and images are opt-in. The server re-checks the
@@ -51,12 +52,9 @@ watch(
   },
 )
 
-// NInput puts autocomplete/name/data-* attrs on its wrapper <div>, not on the
-// real <input> — so they must go through input-props to reach the browser.
-// Without this Chrome guessed the app-name field was a "username" and
-// autofilled the saved login into it.
-const nameInputProps = { autocomplete: 'off', name: 'confirm-app-name', 'data-1p-ignore': '', 'data-lpignore': 'true' }
-const passwordInputProps = { autocomplete: 'current-password', name: 'confirm-password' }
+// See utils/inputProps.ts — autocomplete on <NInput> itself never reaches the <input>.
+const nameInputProps = noAutofill('confirm-app-name')
+const passwordInputProps = currentPassword('confirm-password')
 const nameMismatch = computed(() => typed.value !== '' && typed.value !== props.name)
 const canSubmit = computed(() => !!plan.value && typed.value === props.name && !!password.value && !working.value)
 const volumeNames = computed(() => (plan.value?.volumes ?? []).join(', '))

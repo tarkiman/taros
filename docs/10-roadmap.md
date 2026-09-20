@@ -2056,6 +2056,23 @@ kegagalan parsial tidak menghentikan sisanya). Catatan: `StopContainer` lama mem
 10 dtk yang bisa berbenturan dengan stop-timeout Docker (10 dtk) — kode baru memakai jalur tanpa
 timeout klien; jalur lama belum diubah.
 
+### Frontend: cegah autofill browser di semua kolom konfirmasi/form Settings
+
+Ditemukan dari laporan user: kolom "ketik nama aplikasi" di dialog Uninstall terisi username
+tersimpan lewat autofill Chrome sehingga tombol Uninstall terlihat nonaktif tanpa sebab.
+Akar masalahnya lebih luas: `NInput`/`NInputNumber` menaruh atribut `autocomplete`/`name`/`data-*`
+di `<div>` pembungkus, **bukan** di `<input>` aslinya — jadi `autocomplete="off"` yang tertulis di
+komponen tidak pernah sampai ke browser, dan Chrome menebak sendiri (kolom teks di atas kolom
+password dianggap username). Perbaikan: atribut lewat `:input-props`, dibungkus helper
+`web/frontend/src/utils/inputProps.ts` (`noAutofill`, `currentPassword`, `newPassword`,
+`oneTimeCode`), tiap kolom dengan `name` sendiri. Dipakai di dialog Uninstall, drawer Env, dan
+Settings (konfirmasi password Terminal/Port/TOTP/user, username & password user baru, kolom
+port, kode TOTP, URL webhook — yang bertipe password ditandai `new-password` supaya password
+dashboard tersimpan tidak terisi ke sana). Diverifikasi lewat audit DOM Chromium headless pada
+semua form Settings. Batas jujur: headless tidak punya password tersimpan, jadi perilaku
+autofill Chrome asli hanya bisa dikonfirmasi user. `LoginView` sengaja tidak diubah — di sana
+atribut `autocomplete` justru dipakai password manager, dan perlu diuji hati-hati.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

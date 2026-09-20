@@ -6,6 +6,7 @@ import { Copy, Lock } from '@lucide/vue'
 import { dockerApi, type EnvVar } from '../api/docker'
 import { ApiError } from '../api/client'
 import { copyText } from '../utils/clipboard'
+import { currentPassword, noAutofill } from '../utils/inputProps'
 import type { Container } from '../types/docker'
 
 const props = defineProps<{ show: boolean; container: Container | null }>()
@@ -13,12 +14,9 @@ const emit = defineEmits<{ (e: 'update:show', v: boolean): void }>()
 const { t } = useI18n()
 const message = useMessage()
 
-// NInput puts autocomplete/name attrs on its wrapper <div>, not the real
-// <input>, so they must go through input-props — otherwise Chrome takes the
-// filter box (a text field before a password field) for a "username" and
-// autofills the saved login into it.
-const filterInputProps = { autocomplete: 'off', name: 'env-filter', 'data-1p-ignore': '', 'data-lpignore': 'true' }
-const passwordInputProps = { autocomplete: 'current-password', name: 'env-reveal-password' }
+// See utils/inputProps.ts — autocomplete on <NInput> itself never reaches the <input>.
+const filterInputProps = noAutofill('env-filter')
+const passwordInputProps = currentPassword('env-reveal-password')
 
 const loading = ref(false)
 const error = ref('')

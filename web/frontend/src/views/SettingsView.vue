@@ -12,6 +12,22 @@ import { totpApi } from '../api/totp'
 import { notifyApi, type NotifySettings } from '../api/notify'
 import { ApiError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { currentPassword, newPassword as newPasswordProps, noAutofill, oneTimeCode } from '../utils/inputProps'
+
+// See utils/inputProps.ts — autocomplete on <NInput> itself never reaches the <input>.
+const pwProps = {
+  terminal: currentPassword('confirm-terminal-password'),
+  port: currentPassword('confirm-port-password'),
+  totp: currentPassword('confirm-totp-password'),
+  users: currentPassword('confirm-users-password'),
+  usersRemove: currentPassword('confirm-user-remove-password'),
+}
+const portInputProps = noAutofill('new-port')
+const newUsernameProps = noAutofill('new-username')
+const newPasswordFieldProps = newPasswordProps('new-user-password')
+const newPasswordConfirmProps = newPasswordProps('new-user-password-confirm')
+const totpCodeProps = oneTimeCode('totp-code')
+const webhookUrlProps = newPasswordProps('notify-webhook-url')
 
 const { t } = useI18n()
 const message = useMessage()
@@ -483,7 +499,7 @@ async function sendNotifyTest() {
                   type="password"
                   show-password-on="click"
                   :placeholder="t('common.dashboardPassword')"
-                  autocomplete="current-password"
+                  :input-props="pwProps.terminal"
                   @keyup.enter="confirmToggle"
                 />
                 <NSpace>
@@ -556,6 +572,7 @@ async function sendNotifyTest() {
                 </span>
                 <NInputNumber
                   v-model:value="pendingPort"
+                  :input-props="portInputProps"
                   :min="1"
                   :max="65535"
                   :show-button="false"
@@ -568,7 +585,7 @@ async function sendNotifyTest() {
                   type="password"
                   show-password-on="click"
                   :placeholder="t('common.dashboardPassword')"
-                  autocomplete="current-password"
+                  :input-props="pwProps.port"
                   @keyup.enter="confirmPortChange"
                 />
                 <NSpace>
@@ -623,6 +640,7 @@ async function sendNotifyTest() {
                   v-model:value="totpCode"
                   autofocus
                   placeholder="123456"
+                  :input-props="totpCodeProps"
                   @keyup.enter="confirmTotpSetup"
                 />
                 <NAlert v-if="totpError" type="error" :show-icon="false">{{ totpError }}</NAlert>
@@ -654,7 +672,7 @@ async function sendNotifyTest() {
                     type="password"
                     show-password-on="click"
                     :placeholder="t('common.dashboardPassword')"
-                    autocomplete="current-password"
+                    :input-props="pwProps.totp"
                     @keyup.enter="confirmTotpDisable"
                   />
                   <NSpace>
@@ -700,10 +718,10 @@ async function sendNotifyTest() {
 
             <template v-else-if="usersFlow === 'add'">
               <NSpace vertical :size="10">
-                <NInput v-model:value="newUsername" :placeholder="t('settings.newUsername')" autofocus />
-                <NInput v-model:value="newPassword" type="password" show-password-on="click" :placeholder="t('settings.newPassword')" autocomplete="new-password" />
-                <NInput v-model:value="newPasswordConfirm" type="password" show-password-on="click" :placeholder="t('settings.confirmNewPassword')" autocomplete="new-password" @keyup.enter="confirmAddUser" />
-                <NInput v-model:value="usersPassword" type="password" show-password-on="click" :placeholder="t('common.dashboardPassword')" autocomplete="current-password" @keyup.enter="confirmAddUser" />
+                <NInput v-model:value="newUsername" :placeholder="t('settings.newUsername')" :input-props="newUsernameProps" autofocus />
+                <NInput v-model:value="newPassword" type="password" show-password-on="click" :placeholder="t('settings.newPassword')" :input-props="newPasswordFieldProps" />
+                <NInput v-model:value="newPasswordConfirm" type="password" show-password-on="click" :placeholder="t('settings.confirmNewPassword')" :input-props="newPasswordConfirmProps" @keyup.enter="confirmAddUser" />
+                <NInput v-model:value="usersPassword" type="password" show-password-on="click" :placeholder="t('common.dashboardPassword')" :input-props="pwProps.users" @keyup.enter="confirmAddUser" />
                 <NAlert v-if="usersError" type="error" :show-icon="false">{{ usersError }}</NAlert>
                 <NSpace>
                   <NButton size="small" @click="cancelUsersFlow">{{ t('common.cancel') }}</NButton>
@@ -721,7 +739,7 @@ async function sendNotifyTest() {
                     type="password"
                     show-password-on="click"
                     :placeholder="t('common.dashboardPassword')"
-                    autocomplete="current-password"
+                    :input-props="pwProps.usersRemove"
                     @keyup.enter="confirmRemoveUser"
                   />
                   <NSpace>
@@ -761,6 +779,7 @@ async function sendNotifyTest() {
                   type="password"
                   show-password-on="click"
                   :placeholder="t('settings.notify.webhookPlaceholder')"
+                  :input-props="webhookUrlProps"
                   style="flex: 1"
                 />
                 <NButton size="small" :disabled="!notifyForm.webhookUrl" :loading="notifyTesting" @click="sendNotifyTest">
