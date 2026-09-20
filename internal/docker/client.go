@@ -51,6 +51,18 @@ func (c *Client) Ping(ctx context.Context) error {
 // daemon's own max supported version), which keeps this client working
 // across Docker releases without pinning a version here.
 func (c *Client) do(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+	return c.send(c.http, ctx, method, path, body)
+}
+
+// doSlow is do() for calls that legitimately outlast the 10s client
+// timeout — a graceful container stop waits up to the container's own stop
+// timeout (10s by default) before SIGKILL, so it would race that deadline.
+// Bounded only by the caller's ctx.
+func (c *Client) doSlow(ctx context.Context, method, path string) ([]byte, error) {
+	return c.send(c.streamHTTP, ctx, method, path, nil)
+}
+
+func (c *Client) send(hc *http.Client, ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, "http://docker.sock"+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("docker: build request: %w", err)
@@ -59,7 +71,7 @@ func (c *Client) do(ctx context.Context, method, path string, body io.Reader) ([
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("docker: %s %s: %w", method, path, err)
 	}

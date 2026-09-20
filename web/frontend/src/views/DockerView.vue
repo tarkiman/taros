@@ -24,6 +24,7 @@ import type { DataTableColumns } from 'naive-ui'
 import AppShell from '../layouts/AppShell.vue'
 import DockerProjectsPanel from '../components/DockerProjectsPanel.vue'
 import ContainerEnvDrawer from '../components/ContainerEnvDrawer.vue'
+import AppUninstallModal from '../components/AppUninstallModal.vue'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
 import { useContainerLogsStream } from '../composables/useContainerLogsStream'
@@ -120,6 +121,14 @@ const logSinceOptions = [
   { label: t('docker.logs.last6h'), value: 360 },
   { label: t('docker.logs.last24h'), value: 1440 },
 ]
+
+// --- Uninstall a whole compose project (see AppUninstallModal.vue) ---
+const uninstallShow = ref(false)
+const uninstallName = ref('')
+function openUninstall(name: string) {
+  uninstallName.value = name
+  uninstallShow.value = true
+}
 
 // --- Container environment viewer (read-only, secrets withheld until the
 // user re-confirms their password — see ContainerEnvDrawer.vue) ---
@@ -547,7 +556,7 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="apps" :tab="t('docker.apps.tab')">
         <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
-        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" />
+        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" @uninstall="openUninstall" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />
@@ -603,6 +612,7 @@ onUnmounted(() => {
     </NTabs>
 
     <ContainerEnvDrawer v-model:show="envShow" :container="envContainer" />
+    <AppUninstallModal v-model:show="uninstallShow" :name="uninstallName" @done="loadContainers" />
 
     <NDrawer v-model:show="logDrawerOpen" :width="640" placement="right">
       <NDrawerContent :title="t('docker.logs.title', { name: logContainerName })" closable>

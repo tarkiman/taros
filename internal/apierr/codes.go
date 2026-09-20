@@ -76,14 +76,18 @@ const (
 
 	// handlers_docker.go
 	DockerDisabled              = "docker_disabled"
-	DockerUnreachable           = "docker_unreachable"             // params: detail
-	DockerContainerActionFailed = "docker_container_action_failed" // params: action, detail
-	DockerImageRemoveFailed     = "docker_image_remove_failed"     // params: detail
-	DockerVolumeRemoveFailed    = "docker_volume_remove_failed"    // params: detail
-	DockerNetworkRemoveFailed   = "docker_network_remove_failed"   // params: detail
-	DockerPruneFailed           = "docker_prune_failed"            // params: kind, detail
-	DockerLogsFailed            = "docker_logs_failed"             // params: detail
-	DockerEnvFailed             = "docker_env_failed"              // params: detail
+	DockerUnreachable           = "docker_unreachable"              // params: detail
+	DockerContainerActionFailed = "docker_container_action_failed"  // params: action, detail
+	DockerImageRemoveFailed     = "docker_image_remove_failed"      // params: detail
+	DockerVolumeRemoveFailed    = "docker_volume_remove_failed"     // params: detail
+	DockerNetworkRemoveFailed   = "docker_network_remove_failed"    // params: detail
+	DockerPruneFailed           = "docker_prune_failed"             // params: kind, detail
+	DockerLogsFailed            = "docker_logs_failed"              // params: detail
+	DockerEnvFailed             = "docker_env_failed"               // params: detail
+	DockerProjectNotFound       = "docker_project_not_found"        // no container/network/volume carries the compose label
+	DockerProjectRunsThis       = "docker_project_runs_this"        // TarOS itself is a container of that project
+	DockerProjectUninstallFail  = "docker_project_uninstall_failed" // params: detail
+	DockerProjectConfirmMissing = "docker_project_confirm_missing"  // typed app name didn't match
 
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"
