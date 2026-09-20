@@ -1,0 +1,1 @@
+var e=e=>({autocomplete:`off`,name:e,"data-1p-ignore":``,"data-lpignore":`true`}),t=e=>({autocomplete:`current-password`,name:e}),n=e=>({autocomplete:`new-password`,name:e,"data-1p-ignore":``,"data-lpignore":`true`}),r=e=>({autocomplete:`one-time-code`,name:e});export{r as i,n,e as r,t};
