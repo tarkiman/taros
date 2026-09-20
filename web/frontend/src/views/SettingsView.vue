@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NCard, NSpace, NSwitch, NInput, NInputNumber, NSlider, NButton, NAlert, NSpin, NIcon, NTag, useMessage } from 'naive-ui'
+import { NCard, NSpace, NSwitch, NInput, NInputNumber, NSlider, NButton, NAlert, NSpin, NIcon, NTag, NCheckbox, useMessage } from 'naive-ui'
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
@@ -23,6 +23,7 @@ const pwProps = {
   usersRemove: currentPassword('confirm-user-remove-password'),
 }
 const portInputProps = noAutofill('new-port')
+const graceInputProps = noAutofill('container-grace-min')
 const newUsernameProps = noAutofill('new-username')
 const newPasswordFieldProps = newPasswordProps('new-user-password')
 const newPasswordConfirmProps = newPasswordProps('new-user-password-confirm')
@@ -439,6 +440,7 @@ const notifyForm = ref<NotifySettings>({
   cpu: { enabled: false, thresholdPct: 90, durationMin: 5 },
   mem: { enabled: false, thresholdPct: 90, durationMin: 5 },
   temp: { enabled: false, thresholdC: 80, durationMin: 5 },
+  containers: { enabled: false, restartLoop: true, unhealthy: true, crashed: true, graceMin: 3, includeLogs: false },
 })
 
 async function loadNotifySettings() {
@@ -868,6 +870,42 @@ async function sendNotifyTest() {
                 </div>
               </div>
               <p class="text-muted">{{ t('settings.notify.tempHint') }}</p>
+            </div>
+
+            <div class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.containers.label') }}</span>
+                <NSwitch v-model:value="notifyForm.containers.enabled" size="small" />
+              </NSpace>
+              <p class="text-muted">{{ t('settings.notify.containers.desc') }}</p>
+              <NSpace vertical :size="6">
+                <NCheckbox v-model:checked="notifyForm.containers.restartLoop" :disabled="!notifyForm.containers.enabled">
+                  {{ t('settings.notify.containers.restartLoop') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="notifyForm.containers.unhealthy" :disabled="!notifyForm.containers.enabled">
+                  {{ t('settings.notify.containers.unhealthy') }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="notifyForm.containers.crashed" :disabled="!notifyForm.containers.enabled">
+                  {{ t('settings.notify.containers.crashed') }}
+                </NCheckbox>
+              </NSpace>
+              <div class="notify-field">
+                <span class="notify-field-label">{{ t('settings.notify.containers.grace') }}</span>
+                <div class="notify-slider-combo">
+                  <NSlider v-model:value="notifyForm.containers.graceMin" :min="1" :max="30" :step="1" :disabled="!notifyForm.containers.enabled" style="flex: 1" />
+                  <NInputNumber v-model:value="notifyForm.containers.graceMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.containers.enabled" :show-button="false" size="small" class="notify-combo-input" :input-props="graceInputProps">
+                    <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
+                  </NInputNumber>
+                </div>
+                <p class="text-muted">{{ t('settings.notify.containers.graceHint') }}</p>
+              </div>
+              <NCheckbox v-model:checked="notifyForm.containers.includeLogs" :disabled="!notifyForm.containers.enabled">
+                {{ t('settings.notify.containers.includeLogs') }}
+              </NCheckbox>
+              <NAlert v-if="notifyForm.containers.enabled && notifyForm.containers.includeLogs" type="warning" :show-icon="false">
+                {{ t('settings.notify.containers.logsWarning') }}
+              </NAlert>
+              <p class="text-muted">{{ t('settings.notify.containers.limits') }}</p>
             </div>
 
             <NSpace justify="end">

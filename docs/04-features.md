@@ -1050,7 +1050,7 @@ stabil** (+ params interpolasi opsional) di samping teks aslinya, frontend yang 
   `useI18n()`'s `t`/`te` langsung (kode tunggal `job_failed` + `{detail}`, semua kegagalan
   copy/move di sini memang tidak terklasifikasi lebih jauh).
 
-## 4.11 Notifikasi Discord (CPU/RAM/Suhu)
+## 4.11 Notifikasi Discord (CPU/RAM/Suhu/Container)
 
 Kirim notifikasi ke webhook Discord kalau CPU, RAM, atau suhu CPU **bertahan** di atas nilai
 threshold selama lebih dari durasi tertentu — bukan alert sesaat/spike, tapi kondisi yang
@@ -1090,6 +1090,52 @@ slider di halaman Settings.
   recovery, biru untuk pesan test, berisi nilai saat ini/threshold/durasi bertahan, footer
   `TarOS · <hostname>`. Bahasa pesan Bahasa Indonesia tetap (bukan ikut sistem i18n UI Vue di
   §4.10) — ini pesan langsung ke channel Discord milik user sendiri, bukan bagian UI aplikasi.
+
+### Alert kesehatan container
+
+Alert CPU/RAM/suhu tidak bisa melihat container yang crash-loop atau mati diam-diam — di host
+dev, `aiplatform-redis` dan `deploy-backend-1` restart 68 dan 71 kali tanpa ada yang tahu
+sampai diperiksa manual. Kartu **Container** di Settings > Notifikasi (default mati, memakai
+webhook yang sama, master switch notifikasi tetap harus nyala) menutup celah itu.
+`internal/notify.ContainerMonitor` meng-inspect semua container tiap 30 detik (inspect ~beberapa
+ms/container, 4 paralel) dan menilai tiga aturan independen:
+
+- **Restart berulang**: `RestartCount` naik ≥3 dalam 10 menit. Sengaja memakai hitungan restart,
+  bukan status `restarting` — container yang hidup 60 detik lalu mati hampir tidak pernah
+  tertangkap sedang `restarting`, tapi hitungannya tetap naik. Nilai yang sudah ada saat TarOS
+  mulai dipakai sebagai baseline, bukan dihitung (container dengan RestartCount 68 yang stabil
+  tidak memicu apa-apa).
+- **Unhealthy**: health check `unhealthy` terus-menerus ≥ masa tenggang (kedipan sesaat tidak
+  dihitung).
+- **Berhenti tak terduga**: state `exited` dengan exit code abnormal, restart policy bukan `no`,
+  bertahan ≥1 menit, dan di luar masa tenggang. Exit code 0/137/143 dianggap berhenti sengaja
+  (bersih / SIGKILL setelah `docker stop` / SIGTERM) — **kecuali** `OOMKilled`, karena OOM kill
+  juga berujung 137 dan itu justru kasus yang harus tertangkap (host RAM kecil). Docker tidak
+  punya penanda "dihentikan manual", jadi ini heuristik: crash yang kebetulan exit 0 lolos.
+
+Semantik sama dengan alert metrik: **satu alert per insiden**, satu pesan "pulih" setelah kondisi
+bersih ≥5 menit (kedipan di dalam jendela itu tetap insiden yang sama, tidak mengirim ulang).
+**Masa tenggang** (default 3 menit, 1–60) adalah waktu tenang setelah TarOS menyala/aturan
+dinyalakan — container memang telat naik setelah boot (Wi-Fi/SMB) — sekaligus lama minimum
+unhealthy; ia juga berlaku untuk restart-loop dan crash. Menonaktifkan lalu menyalakan lagi
+memulai masa tenggang baru. Lonjakan (mis. banyak container gagal sesudah boot buruk) dibatasi
+4 pesan per siklus: 3 alert bernama + 1 ringkasan yang menyebut sisanya.
+
+- **Log terakhir** (3 baris) bisa disertakan di alert — **default mati**, karena log bisa memuat
+  token/password dan pesannya keluar dari mesin (ke Discord). Saat dinyalakan, UI menampilkan
+  peringatan; backtick di log dinetralkan supaya tidak memecah blok kode Discord.
+- Container tanpa restart policy tidak dipantau untuk crash (container coba-coba sekali jalan
+  tidak berisik, tanpa perlu daftar mute).
+- Container yang dihapus/di-uninstall dilupakan tanpa pesan.
+- **Batas jujur**: kalau TarOS atau seluruh Pi mati, tidak ada yang terkirim (butuh pemantau
+  eksternal). Setelah TarOS di-restart, insiden yang masih berlangsung dikirim ulang sekali
+  (status insiden hanya di memori).
+- Klien lama (JS ter-cache) yang menyimpan tanpa blok `containers` tidak mereset pengaturannya:
+  handler mendekode ke pengaturan yang tersimpan.
+- Diuji: unit test state machine (jam & sumber palsu, 13 test + 7 kasus tabel untuk aturan crash, dicek dengan mutasi — tiap
+  aturan yang dirusak membuat test gagal) dan langsung ke Docker daemon asli (`TAROS_LIVE_DOCKER=1
+  go test ./internal/notify -run Live -v`) dengan 3 container tiruan crash-loop / unhealthy /
+  exit-5 plus 33 container asli: tepat 3 alert yang diharapkan, 0 false positive, kolom log terisi.
 
 ## 4.12 Analisis Disk
 

@@ -314,6 +314,7 @@ bagian ini fokus ke kontrol keamanannya.
 | Bug (path traversal, dsb) berdampak ke seluruh sistem, bukan cuma lingkup TarOS | Non-root tetap default (Opsi A/B); mode root (Opsi C, setara CasaOS) hanya lewat pilihan eksplisit saat instalasi, bukan default diam-diam |
 | URL webhook Discord (secret) bocor lewat log/response error | Tidak pernah masuk `slog`/pesan error API (§7.10); file penyimpanannya 0600 dan git-ignored |
 | SSRF lewat field URL webhook notifikasi | Domain divalidasi ketat ke `discord.com`/`discordapp.com`, bukan sekadar `url.Parse` (§7.10) |
+| Log container yang mengandung secret ikut terkirim ke Discord lewat alert container | Melampirkan log **opt-in, default mati**, dengan peringatan di UI; tanpa opsi itu alert cuma memuat nama, exit code, dan restart policy — TarOS tidak pernah membaca log container kalau opsi mati |
 
 ## 7.9 Update Aplikasi
 
