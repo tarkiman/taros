@@ -13,6 +13,13 @@ const emit = defineEmits<{ (e: 'update:show', v: boolean): void }>()
 const { t } = useI18n()
 const message = useMessage()
 
+// NInput puts autocomplete/name attrs on its wrapper <div>, not the real
+// <input>, so they must go through input-props — otherwise Chrome takes the
+// filter box (a text field before a password field) for a "username" and
+// autofills the saved login into it.
+const filterInputProps = { autocomplete: 'off', name: 'env-filter', 'data-1p-ignore': '', 'data-lpignore': 'true' }
+const passwordInputProps = { autocomplete: 'current-password', name: 'env-reveal-password' }
+
 const loading = ref(false)
 const error = ref('')
 const vars = ref<EnvVar[]>([])
@@ -108,7 +115,7 @@ async function copy(text: string) {
       <NAlert v-else-if="error" type="error" :title="error" />
       <template v-else>
         <div class="controls">
-          <NInput v-model:value="filter" size="small" clearable :placeholder="t('docker.env.filter')" style="max-width: 200px" />
+          <NInput v-model:value="filter" size="small" clearable :placeholder="t('docker.env.filter')" :input-props="filterInputProps" style="max-width: 200px" />
           <NCheckbox v-if="imageDefaultCount > 0" v-model:checked="hideImageDefaults" size="small">
             {{ t('docker.env.hideImageDefaults', { count: imageDefaultCount }) }}
           </NCheckbox>
@@ -129,7 +136,7 @@ async function copy(text: string) {
               show-password-on="click"
               size="small"
               :placeholder="t('common.dashboardPassword')"
-              autocomplete="current-password"
+              :input-props="passwordInputProps"
               @keyup.enter="confirmReveal"
             />
             <NButton size="small" @click="askPassword = false; password = ''; revealError = ''">{{ t('common.cancel') }}</NButton>
