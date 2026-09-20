@@ -288,6 +288,7 @@ const en = {
         keepVolumes: 'Data volumes are kept ({names}) — a reinstall will find its data again.',
         removeImages: 'Also delete its images ({count})',
         imagesHint: 'Frees disk space; images still used by other containers are skipped. They are downloaded/built again on the next start.',
+        nameMismatch: 'That doesn’t match the app name.',
         typeName: 'Type the app name to confirm',
         password: 'Dashboard password',
         confirm: 'Uninstall',

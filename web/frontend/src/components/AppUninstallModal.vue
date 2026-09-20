@@ -51,6 +51,13 @@ watch(
   },
 )
 
+// NInput puts autocomplete/name/data-* attrs on its wrapper <div>, not on the
+// real <input> — so they must go through input-props to reach the browser.
+// Without this Chrome guessed the app-name field was a "username" and
+// autofilled the saved login into it.
+const nameInputProps = { autocomplete: 'off', name: 'confirm-app-name', 'data-1p-ignore': '', 'data-lpignore': 'true' }
+const passwordInputProps = { autocomplete: 'current-password', name: 'confirm-password' }
+const nameMismatch = computed(() => typed.value !== '' && typed.value !== props.name)
 const canSubmit = computed(() => !!plan.value && typed.value === props.name && !!password.value && !working.value)
 const volumeNames = computed(() => (plan.value?.volumes ?? []).join(', '))
 const failed = computed(() => (result.value ?? []).filter((s) => !s.ok))
@@ -136,10 +143,6 @@ function close() {
       <p class="note text-muted">{{ t('docker.apps.uninstall.keepNote') }}</p>
 
       <div class="block">
-        <div class="label">{{ t('docker.apps.uninstall.typeName') }}: <span class="mono">{{ name }}</span></div>
-        <NInput v-model:value="typed" size="small" :disabled="working" :placeholder="name" autocomplete="off" />
-      </div>
-      <div class="block">
         <NInput
           v-model:value="password"
           type="password"
@@ -147,9 +150,21 @@ function close() {
           size="small"
           :disabled="working"
           :placeholder="t('docker.apps.uninstall.password')"
-          autocomplete="current-password"
+          :input-props="passwordInputProps"
           @keyup.enter="submit"
         />
+      </div>
+      <div class="block">
+        <div class="label">{{ t('docker.apps.uninstall.typeName') }}: <span class="mono">{{ name }}</span></div>
+        <NInput
+          v-model:value="typed"
+          size="small"
+          :disabled="working"
+          :placeholder="name"
+          :status="nameMismatch ? 'error' : undefined"
+          :input-props="nameInputProps"
+        />
+        <p v-if="nameMismatch" class="mismatch">{{ t('docker.apps.uninstall.nameMismatch') }}</p>
       </div>
       <NAlert v-if="error" type="error" :title="error" class="block" />
       <p v-if="working" class="hint text-muted">{{ t('docker.apps.uninstall.working') }}</p>
@@ -176,6 +191,7 @@ function close() {
 .hint { font-size: 0.78rem; margin: 4px 0 0 24px; }
 p.note { font-size: 0.78rem; margin: 0 0 14px; }
 .danger-text { color: var(--danger); }
+.mismatch { font-size: 0.78rem; color: var(--danger); margin: 4px 0 0; }
 .text-muted { color: var(--text-muted); }
 .fail-list { margin: 4px 0 0; padding-left: 18px; font-size: 0.82rem; }
 .footer { display: flex; justify-content: flex-end; gap: 8px; }

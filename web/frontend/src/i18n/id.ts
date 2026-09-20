@@ -289,6 +289,7 @@ export default {
         keepVolumes: 'Volume data dipertahankan ({names}) — kalau dipasang ulang, datanya ketemu lagi.',
         removeImages: 'Hapus juga image-nya ({count})',
         imagesHint: 'Membebaskan ruang disk; image yang masih dipakai container lain dilewati. Akan diunduh/dibuild lagi saat aplikasi dijalankan berikutnya.',
+        nameMismatch: 'Tidak cocok dengan nama aplikasi.',
         typeName: 'Ketik nama aplikasi untuk konfirmasi',
         password: 'Password dashboard',
         confirm: 'Uninstall',
