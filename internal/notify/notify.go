@@ -91,13 +91,32 @@ type MetricRule struct {
 	DurationMin  int     `yaml:"durationMin" json:"durationMin"`
 }
 
+// ContainerRules configures the container-health alerts (see containers.go):
+// one master switch, three independent rules, one shared grace period.
+type ContainerRules struct {
+	Enabled     bool `yaml:"enabled" json:"enabled"`
+	RestartLoop bool `yaml:"restartLoop" json:"restartLoop"` // >=3 restarts within 10 minutes
+	Unhealthy   bool `yaml:"unhealthy" json:"unhealthy"`     // health check failing for GraceMin
+	Crashed     bool `yaml:"crashed" json:"crashed"`         // exited abnormally and stayed down
+	// GraceMin is both the quiet period after TarOS starts/the rules are
+	// switched on (containers legitimately start late after a boot) and how
+	// long a container must stay unhealthy before it counts.
+	GraceMin int `yaml:"graceMin" json:"graceMin"`
+	// IncludeLogs attaches the last few log lines to an alert. Off by
+	// default: logs can hold tokens and this leaves the machine (Discord).
+	IncludeLogs bool `yaml:"includeLogs" json:"includeLogs"`
+}
+
+const defaultGraceMin = 3
+
 // Settings is the full Discord notification configuration.
 type Settings struct {
-	Enabled    bool       `yaml:"enabled" json:"enabled"`
-	WebhookURL string     `yaml:"webhookUrl" json:"webhookUrl"`
-	CPU        MetricRule `yaml:"cpu" json:"cpu"`
-	Mem        MetricRule `yaml:"mem" json:"mem"`
-	Temp       MetricRule `yaml:"temp" json:"temp"`
+	Enabled    bool           `yaml:"enabled" json:"enabled"`
+	WebhookURL string         `yaml:"webhookUrl" json:"webhookUrl"`
+	CPU        MetricRule     `yaml:"cpu" json:"cpu"`
+	Mem        MetricRule     `yaml:"mem" json:"mem"`
+	Temp       MetricRule     `yaml:"temp" json:"temp"`
+	Containers ContainerRules `yaml:"containers" json:"containers"`
 }
 
 // Default returns sane, inert defaults — Enabled=false and every rule
@@ -109,6 +128,9 @@ func Default() Settings {
 		CPU:     MetricRule{Enabled: false, ThresholdPct: 90, DurationMin: 5},
 		Mem:     MetricRule{Enabled: false, ThresholdPct: 90, DurationMin: 5},
 		Temp:    MetricRule{Enabled: false, ThresholdC: 80, DurationMin: 5},
+		// Rules default to on so that flipping the master switch is all it
+		// takes; the master itself is off like every other rule.
+		Containers: ContainerRules{Enabled: false, RestartLoop: true, Unhealthy: true, Crashed: true, GraceMin: defaultGraceMin},
 	}
 }
 
@@ -173,6 +195,11 @@ func (s *Store) Get() Settings {
 // value wholesale (this is a single settings object, not a list — no
 // partial-field PATCH semantics needed).
 func (s *Store) Update(next Settings) (Settings, error) {
+	// A client that predates the container rules omits them entirely;
+	// don't let that read as an invalid grace period.
+	if !next.Containers.Enabled && next.Containers.GraceMin == 0 {
+		next.Containers.GraceMin = defaultGraceMin
+	}
 	if err := validate(next); err != nil {
 		return Settings{}, err
 	}
@@ -190,7 +217,7 @@ func (s *Store) Update(next Settings) (Settings, error) {
 }
 
 func validate(s Settings) error {
-	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled
+	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled || s.Containers.Enabled
 	if (s.Enabled || anyRuleEnabled) && strings.TrimSpace(s.WebhookURL) == "" {
 		return invalid(apierr.NotifyWebhookRequired, "URL webhook Discord wajib diisi untuk mengaktifkan notifikasi", nil)
 	}
@@ -206,6 +233,11 @@ func validate(s Settings) error {
 	}
 	if err := validateTempRule(s.Temp); err != nil {
 		return err
+	}
+	if s.Containers.Enabled {
+		if err := validateDuration(s.Containers.GraceMin); err != nil {
+			return err
+		}
 	}
 	return nil
 }

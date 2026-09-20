@@ -15,7 +15,10 @@ func (s *Server) handleNotifyGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifyUpdate(w http.ResponseWriter, r *http.Request) {
-	var req notify.Settings
+	// Decode onto the current settings so a field the client omits (e.g. a
+	// cached older frontend that predates the "containers" block) keeps its
+	// saved value instead of silently resetting to zero.
+	req := s.deps.Notify.Get()
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
 		return

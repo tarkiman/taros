@@ -2073,6 +2073,17 @@ semua form Settings. Batas jujur: headless tidak punya password tersimpan, jadi 
 autofill Chrome asli hanya bisa dikonfirmasi user. `LoginView` sengaja tidak diubah — di sana
 atribut `autocomplete` justru dipakai password manager, dan perlu diuji hati-hati.
 
+### Notifikasi: alert kesehatan container (restart-loop / unhealthy / berhenti tak terduga)
+
+Saran #1 dari diskusi "fitur apa lagi", dipilih karena dua container restart-loop selama berjam-jam
+tanpa ada yang tahu. Desain (didiskusikan dulu, semua default yang direkomendasikan disetujui):
+inspect tiap 30 dtk, tiga aturan independen, satu alert per insiden + pesan pulih, masa tenggang
+pasca-boot, hanya container ber-restart-policy untuk crash, log opt-in default mati, lonjakan
+dilipat jadi ringkasan. Detail di `docs/04-features.md` §4.11 dan `docs/07-security.md`. Diuji
+dengan unit test bermutasi dan langsung ke Docker asli (0 false positive dari 33 container).
+Sengaja belum ada: alert dari luar mesin (heartbeat eksternal), mute per aplikasi (cukup restart
+policy), status insiden yang bertahan lintas restart TarOS.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
