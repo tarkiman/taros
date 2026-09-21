@@ -32,6 +32,7 @@ import (
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/web"
+	"github.com/tarkiman/taros/internal/wifi"
 )
 
 // version is set at build time via -ldflags "-X main.version=vX.Y.Z" (see
@@ -183,6 +184,16 @@ func runServer(args []string) {
 		}
 	}
 
+	// Wi-Fi management via NetworkManager's nmcli (Linux only). Absent nmcli is
+	// normal (macOS, or a host not using NetworkManager): the feature simply
+	// reports itself unavailable.
+	var wifiClient *wifi.Client
+	if runtime.GOOS == "linux" {
+		if c, err := wifi.New(cfg.Wifi.Device); err == nil {
+			wifiClient = c
+		}
+	}
+
 	// Same "non-critical, don't block startup" reasoning as quickLinks
 	// above.
 	folderShortcuts, err := foldershortcuts.Load(cfg.FolderShortcuts.SettingsFile)
@@ -213,6 +224,7 @@ func runServer(args []string) {
 		Notify:                    notifySettings,
 		FolderShortcuts:           folderShortcuts,
 		BootLog:                   bootLedger,
+		Wifi:                      wifiClient,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {

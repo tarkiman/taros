@@ -26,6 +26,7 @@ type Config struct {
 	Notify          NotifyConfig          `yaml:"notify"`
 	FolderShortcuts FolderShortcutsConfig `yaml:"folderShortcuts"`
 	BootLog         BootLogConfig         `yaml:"bootLog"`
+	Wifi            WifiConfig            `yaml:"wifi"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
@@ -188,6 +189,14 @@ type FolderShortcutsConfig struct {
 // heartbeat). Not secret, so 0644 like quick-links.yaml.
 type BootLogConfig struct {
 	File string `yaml:"file"`
+}
+
+// WifiConfig — see docs/04-features.md §4.14. Device pins the adapter TarOS
+// scans/connects with ("" = auto: the connected one, else the first). A
+// configured adapter that doesn't exist is an error, never a silent fallback
+// to another radio.
+type WifiConfig struct {
+	Device string `yaml:"device"`
 }
 
 func Default() Config {

@@ -6,6 +6,7 @@ import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import BootHistoryCard from '../components/BootHistoryCard.vue'
+import WifiCard from '../components/WifiCard.vue'
 import { terminalApi } from '../api/terminal'
 import { diskAnalysisApi } from '../api/diskAnalysis'
 import { settingsApi } from '../api/settings'
@@ -766,6 +767,8 @@ async function sendNotifyTest() {
             </NAlert>
           </NSpace>
         </NCard>
+
+        <WifiCard />
 
         <NCard embedded size="small" :title="t('settings.notify.title')" style="margin-top: 16px">
           <div v-if="notifyLoading" class="loading"><NSpin size="small" /></div>

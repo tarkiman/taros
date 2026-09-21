@@ -110,3 +110,10 @@ bootLog:
   # pada boot berikutnya = Pi mati mendadak. Di /opt/taros karena direktori
   # itu sudah ditulis user servis, sama alasannya dengan quickLinksFile.
   file: "/opt/taros/boots.yaml"
+
+wifi:
+  # Halaman Settings > Wi-Fi (lihat docs/04-features.md §4.14) memakai
+  # NetworkManager (nmcli) dan butuh TarOS berjalan sebagai root. Kosongkan
+  # untuk otomatis (adapter yang sedang terhubung, atau yang pertama); isi
+  # mis. "wlan0" kalau ada lebih dari satu adapter Wi-Fi.
+  device: ""

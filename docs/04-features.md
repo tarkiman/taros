@@ -1276,3 +1276,74 @@ TarOS. Datanya dari `internal/bootlog` — file `bootLog.file` (default `/opt/ta
   sesi (SIGTERM bersih, `kill -9`, dan mati mendadak yang disimulasikan dengan mengganti
   `boot_id`) terklasifikasi benar dan tidak diumumkan ulang. Pengiriman Discord sungguhan tidak
   dicoba (webhook asli tidak dipakai) — jalurnya `sendWebhook` yang sama dengan alert lain.
+
+## 4.14 Manajemen Wi-Fi (scan / sambung / lupakan)
+
+Kartu **Wi-Fi** di Settings: pindai jaringan yang terlihat, sambung ke salah satunya (dengan
+password kalau perlu), sambung ke jaringan tersembunyi, dan lupakan jaringan tersimpan. Dikerjakan
+lewat `nmcli` NetworkManager (`internal/wifi`), tanpa library D-Bus.
+
+**Risiko utamanya menentukan desain**: Pi ini hanya punya Wi-Fi dan TarOS dibuka lewat Wi-Fi yang
+sama, jadi pindah jaringan yang salah (password keliru, di luar jangkauan) memutus perangkat tanpa
+jalan kembali selain akses fisik. Karena itu:
+
+- **Pindah jaringan berjalan di server, asinkron, dan diverifikasi**: `POST /api/wifi/connect`
+  langsung membalas 202; goroutine mengingat koneksi sebelumnya, menyambung, lalu memverifikasi
+  bahwa perangkat benar-benar *connected* pada SSID yang diminta **dengan alamat IPv4**. Kalau gagal
+  di titik mana pun, ia menghapus profil baru dan menyambung balik ke koneksi sebelumnya
+  (`rolled_back`); kalau itu pun gagal hasilnya `rollback_failed` — dilaporkan terang-terangan, tidak
+  disembunyikan. Respons HTTP-nya sendiri akan hilang saat link berpindah, jadi hasil dibaca dari
+  `GET /api/wifi/status` (state job ada di memori); UI menunggu Pi kembali, memberi tahu kalau link
+  terputus lama (mungkin alamatnya berubah), dan menampilkan alamat baru begitu berhasil.
+- **Kriteria "berhasil" sengaja longgar di gateway**: state *connected* + SSID benar + alamat IPv4 —
+  **bukan** gateway default atau ping ke gateway. LAN terisolasi yang sah tidak punya router keluar,
+  dan banyak router menjatuhkan ICMP; keduanya akan me-rollback perpindahan yang sebenarnya baik.
+- **Konfirmasi password dashboard** untuk sambung dan lupakan (403 kalau salah), plus peringatan di
+  dialog bahwa halaman bisa terputus dan cara menjangkau Pi sesudahnya (alamat baru, ZeroTier).
+- **Password Wi-Fi tidak pernah lewat baris perintah.** Profil baru ditulis sebagai *keyfile*
+  NetworkManager (`/etc/NetworkManager/system-connections/taros-wifi-<uuid>.nmconnection`, 0600,
+  root, `O_EXCL`) lalu `nmcli connection load` — SSID ditulis sebagai daftar byte (tak ambigu untuk
+  SSID apa pun, mis. "12;34") dan backslash/spasi ujung di-escape. Password tidak pernah di-log,
+  dikembalikan API, atau ada di pesan error (`CmdError` hanya membawa stderr, tidak argumen).
+  Divalidasi sebagai passphrase WPA yang sah (8–63 ASCII yang bisa dicetak, atau 64 digit hex),
+  SSID ≤32 byte tanpa karakter kontrol.
+- **Aman terhadap salah pilih**: hanya profil mode *infrastructure* yang dianggap "tersimpan" (profil
+  hotspot/AP bernama sama tidak boleh dipakai ulang — itu akan menjadikan adapter sebuah AP), yang
+  sedang dipakai tidak bisa dilupakan, uuid non-Wi-Fi ditolak, profil lama yang kata sandinya diganti
+  baru dihapus **setelah** yang baru berhasil (gagal → yang lama tetap), dan hanya satu perpindahan
+  berjalan sekali waktu (409 `wifi_busy`). Scan segar dibatasi 1 per 8 detik (scan sesaat menurunkan
+  throughput link yang sedang dipakai); permintaan lebih cepat dijawab dari cache.
+- **Lingkup v1**: WPA/WPA2 (termasuk campuran WPA2/WPA3), WPA3-SAE, dan jaringan terbuka. WPA-Enterprise
+  (802.1X) dan WEP **tampil tapi tidak bisa disambung**; tidak ada IP statis dan tidak ada
+  mematikan radio (yang terakhir bisa memutus perangkat tanpa pemulihan).
+- **Syarat**: NetworkManager berjalan, ada adapter Wi-Fi, izin polkit NetworkManager (scan,
+  network-control, settings.modify.system) diperiksa lewat `nmcli general permissions` (hanya
+  membaca), dan **TarOS berjalan sebagai root** (menulis keyfile). Kalau tidak terpenuhi, kartu
+  menampilkan alasannya (`no_nmcli`, `nm_not_running`, `no_wifi_device`, `not_authorized`,
+  `needs_root`), bukan tombol yang gagal diam-diam. Config `wifi.device` mengunci adapter tertentu;
+  adapter yang dikonfigurasi tapi tidak ada adalah error, tidak pernah mundur diam-diam ke radio lain.
+  Otomatis (default) memilih adapter yang sedang terhubung — kalau ada hotspot berbasis adapter lain
+  yang juga "terhubung", isi `wifi.device`.
+- Audit log: `wifi: pindah jaringan dimulai` (ssid, hidden, siapa), hasilnya (ssid, result, detail),
+  dan `jaringan tersimpan dilupakan` — tanpa password.
+- **Diuji**:
+  - 25 unit test dengan NetworkManager palsu yang meniru profil, jaringan, koneksi aktif, dan kegagalan
+    (sukses, password salah, tanpa lease, di luar jangkauan, rollback gagal, saat pindah `up` "berhasil"
+    tapi landing di SSID lain, dua pindah bersamaan, validasi, lupakan, ketersediaan) — dicek dengan
+    **20 mutasi**, semuanya tertangkap.
+  - Read-only di NetworkManager **asli** host ini (status, daftar, semua penolakan) tanpa menyentuh radio.
+  - **End-to-end sungguhan di radio virtual** (`mac80211_hwsim`, dua hotspot buatan NetworkManager,
+    `wlan0` tidak disentuh, rute default dijaga tidak berubah, host diverifikasi identik sesudahnya):
+    sambung (4 dtk), pindah antar-AP dengan koneksi sebelumnya diingat, **password salah dan SSID di
+    luar jangkauan sama-sama di-rollback** (~30 dtk, profil rusak tidak tertinggal, koneksi lama pulih),
+    pakai ulang profil tersimpan tanpa keyfile baru, lupakan, dan jaringan tersembunyi. Dari 2.653
+    sampel baris perintah `nmcli` (tiap ~20 ms) **tidak ada satu pun yang memuat password**. UI diuji di
+    Chromium headless terhadap backend yang sama.
+  - Temuan yang **hanya** ketahuan lewat uji nyata (diperbaiki, masing-masing diberi test): profil
+    hotspot terbaca sebagai "tersimpan"; kriteria gateway me-rollback jaringan tanpa gateway; NetworkManager
+    melaporkan password salah sebagai "The Wi-Fi network could not be found" (sama dengan di luar
+    jangkauan — UI menjelaskan kedua kemungkinan); pesan berisi `Hint: use 'journalctl …'` dibersihkan.
+- **Belum teruji / batas jujur**: perpindahan pada Wi-Fi **asli** host ini tidak dicoba (hanya satu AP
+  dan satu-satunya jalur ke Pi); probing AP yang benar-benar menyembunyikan SSID (hotspot virtual tetap
+  menyiarkannya — yang teruji jalur flag `hidden` dan keyfile-nya); jalur non-root/polkit (butuh root
+  sekarang); WPA3-SAE-only pada radio sungguhan; dan jaringan captive-portal (dianggap tersambung).
