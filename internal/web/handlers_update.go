@@ -3,7 +3,6 @@ package web
 import (
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/tarkiman/taros/internal/apierr"
@@ -73,6 +72,6 @@ func (s *Server) handleUpdateApply(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		time.Sleep(700 * time.Millisecond)
-		os.Exit(0)
+		s.exit(0)
 	}()
 }

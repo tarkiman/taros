@@ -224,8 +224,16 @@ func runServer(args []string) {
 		Notify:                    notifySettings,
 		FolderShortcuts:           folderShortcuts,
 		BootLog:                   bootLedger,
-		Wifi:                      wifiClient,
-		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
+		// Deliberate restarts (Settings toggles, self-update) go through here so
+		// the boot ledger records them as clean stops, not TarOS crashes.
+		Exit: func(code int) {
+			if bootLedger != nil {
+				bootLedger.MarkClean()
+			}
+			os.Exit(code)
+		},
+		Wifi:                wifiClient,
+		DiskAnalysisEnabled: cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {
 		dockerClient := docker.NewClient(cfg.Docker.SocketPath)
