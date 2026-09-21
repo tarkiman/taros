@@ -33,6 +33,9 @@ type Deps struct {
 	DockerEnabled bool
 	Docker        *docker.Client
 	DockerWatcher *docker.Watcher
+	// Lifecycle runs start/stop/restart on a whole compose project in
+	// dependency order (docs/04-features.md §4.2). nil with Docker off.
+	Lifecycle *docker.Lifecycle
 
 	// ProtectedUnits get an extra-emphatic confirmation before stop/restart
 	// — see docs/07-security.md.
@@ -200,6 +203,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/docker/containers/{id}/env", s.requireAuth(s.handleDockerContainerEnv))
 	mux.HandleFunc("POST /api/docker/containers/{id}/env/reveal", s.requireAuth(s.handleDockerContainerEnvReveal))
 	mux.HandleFunc("GET /api/docker/projects/{name}/uninstall-plan", s.requireAuth(s.handleDockerProjectPlan))
+	mux.HandleFunc("GET /api/docker/projects/{name}/lifecycle", s.requireAuth(s.handleDockerProjectJob))
+	mux.HandleFunc("POST /api/docker/projects/{name}/lifecycle", s.requireAuth(s.handleDockerProjectLifecycle))
 	mux.HandleFunc("POST /api/docker/projects/{name}/uninstall", s.requireAuth(s.handleDockerProjectUninstall))
 	mux.HandleFunc("POST /api/docker/images/{id}/remove", s.requireAuth(s.handleAPIDockerImageRemove))
 	mux.HandleFunc("POST /api/docker/volumes/{name}/remove", s.requireAuth(s.handleAPIDockerVolumeRemove))

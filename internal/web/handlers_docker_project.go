@@ -16,6 +16,10 @@ import (
 // apierr codes; anything else goes through the generic action error.
 func writeProjectError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, docker.ErrInvalidAction):
+		writeJSONError(w, http.StatusBadRequest, apierr.DockerProjectActionInvalid, "aksi tidak dikenal", nil)
+	case errors.Is(err, docker.ErrBusyProject):
+		writeJSONError(w, http.StatusConflict, apierr.DockerProjectBusy, "aplikasi ini sedang menjalankan aksi lain", nil)
 	case errors.Is(err, docker.ErrProjectNotFound):
 		writeJSONError(w, http.StatusNotFound, apierr.DockerProjectNotFound, "aplikasi tidak ditemukan", nil)
 	case errors.Is(err, docker.ErrProjectRunsThis):
@@ -117,4 +121,51 @@ func containersFailed(res docker.UninstallResult) bool {
 		}
 	}
 	return false
+}
+
+type projectLifecycleRequest struct {
+	Action string `json:"action"` // start | stop | restart
+}
+
+// handleDockerProjectLifecycle starts/stops/restarts a whole compose project
+// in dependency order (dependencies first when starting, dependents first
+// when stopping — see internal/docker/lifecycle.go). It returns 202 at once;
+// the work runs in the background and is read from the GET below. Like the
+// per-container actions it needs no password re-entry (the UI asks for a
+// confirmation on stop/restart), but every request is audit-logged.
+func (s *Server) handleDockerProjectLifecycle(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.DockerEnabled {
+		s.writeDockerUnavailable(w, nil)
+		return
+	}
+	var req projectLifecycleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, apierr.InvalidRequest, "body tidak valid", nil)
+		return
+	}
+	name := r.PathValue("name")
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	job, err := s.deps.Lifecycle.Run(ctx, name, req.Action)
+	if err != nil {
+		writeProjectError(w, err)
+		return
+	}
+	slog.Info("docker: aksi aplikasi dimulai", "project", name, "action", req.Action, "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusAccepted, map[string]any{"job": job})
+}
+
+// handleDockerProjectJob returns the latest lifecycle job of a project
+// (null when none ran since TarOS started).
+func (s *Server) handleDockerProjectJob(w http.ResponseWriter, r *http.Request) {
+	if !s.deps.DockerEnabled {
+		s.writeDockerUnavailable(w, nil)
+		return
+	}
+	job, ok := s.deps.Lifecycle.Job(r.PathValue("name"))
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"job": nil})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": job})
 }

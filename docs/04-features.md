@@ -160,12 +160,64 @@ cuma tampilan berpusat pada project, tahap 1 sengaja **read-only** (tanpa Start/
 - Detail per service: status, health, uptime, CPU/RAM, tombol Logs (memakai ulang drawer log
   di bawah), dan link **Buka folder project** ke File Explorer (dari `working_dir`).
 - **Batasan jujur**: "running" tanpa `HEALTHCHECK` di compose file belum berarti sehat — hint di
-  bawah daftar mengingatkan ini. Aksi per-project Start/Stop/Restart dan update image sengaja
-  belum ada (Start/Stop lewat API Docker tidak menghormati `depends_on`); satu-satunya aksi
-  per-project adalah **Uninstall** (di bawah).
+  bawah daftar mengingatkan ini. Aksi per-project: **Start/Stop/Restart** dan **Uninstall**
+  (di bawah); update image sengaja belum ada.
 - Diuji di device nyata (7 project sungguhan) plus project sementara berisi service sehat,
   `unhealthy`, restart-loop, dan satu container non-compose — semua status & pengurutan
   terverifikasi lewat Chromium headless (CDP).
+
+### Start / Stop / Restart aplikasi (urutan `depends_on`)
+
+Tombol **Start**, **Stop**, dan **Restart** di kartu aplikasi (tab Aplikasi), di samping Uninstall.
+Start/Stop lewat API Docker biasa tidak tahu `depends_on` dan tidak ada CLI `docker compose` di host —
+tetapi compose menandai tiap container dengan label `com.docker.compose.depends_on`
+(`service:condition:restart,…`), jadi urutannya bisa disusun ulang dari container-nya saja
+(`internal/docker/lifecycle.go`). Dicek di host ini: 14 dependensi `service_healthy` dan 10
+`service_started`, dengan rantai tiga lapis nyata di `aiplatform`.
+
+- **Start**: dependensi dulu, per lapisan (container satu lapisan paralel). Sebelum lapisan berikutnya
+  ia menunggu kondisi terkuat yang diminta dependen: `service_started` = berjalan, `service_healthy` =
+  health `healthy`, `service_completed_successfully` = keluar dengan exit 0. Batas tunggu 120 dtk.
+  Status `unhealthy` **tetap ditunggu** (health check bisa pulih dalam jendela itu — terlihat nyata
+  saat `compose up` sendiri menyerah karena `db` sempat `unhealthy` sesaat sebelum sehat, dan
+  meninggalkan `api`/`web` berstatus *Created*). Container tanpa healthcheck yang diminta `service_healthy`
+  dianggap siap saat berjalan (dicatat di detail). Container yang mati sebelum sehat **gagal seketika**,
+  tidak menunggu sampai timeout.
+- **Stop**: kebalikannya — yang bergantung dihentikan dulu, baru yang dibutuhkannya, dengan stop
+  yang baik (SIGTERM lalu SIGKILL sesuai stop-timeout container, bukan kill).
+- **Restart** = satu siklus Stop lalu Start penuh. Status container dibaca ulang di antara kedua fase
+  (status yang dibaca di awal sudah basi begitu semuanya dihentikan).
+- **Kegagalan parsial tidak diam-diam**: container yang gagal, atau yang dependensinya gagal, ditandai
+  *failed* / *dilewati* dengan alasan (nama dependensi dan kata-kata daemon Docker), sedangkan service
+  yang tidak bergantung tetap dikerjakan. Container yang sudah **dihapus** tidak bisa dibuat ulang tanpa
+  compose — dilaporkan, tidak dipura-purakan (`docker compose up` yang membuatnya ulang). Container
+  `paused` dilanjutkan; yang sudah berjalan dilewati dengan keterangan.
+- **Berjalan di server sebagai job** (202 lalu dibaca dari `GET .../lifecycle`), jadi tetap jalan kalau
+  browser ditutup, dan hasilnya terbaca lagi setelah reload; UI menampilkan progres per container.
+  Satu job per aplikasi sekali waktu (409 `docker_project_busy`); aplikasi berbeda boleh bersamaan.
+  Ditolak kalau TarOS sendiri berjalan sebagai container di aplikasi itu (sama dengan Uninstall).
+- **Konfirmasi** dialog untuk Stop dan Restart, tanpa password (sama dengan aksi per-container yang
+  sudah ada); Start langsung. Setiap permintaan tercatat di log (siapa, aplikasi, aksi).
+- **Efek ke alert container** (§4.11): Stop lewat sini berakhir exit 0/137/143, yang alert container
+  anggap berhenti sengaja, jadi tidak memicu alert; Restart tidak menaikkan `RestartCount`.
+- **Perbaikan terkait**: `StopContainer`/`RestartContainer` per-container lama memakai timeout HTTP
+  klien 10 dtk — persis sama dengan stop-timeout default Docker (10 dtk), sehingga container yang
+  lambat berhenti dilaporkan gagal padahal berhasil. Kini memakai jalur tanpa timeout klien (dibatasi
+  konteks), dengan test.
+- **Diuji**: 17 test dengan Docker palsu yang menyimpan state (urutan start/stop, menunggu health,
+  dependensi mati/tak pernah sehat, `completed_successfully`, tanpa healthcheck, paused, sudah berjalan,
+  siklus, satu-job-per-aplikasi, restart dengan state basi, stop yang melewati timeout klien) — dicek
+  dengan **12 mutasi**, semuanya tertangkap (satu lewat *stack overflow* saat penjaga siklus dilepas). Di
+  Docker **asli**, dengan project tiruan berlapis tiga (`db` sehat setelah ~6 dtk → `api` → `web`,
+  ditambah `cache`): urutan stop dibuktikan dari `FinishedAt` milik Docker sendiri (web → api → cache∥db),
+  urutan start dari `StartedAt` (**api menyala 7,2 dtk setelah db**, menunggu sehat), restart penuh,
+  start ketika `api`/`web` hanya *Created*, dan dependensi yang crash (exit 3 → dependen dilewati,
+  service independen tetap jalan). UI diuji di Chromium headless (konfirmasi, tombol terkunci selama
+  job, progres per service, tombol kembali sesuai keadaan). Container asli tidak disentuh.
+- **Batas jujur**: tidak bisa menyalakan ulang container yang sudah dihapus (butuh compose); tidak
+  menghormati `restart:` di label dependensi; batas tunggu 120 dtk tidak bisa diatur; `depends_on`
+  antar-aplikasi berbeda tidak dikenal (hanya di dalam satu compose project); dan job hanya di memori
+  (hilang kalau TarOS restart).
 
 ### Environment variable container (read-only, rahasia ditahan)
 

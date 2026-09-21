@@ -88,6 +88,8 @@ const (
 	DockerProjectRunsThis       = "docker_project_runs_this"        // TarOS itself is a container of that project
 	DockerProjectUninstallFail  = "docker_project_uninstall_failed" // params: detail
 	DockerProjectConfirmMissing = "docker_project_confirm_missing"  // typed app name didn't match
+	DockerProjectActionInvalid  = "docker_project_action_invalid"   // not start|stop|restart
+	DockerProjectBusy           = "docker_project_busy"             // another action is already running on it
 
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"

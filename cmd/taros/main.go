@@ -233,6 +233,7 @@ func runServer(args []string) {
 		go dockerWatcher.Run(ctx, time.Duration(cfg.Docker.WatchIntervalSec)*time.Second)
 		deps.Docker = dockerClient
 		deps.DockerWatcher = dockerWatcher
+		deps.Lifecycle = docker.NewLifecycle(dockerClient, func() { dockerWatcher.RefreshNow(ctx) })
 		// Container-health alerts (crash loops, unhealthy, unexpected exits):
 		// idle unless enabled in Settings > Notifications, so this costs one
 		// settings read per tick by default.

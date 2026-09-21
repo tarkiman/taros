@@ -41,6 +41,25 @@ export interface UninstallBody {
   removeImages: boolean
 }
 
+// Mirrors internal/docker.LifecycleJob / LifecycleStep.
+export type LifecycleAction = 'start' | 'stop' | 'restart'
+export interface LifecycleStep {
+  service: string
+  container: string
+  action: 'start' | 'stop'
+  state: 'pending' | 'running' | 'ok' | 'failed' | 'skipped'
+  detail?: string
+}
+export interface LifecycleJob {
+  project: string
+  action: LifecycleAction
+  phase: 'running' | 'done'
+  result?: 'ok' | 'partial' | 'failed'
+  steps: LifecycleStep[]
+  startedAt: string
+  finishedAt?: string
+}
+
 export const dockerApi = {
   containers: () => api.get<ContainersResponse>('/api/docker/containers'),
   containerAction: (id: string, action: 'start' | 'stop' | 'restart' | 'remove') =>
@@ -52,6 +71,12 @@ export const dockerApi = {
   // withheld secret values.
   revealEnv: (id: string, password: string) =>
     api.post<{ values: Record<string, string> }>(`/api/docker/containers/${encodeURIComponent(id)}/env/reveal`, { password }),
+
+  // Start/stop/restart a whole app in dependency order. Returns at once (202);
+  // the work runs on the server and is read back with appJob().
+  appLifecycle: (name: string, action: LifecycleAction) =>
+    api.post<{ job: LifecycleJob }>(`/api/docker/projects/${encodeURIComponent(name)}/lifecycle`, { action }),
+  appJob: (name: string) => api.get<{ job: LifecycleJob | null }>(`/api/docker/projects/${encodeURIComponent(name)}/lifecycle`),
 
   uninstallPlan: (name: string) =>
     api.get<ProjectPlan>(`/api/docker/projects/${encodeURIComponent(name)}/uninstall-plan`),
