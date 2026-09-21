@@ -2174,6 +2174,36 @@ dengan en/id); mengganti password akun nonaktif membuka kuncinya; opsi TLS 1.1 t
 tetap bisa ditinjau), pengelolaan di Pi asli (vsftpd milik Pi dan perangkat 192.168.1.14 tidak disentuh),
 mengikat FTP ke satu jaringan, dan lebih dari satu folder per akun FTP.
 
+### Drive eksternal: auto-mount USB (flashdisk / HDD / SSD)
+
+Permintaan: colok flashdisk/HDD/SSD USB → ter-mount otomatis, muncul di dashboard dan File Explorer,
+isinya langsung bisa dibuka. Keputusan yang disetujui (ikut rekomendasi): mounter buatan TarOS sendiri
+(bukan `udisks2`: dbus/polkit tidak ada di semua distro), deteksi polling murah (bukan udev/dbus),
+hanya disk eksternal dan tidak pernah disk sistem/`fstab`, `nosuid,nodev,noexec` bawaan (bisa dimatikan
+di Settings), titik mount stabil per-UUID, volume kotor di-mount read-only, `mountBase` bawaan
+`/media/taros` dan `/DATA/MOUNT` di host ini, auto-mount bawaan hidup. Detail dan batas di
+`docs/04-features.md` §4.17 dan `docs/07-security.md`.
+
+Temuan dari uji nyata yang diperbaiki (semuanya kini punya test): (1) kernel memberi `removable=0`
+untuk HDD USB, jadi flag lama tak mengenalinya (kini bus USB) — dashboard lama juga terkoreksi;
+(2) **fingerprint deteksi tak melihat kartu yang dimasukkan ke card reader / loop device** karena node
+device-nya sudah ada — ketahuan di uji UI, kini `size` ikut sidik jari; (3) tanpa udev `lsblk`
+mengembalikan volume kosong — kini di-probe dengan `blkid`, dan labelnya di-unescape (`WIN\ BACKUP`);
+(4) **klik Unmount langsung di-mount ulang beberapa detik kemudian** — kini drive yang di-unmount/
+di-eject (juga oleh orang lain lewat terminal) tidak di-mount lagi sampai dicabut-colok;
+(5) ntfs-3g menjatuhkan volume hibernasi ke read-only sendiri dan hanya bilang di stderr, jadi tanpa
+membaca stderr alasannya hilang; (6) kunci terjemahan yang hilang di halaman berbagi file baru ketahuan setelah rilis
+sebelumnya — kini ada `npm run check:i18n` (kunci statis yang dipakai, kesamaan en/id, dan teks untuk
+setiap kode error backend).
+
+Mutation testing: **43 mutasi valid tertangkap**; dua yang selamat sengaja diterima — validasi bentuk
+path `/dev/x` di `findDisk` (lapisan kedua di belakang pencocokan ke hasil `lsblk`, sudah diuji langsung)
+dan penyimpanan baseline sidik jari setelah mount sendiri (hanya optimasi, tanpa efek yang teramati).
+Uji mount asli di kontainer tanpa disk asli (4 distro), UI di Chromium, dan Pi asli hanya dibaca.
+**Belum**: uji dengan flashdisk/HDD USB fisik (eject sungguhan, cabut tanpa eject, HDD tidur, hub),
+"pin ke boot" (entri `fstab` `nofail` bertanda untuk drive yang harus siap sebelum Docker), perbaikan
+volume kotor (`ntfsfix`/`fsck`), LUKS, notifikasi Discord colok/cabut, dan mount manual disk non-USB.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

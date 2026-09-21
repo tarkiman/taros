@@ -241,6 +241,22 @@ selama tidak diaktifkan; mengelola vsftpd butuh TarOS berjalan sebagai **root**;
 "hanya akun TarOS" mengunci user perangkat (UI menampilkan siapa sebelum diterapkan); restart vsftpd
 memutus transfer yang berjalan.
 
+### Drive eksternal (auto-mount)
+
+Fitur ini menjalankan `mount`/`umount` sebagai root atas perangkat yang dicolok orang, jadi pagarnya
+(rincian di docs/04-features.md §4.17): hanya disk **eksternal** (bus USB atau `removable`); tidak pernah
+disk sistem (`/`, `/boot`, swap), tidak pernah drive di `/etc/fstab`; request hanya bisa menyebut drive yang
+TarOS sendiri daftarkan (path divalidasi lalu dicocokkan ke `lsblk` baru — diuji dengan `/dev/nvme0n1p2`,
+`/etc/shadow`, `..`, injeksi shell); opsi `nosuid,nodev,noatime,noexec` bawaan (program di drive tak bisa
+dijalankan — diuji dengan mount asli); tidak pernah mount di atas direktori berisi file; nama titik mount
+dibersihkan (label `../../etc` tak bisa keluar dari `mountBase`); unmount tidak pernah dipaksa;
+menyalakan auto-mount atau mematikan noexec meminta **password dashboard lagi**. **Risiko yang tersisa dan
+diakui**: me-mount filesystem dari media yang tak dipercaya mengekspos **parser filesystem kernel**
+(bug di driver vfat/exfat/ntfs/ext4 bisa dieksploitasi lewat image berbahaya) — itu risiko setiap
+auto-mount di OS mana pun, dan alasan auto-mount bisa dimatikan (Settings) atau per-drive ("jangan
+auto-mount"); NTFS lewat ntfs-3g (FUSE, di ruang user). Drive dengan `setuid`/`dev` node tidak berfungsi
+berkat `nosuid,nodev`. Butuh TarOS berjalan sebagai **root** (sama dengan Wi-Fi dan berbagi file).
+
 ### Riwayat boot
 
 `boots.yaml` (docs/04-features.md §4.13) berisi `boot_id` kernel, waktu, suhu, dan persentase
@@ -380,6 +396,7 @@ bagian ini fokus ke kontrol keamanannya.
 | File besar/berbahaya diupload lalu dieksekusi | Tidak ada eksekusi otomatis; batas ukuran; scoping direktori |
 | Shell interaktif disalahgunakan kalau kredensial dashboard bocor | Non-root, idle timeout, 1 sesi konkuren, bisa di-disable total, rekomendasi network isolation |
 | Folder sensitif (sistem, kunci SSH, data aplikasi) terpublikasi lewat SMB | Akar yang diizinkan + daftar tolak + lokasi sistem hardcode + resolusi symlink; share tanpa akses tamu; perubahan butuh password dashboard (§7.4 "Berbagi file") |
+| Media USB berbahaya di-mount otomatis (image filesystem rusak, program di dalamnya) | Hanya disk eksternal, `nosuid,nodev,noexec`, auto-mount bisa dimatikan/per-drive, tidak pernah disk sistem/fstab; risiko parser filesystem kernel diakui (§7.4 "Drive eksternal") |
 | Proses/PTY menumpuk (resource exhaustion) dari sesi terminal | Kill otomatis saat koneksi terputus, batas sesi konkuren |
 | Kredensial dashboard bocor → akses root instan (kalau sudo NOPASSWD aktif) | Sudo tidak aktif default; mode "dengan password" direkomendasikan; NOPASSWD didokumentasikan eksplisit sebagai risiko tinggi, bukan default |
 | Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |

@@ -1,0 +1,163 @@
+{
+   "blockdevices": [
+      {
+         "name": "loop0",
+         "path": "/dev/loop0",
+         "type": "loop",
+         "fstype": "swap",
+         "label": "origin:rpi-swap",
+         "uuid": null,
+         "partuuid": null,
+         "size": 2147483648,
+         "ro": false,
+         "rm": false,
+         "hotplug": false,
+         "tran": null,
+         "model": null,
+         "vendor": null,
+         "pkname": null,
+         "mountpoints": [],
+         "parttypename": null
+      },{
+         "name": "sda",
+         "path": "/dev/sda",
+         "type": "disk",
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "partuuid": null,
+         "size": 4000787030016,
+         "ro": false,
+         "rm": false,
+         "hotplug": false,
+         "tran": "usb",
+         "model": "EXAMPLE-DRIVE",
+         "vendor": "EXAMPLE",
+         "pkname": null,
+         "mountpoints": [],
+         "parttypename": null,
+         "children": [
+            {
+               "name": "sda1",
+               "path": "/dev/sda1",
+               "type": "part",
+               "fstype": null,
+               "label": null,
+               "uuid": null,
+               "partuuid": "66666666-7777-4888-9999-000000000000",
+               "size": 16759808,
+               "ro": false,
+               "rm": false,
+               "hotplug": false,
+               "tran": null,
+               "model": null,
+               "vendor": null,
+               "pkname": "sda",
+               "mountpoints": [],
+               "parttypename": "Microsoft reserved"
+            },{
+               "name": "sda2",
+               "path": "/dev/sda2",
+               "type": "part",
+               "fstype": "ntfs",
+               "label": "PHOTOS_BACKUP",
+               "uuid": "0123456789ABCDEF",
+               "partuuid": "11111111-2222-4333-8444-555555555555",
+               "size": 4000768327680,
+               "ro": false,
+               "rm": false,
+               "hotplug": false,
+               "tran": null,
+               "model": null,
+               "vendor": null,
+               "pkname": "sda",
+               "mountpoints": [
+                   "/mnt/backup"
+               ],
+               "parttypename": "Microsoft basic data"
+            }
+         ]
+      },{
+         "name": "zram0",
+         "path": "/dev/zram0",
+         "type": "disk",
+         "fstype": "swap",
+         "label": "zram0",
+         "uuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+         "partuuid": null,
+         "size": 2147483648,
+         "ro": false,
+         "rm": false,
+         "hotplug": false,
+         "tran": null,
+         "model": null,
+         "vendor": null,
+         "pkname": null,
+         "mountpoints": [
+             "[SWAP]"
+         ],
+         "parttypename": null
+      },{
+         "name": "nvme0n1",
+         "path": "/dev/nvme0n1",
+         "type": "disk",
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "partuuid": null,
+         "size": 256060514304,
+         "ro": false,
+         "rm": false,
+         "hotplug": false,
+         "tran": "nvme",
+         "model": "EXAMPLE NVME 256GB",
+         "vendor": null,
+         "pkname": null,
+         "mountpoints": [],
+         "parttypename": null,
+         "children": [
+            {
+               "name": "nvme0n1p1",
+               "path": "/dev/nvme0n1p1",
+               "type": "part",
+               "fstype": "vfat",
+               "label": "bootfs",
+               "uuid": "AAAA-0001",
+               "partuuid": "aaaaaaaa-01",
+               "size": 536870912,
+               "ro": false,
+               "rm": false,
+               "hotplug": false,
+               "tran": "nvme",
+               "model": null,
+               "vendor": null,
+               "pkname": "nvme0n1",
+               "mountpoints": [
+                   "/boot/firmware"
+               ],
+               "parttypename": "W95 FAT32 (LBA)"
+            },{
+               "name": "nvme0n1p2",
+               "path": "/dev/nvme0n1p2",
+               "type": "part",
+               "fstype": "ext4",
+               "label": "rootfs",
+               "uuid": "bbbbbbbb-0000-4000-8000-000000000002",
+               "partuuid": "aaaaaaaa-02",
+               "size": 255515254784,
+               "ro": false,
+               "rm": false,
+               "hotplug": false,
+               "tran": "nvme",
+               "model": null,
+               "vendor": null,
+               "pkname": "nvme0n1",
+               "mountpoints": [
+                   "/"
+               ],
+               "parttypename": "Linux"
+            }
+         ]
+      }
+   ]
+}

@@ -384,6 +384,17 @@ pasif (bila diatur) harus dibuka di firewall/router oleh pemilik host.
 
 Tidak ada pekerjaan latar: nol beban saat halaman tidak dibuka.
 
+**Drive eksternal (docs/04-features.md §4.17)**: section `storage` di `config.yaml` (`enabled`,
+`mountBase`, `file`, `ownerUser`, `umask`, `pollSeconds`, `extraExternal`; lihat
+`deploy/config.example.yaml`). Bawaan aktif: drive USB di-mount otomatis di bawah `/media/taros/<label>`.
+Butuh TarOS berjalan sebagai **root** dan `lsblk`, `mount`, `umount` (util-linux); `blkid` untuk host tanpa
+udev; `ntfs-3g` (bila tidak ada, driver kernel `ntfs3`) dan `exfatprogs`/kernel ≥5.7 untuk exFAT. Untuk
+user non-root drive hanya dilistkan dengan alasannya. Pengaturan runtime (auto-mount, noexec, drive yang
+diabaikan, nama titik mount yang diingat) di `storage.yaml` di folder yang sama dengan `quick-links.yaml`
+(0644, bukan rahasia). Biaya: dua pembacaan file kecil tiap 3 detik; `lsblk` hanya saat ada perubahan.
+Drive yang sudah ada di `/etc/fstab` **tidak disentuh** — dan yang harus siap sebelum Docker/Samba
+start sebaiknya tetap di `fstab` (dengan `nofail`).
+
 ### Benchmark Pembanding: CasaOS
 
 TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM

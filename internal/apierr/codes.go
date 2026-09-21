@@ -136,6 +136,20 @@ const (
 	SharingFTPApplyRejected = "sharing_ftp_apply_rejected" // params: detail
 	SharingNoLogin          = "sharing_no_login"
 
+	// handlers_storage.go / internal/storage
+	StorageUnavailable     = "storage_unavailable"
+	StorageCannotMount     = "storage_cannot_mount" // params: reason
+	StorageNoDevice        = "storage_no_device"
+	StorageManagedByFstab  = "storage_managed_by_fstab"
+	StorageUnsupportedFS   = "storage_unsupported_fs"
+	StorageAlreadyMounted  = "storage_already_mounted"
+	StorageNotMounted      = "storage_not_mounted"
+	StorageMountpointInUse = "storage_mountpoint_in_use"
+	StorageMountFailed     = "storage_mount_failed"   // params: detail
+	StorageUnmountFailed   = "storage_unmount_failed" // params: detail
+	StorageBusy            = "storage_busy"           // params: users
+	StorageFailed          = "storage_failed"         // params: detail
+
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"
 

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:i18n": "node --experimental-strip-types --no-warnings scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

@@ -118,6 +118,24 @@ wifi:
   # mis. "wlan0" kalau ada lebih dari satu adapter Wi-Fi.
   device: ""
 
+storage:
+  # Drive eksternal: flashdisk/HDD/SSD USB di-mount otomatis dan muncul di dashboard
+  # dan File Explorer (lihat docs/04-features.md §4.17). Butuh TarOS berjalan sebagai
+  # root; tanpa root drive hanya dilistkan. Drive di /etc/fstab tidak pernah disentuh.
+  enabled: true
+  # Satu direktori per drive dibuat di bawah ini. Di host bergaya CasaOS: "/DATA/MOUNT".
+  mountBase: "/media/taros"
+  # Pengaturan runtime (auto-mount, noexec, drive yang diabaikan). Kosongkan untuk
+  # otomatis di folder yang sama dengan quickLinksFile.
+  file: "/opt/taros/storage.yaml"
+  # Pemilik file di drive FAT/exFAT/NTFS ("" = user biasa pertama, seperti uid=1000 di fstab).
+  ownerUser: ""
+  umask: "002"
+  pollSeconds: 3
+  # Awalan nama block device yang dianggap eksternal walau bukan USB: "mmcblk" untuk
+  # slot SD, "loop" untuk mencoba-coba.
+  extraExternal: []
+
 fileSharing:
   # Halaman Berbagi file (lihat docs/04-features.md §4.16): kelola Samba dari
   # TarOS. Butuh TarOS berjalan sebagai root dan paket Samba terpasang.

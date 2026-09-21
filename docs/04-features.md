@@ -34,6 +34,9 @@
   nfs/cifs/dst), total/used/free/persentase, dan **label "internal"/"eksternal"** (heuristik:
   baca `/sys/block/<dev>/removable` — `1` berarti removable/eksternal; device yang levelnya
   di belakang partisi USB, seperti `sda1` dari `/sys/block/sda`, ikut mewarisi flag parent-nya).
+  **Catatan (v0.42):** kernel memberi `removable=0` untuk HDD/SSD USB (hanya flashdisk dan card
+  reader yang `1`), jadi disk yang duduk di bus USB (path sysfs-nya melewati `/usbN/`) kini juga
+  dihitung eksternal. Penanganan drive eksternal (mount otomatis, eject) ada di §4.17.
 - Filter mount point virtual/tidak relevan (`tmpfs`, `devtmpfs`, `proc`, `sysfs`, `cgroup*`,
   `overlay` milik container Docker, dll) dari daftar utama, tapi tetap bisa ditampilkan di
   mode "advanced" jika perlu.
@@ -1621,3 +1624,98 @@ LAN sama-sama terjangkau, dan itu yang diminta); sertifikat FTPS self-signed (kl
 sekali); TarOS tidak memasang paket; perubahan butuh root; `/home` bukan root share default (tambahkan lewat
 `fileSharing.allowedRoots`); di host tanpa systemd (container) layanan tidak bisa dijalankan dari UI;
 ACL/quota per share dan akun tamu tidak ada.
+
+## 4.17 Drive Eksternal (flashdisk, HDD, SSD USB)
+
+Colok flashdisk/HDD/SSD USB ke perangkat yang menjalankan TarOS → dalam beberapa detik drive itu
+ter-mount otomatis, muncul di **dashboard** (kartu "Drive eksternal" + daftar Storage), di **sidebar File
+Explorer** ("Drive"), dan isinya langsung bisa dibuka. Ada tombol **Mount / Unmount / Eject**, pilihan
+**"jangan auto-mount drive ini"**, dan di Settings > Drive eksternal: auto-mount dan `noexec`.
+Kodenya di `internal/storage`, `internal/web/handlers_storage.go`, `UsbDevicesCard.vue`,
+`DevicesSidebar.vue`, `StorageSettingsCard.vue`. Hanya Linux; mount butuh root (tanpa root drive hanya
+dilistkan dengan alasannya).
+
+### Aturan keselamatan
+
+- **Hanya disk eksternal**: di bus USB (`TRAN=usb`) atau `removable=1`. Perhatikan: HDD/SSD USB punya
+  `removable=0` di kernel, jadi bus-lah yang menentukan. NVMe/SATA internal tidak pernah disentuh
+  (bisa ditambah lewat `storage.extraExternal`, mis. `mmcblk` untuk slot SD).
+- **Tidak pernah** disk yang menampung `/`, `/boot`, `/usr`, `/var` atau swap (Pi yang boot dari SSD USB
+  aman — diuji), **dan tidak pernah** drive yang ada di `/etc/fstab` (cocok lewat UUID/LABEL/PARTUUID/
+  path/`/dev/disk/by-*`/mount point): tampil "Di fstab", hanya bisa dibuka; tidak bisa di-mount/
+  unmount/eject dari sini. HDD 4TB di host ini (fstab) karenanya tidak berubah.
+- **Permintaan hanya bisa menyebut drive yang TarOS sendiri daftarkan** sebagai eksternal: path
+  divalidasi (`/dev/<nama>`), lalu dicari di hasil `lsblk` baru — `/dev/nvme0n1p2`, `/etc/shadow`, `..`
+  ditolak tanpa satu perintah pun dijalankan (diuji).
+- **Opsi mount aman**: `nosuid,nodev,noatime,noexec` (noexec bisa dimatikan di Settings), read-only
+  otomatis untuk `iso9660`/`udf`. FAT/exFAT/NTFS dimiliki `storage.ownerUser` (bawaan: user biasa
+  pertama, `uid`/`gid` + `umask=002`, seperti `fstab` Anda); ext4/xfs/btrfs memakai kepemilikan aslinya.
+- **Tidak pernah mount di atas file orang**: titik mount hanya direktori kosong yang bukan mount point;
+  direktori berisi dilewati (nama lain dipilih) atau ditolak.
+- **Auto-mount menunggu satu putaran**: drive baru tidak disentuh saat pertama terlihat (udev belum
+  selesai mengenali filesystem-nya), baru pada pengecekan berikutnya. Yang gagal di-mount **tidak dicoba
+  ulang tiap detik** (diingat sampai dicabut-colok; tombol Mount mencoba lagi), dan drive yang **Anda
+  unmount/eject sendiri tidak di-mount lagi** selama masih tercolok.
+- **Menyalakan auto-mount atau mematikan noexec meminta password dashboard lagi** (403); arah yang lebih
+  aman langsung berlaku. Mount/unmount/eject biasa cukup dengan sesi.
+
+### Cara kerja
+
+- **Deteksi murah**: tiap `storage.pollSeconds` (3 dtk) hanya membaca `/sys/block` (nama + `size`) dan
+  `mountinfo`; `lsblk` baru dijalankan saat sidik jari itu berubah — mesin yang diam tidak mem-fork proses.
+  `size` ikut sidik jari karena kartu yang dimasukkan ke card reader (atau image yang dipasang ke loop
+  device) tidak menambah node device, hanya membuat node yang ada berhenti kosong (**bug nyata yang
+  ketahuan di uji UI**).
+- **Tanpa udev**: `lsblk` mengambil tipe/label/UUID dari database udev, yang kosong di host tanpa udev dan
+  di detik-detik awal setelah dicolok. Volume yang tak dikenali di-probe dengan `blkid -p` (di-cache 20 dtk,
+  hanya untuk disk eksternal; label di-unescape: `WIN\ BACKUP` → `WIN BACKUP`).
+- **Titik mount stabil**: `<storage.mountBase>/<label>` (dibersihkan: hanya `A-Za-z0-9._-`, tanpa titik/
+  strip di ujung, ≤32 karakter; label berbahaya seperti `../../etc` menjadi `etc`), bentrok → `<label>-<uuid8>`,
+  tanpa label → `usb-<uuid8>`. Nama **diingat per-UUID** di `storage.yaml`, jadi drive yang sama selalu
+  kembali ke path yang sama — share Samba/FTP dan bind mount container yang menunjuk ke dalamnya tetap
+  valid setelah dicabut-colok. Default `mountBase` `/media/taros`; di host CasaOS-style pakai `/DATA/MOUNT`.
+- **Volume kotor/hibernasi**: NTFS yang ditinggalkan Windows dalam "fast startup" ditolak ntfs-3g, tapi
+  ia sendiri jatuh ke read-only dan hanya bilang di stderr — TarOS membaca stderr itu (diuji dengan
+  ntfs-3g asli: file `hiberfil.sys` bertanda `hibr`) dan menampilkan alasan ("Windows meninggalkan volume
+  ini hibernasi…"); bila mount rw gagal dengan pesan "dirty/unclean/hibernated" TarOS mencoba ulang `ro`.
+  Tidak pernah dipaksa tulis. Perbaikan (`ntfsfix`/`fsck`) belum ada.
+- **Tidak didukung, tapi dilistkan dengan alasan**: LUKS/BitLocker (terenkripsi), LVM, RAID, swap, ZFS,
+  tanpa filesystem, filesystem tak dikenal.
+- **Unmount yang sibuk ditolak dengan penyebabnya**: proses yang punya cwd/fd di dalam mount (dibaca dari
+  `/proc`; diuji dengan `sleep` sungguhan) dan share Samba/folder FTP TarOS yang berada di dalamnya.
+  Tidak pernah dipaksa (`umount -l` hanya untuk drive yang sudah hilang).
+- **Eject** = unmount semua partisi (berhenti di yang sibuk, drive tidak dilepas) → `sync` → tulis `1` ke
+  `/sys/block/<disk>/device/delete` (USB HDD berhenti berputar, aman dicabut). Bila node itu tak ada
+  (loop device), tetap "aman dicabut" karena sudah di-unmount.
+- **Dicabut tanpa eject**: mount yang tertinggal (sumbernya hilang) di bawah `mountBase` dilepas
+  (`umount -l`) dan direktorinya dihapus, dengan log WARN dan event `removed_unsafely` — mount di luar
+  `mountBase` tidak disentuh.
+
+### API
+
+`GET /api/storage/devices` (read-only), `POST /api/storage/{mount,unmount,eject,ignore,settings}`. Kode
+error `storage_*` diterjemahkan (§4.10; `storage_busy` memuat siapa yang memakai). Subcommand
+`taros storage-status` mencetak daftar drive tanpa mengubah apa pun.
+
+### Diuji
+
+- Unit dengan mesin palsu (lsblk/mount/umount/blkid + sysfs/mountinfo/proc/fstab di direktori
+  sementara) dan **fixture lsblk asli dari Pi ini** (dianonimkan): 36 test dengan banyak kasus tiap — klasifikasi, disk
+  sistem, fstab, nama, opsi per-filesystem, volume kotor, busy, eject, cabut tanpa eject, tanpa root,
+  tanpa `lsblk`, format util-linux lama, dan lain-lain.
+- **Mutation testing**: lihat catatan di `docs/10-roadmap.md`.
+- **mount/umount/lsblk sungguhan** (`TestIntegrationStorage`, `TAROS_STORAGE_IT=1`) pada loop device
+  vfat/exfat/ntfs/ext4 di kontainer sekali-pakai **tanpa disk asli di `/dev`** (tes menolak jalan bila
+  ada `/dev/sd*`/`nvme*`): auto-mount 2 putaran, opsi `nosuid,nodev,noexec` benar-benar berlaku (program
+  yang disalin ke drive **tidak bisa dijalankan**), kepemilikan uid, busy dengan proses `sleep` sungguhan,
+  path yang sama setelah mount ulang, NTFS hibernasi dengan ntfs-3g asli → read-only + alasan, eject.
+- UI di Chromium headless terhadap kontainer yang sama: colok/lepas, kartu dashboard, sidebar Files (klik
+  membuka isi drive), Unmount/busy/Eject, "jangan auto-mount", toggle Settings (password salah/benar),
+  tampilan ponsel 390px, id/en. Di Pi asli hanya **dibaca** (`taros storage-status`).
+
+### Batas jujur
+
+Hanya Linux; butuh root; tidak ada LUKS/BitLocker, perbaikan volume kotor, atau mount disk internal dari
+UI; drive yang harus siap **sebelum** Docker/Samba start tetap paling benar lewat `fstab` (auto-mount TarOS
+berjalan setelah TarOS start — persis kasus SMB race di host ini); eject USB fisik, hub bertenaga, dan
+pencabutan tanpa eject baru teruji lewat simulasi (kernel ini tak punya emulator USB).

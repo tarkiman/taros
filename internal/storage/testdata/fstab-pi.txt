@@ -1,0 +1,7 @@
+proc            /proc           proc    defaults          0       0
+PARTUUID=aaaaaaaa-01  /boot/firmware  vfat    defaults          0       2
+PARTUUID=aaaaaaaa-02  /               ext4    defaults,noatime  0       1
+# external drives kept in fstab
+UUID=0123456789ABCDEF /mnt/backup ntfs-3g defaults,nofail,uid=1000,gid=1000,umask=002 0 0
+UUID=67AF-6FD6 /mnt/exfat exfat defaults,nofail,uid=1000,gid=1000,umask=002 0 0
+//192.168.1.20/MEDIA /mnt/smb cifs credentials=/root/.smbcred,nofail 0 0

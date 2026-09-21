@@ -7,6 +7,7 @@ import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import BootHistoryCard from '../components/BootHistoryCard.vue'
 import WifiCard from '../components/WifiCard.vue'
+import StorageSettingsCard from '../components/StorageSettingsCard.vue'
 import ContainerShellCard from '../components/ContainerShellCard.vue'
 import { terminalApi } from '../api/terminal'
 import { diskAnalysisApi } from '../api/diskAnalysis'
@@ -772,6 +773,8 @@ async function sendNotifyTest() {
         </NCard>
 
         <WifiCard />
+
+        <StorageSettingsCard />
 
         <NCard embedded size="small" :title="t('settings.notify.title')" style="margin-top: 16px">
           <div v-if="notifyLoading" class="loading"><NSpin size="small" /></div>
