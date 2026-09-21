@@ -82,14 +82,21 @@ func parentBlockDevice(name string) string {
 	return m[3]
 }
 
-func isRemovable(source string) bool {
+func isRemovable(source string) bool { return isRemovableAt("/sys/block", source) }
+
+// isRemovableAt: the kernel's own "removable" flag is 1 for flash drives and
+// card readers but 0 for USB hard disks and SSDs, so a device that hangs off the
+// USB bus counts as external too (its sysfs path passes through .../usbN/...).
+func isRemovableAt(sysBlock, source string) bool {
 	name := strings.TrimPrefix(source, "/dev/")
 	parent := parentBlockDevice(name)
-	data, err := os.ReadFile("/sys/block/" + parent + "/removable")
-	if err != nil {
-		return false
+	if data, err := os.ReadFile(sysBlock + "/" + parent + "/removable"); err == nil && strings.TrimSpace(string(data)) == "1" {
+		return true
 	}
-	return strings.TrimSpace(string(data)) == "1"
+	if target, err := os.Readlink(sysBlock + "/" + parent); err == nil && strings.Contains(target, "/usb") {
+		return true
+	}
+	return false
 }
 
 // sampleDiskUsage refreshes c.latestDisks. Called on its own slower

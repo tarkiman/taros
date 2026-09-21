@@ -23,6 +23,7 @@ import {
 import AppShell from '../layouts/AppShell.vue'
 import GaugeChart from '../components/charts/GaugeChart.vue'
 import HostAddressesCard from '../components/HostAddressesCard.vue'
+import UsbDevicesCard from '../components/UsbDevicesCard.vue'
 import DashboardApps from '../components/DashboardApps.vue'
 import LineChart, { type LineSeries } from '../components/charts/LineChart.vue'
 import { useMetricsStream } from '../composables/useMetricsStream'
@@ -635,6 +636,8 @@ async function deleteLink(link: QuickLink) {
             </NCard>
           </NGi>
         </NGrid>
+
+        <UsbDevicesCard />
 
         <NGrid cols="1 m:2" :x-gap="16" :y-gap="16" responsive="screen" class="section">
           <NGi>

@@ -41,3 +41,30 @@ func TestFileSharingDefaultsAndPlacement(t *testing.T) {
 		t.Errorf("explicit settings must win: %+v", cfg.FileSharing)
 	}
 }
+
+func TestStorageDefaultsAndPlacement(t *testing.T) {
+	load := func(body string) Config {
+		p := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg
+	}
+	// An install from before this feature: on, sensible mount base, file next to quick-links.yaml.
+	cfg := load("dashboard:\n  quickLinksFile: \"/opt/taros/quick-links.yaml\"\n")
+	if !cfg.Storage.Enabled || cfg.Storage.MountBase != "/media/taros" || cfg.Storage.File != "/opt/taros/storage.yaml" || cfg.Storage.PollSeconds != 3 || cfg.Storage.Umask != "002" {
+		t.Errorf("%+v", cfg.Storage)
+	}
+	// Explicit settings win; a partial section keeps the other defaults.
+	cfg = load("storage:\n  mountBase: \"/DATA/MOUNT\"\n  ownerUser: tarkiman\n  extraExternal: [mmcblk]\n")
+	if cfg.Storage.MountBase != "/DATA/MOUNT" || cfg.Storage.OwnerUser != "tarkiman" || !cfg.Storage.Enabled || len(cfg.Storage.ExtraExternal) != 1 {
+		t.Errorf("%+v", cfg.Storage)
+	}
+	if cfg = load("storage:\n  enabled: false\n"); cfg.Storage.Enabled {
+		t.Error("can be turned off")
+	}
+}

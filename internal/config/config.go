@@ -29,6 +29,7 @@ type Config struct {
 	Wifi            WifiConfig            `yaml:"wifi"`
 	ContainerShell  ContainerShellConfig  `yaml:"containerShell"`
 	FileSharing     FileSharingConfig     `yaml:"fileSharing"`
+	Storage         StorageConfig         `yaml:"storage"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
@@ -217,6 +218,27 @@ type FileSharingConfig struct {
 	DeniedPaths  []string `yaml:"deniedPaths"`
 }
 
+// StorageConfig — see docs/04-features.md §4.17. TarOS finds external drives
+// (USB flash drives, hard disks, SSDs), mounts them under MountBase, and lists
+// them on the dashboard and in the file explorer. File keeps the settings that
+// change at run time (auto-mount, noexec, remembered drives). Mounting needs
+// root; without it drives are listed but not touched.
+type StorageConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// MountBase: one directory per drive is made under it. Point it where the
+	// rest of your setup expects drives, e.g. /DATA/MOUNT on a CasaOS-style host.
+	MountBase string `yaml:"mountBase"`
+	File      string `yaml:"file"`
+	// OwnerUser: who FAT/exFAT/NTFS files belong to ("" = the first ordinary user).
+	OwnerUser string `yaml:"ownerUser"`
+	Umask     string `yaml:"umask"`
+	// PollSeconds: how often the device list is checked for changes (cheap).
+	PollSeconds int `yaml:"pollSeconds"`
+	// ExtraExternal: block-device name prefixes to treat as external although they
+	// are not USB — "mmcblk" for an SD slot, "loop" to try things out.
+	ExtraExternal []string `yaml:"extraExternal"`
+}
+
 // WifiConfig — see docs/04-features.md §4.14. Device pins the adapter TarOS
 // scans/connects with ("" = auto: the connected one, else the first). A
 // configured adapter that doesn't exist is an error, never a silent fallback
@@ -296,6 +318,7 @@ func Default() Config {
 			AllowedRoots: []string{"/srv", "/mnt", "/media", "/data", "/DATA"},
 			DeniedPaths:  []string{"/DATA/AppData"}, // CasaOS keeps app data here
 		},
+		Storage:        StorageConfig{Enabled: true, MountBase: "/media/taros", File: "./storage.yaml", Umask: "002", PollSeconds: 3},
 		ContainerShell: ContainerShellConfig{Enabled: false, IdleTimeoutMin: 15, MaxConcurrentSessions: 2},
 	}
 }
@@ -332,6 +355,9 @@ func Load(path string) (Config, error) {
 	// instead of a relative path that resolves against the working directory.
 	if cfg.BootLog.File == Default().BootLog.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
 		cfg.BootLog.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "boots.yaml")
+	}
+	if cfg.Storage.File == Default().Storage.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
+		cfg.Storage.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "storage.yaml")
 	}
 	if cfg.FileSharing.File == Default().FileSharing.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
 		cfg.FileSharing.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "sharing.yaml")

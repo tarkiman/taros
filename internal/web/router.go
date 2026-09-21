@@ -15,6 +15,7 @@ import (
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/sharing"
+	"github.com/tarkiman/taros/internal/storage"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/wifi"
@@ -143,6 +144,10 @@ type Deps struct {
 	// endpoints then answer 503.
 	Sharing *sharing.Manager
 
+	// Storage finds, mounts and ejects external drives (internal/storage,
+	// docs/04-features.md §4.17). nil off Linux or when disabled.
+	Storage *storage.Manager
+
 	// Notify holds Discord alert settings (webhook URL, CPU/RAM/temp
 	// thresholds+durations) — see internal/notify and
 	// docs/04-features.md §4.11. Same "mutated directly, no restart"
@@ -202,6 +207,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
 	mux.HandleFunc("GET /api/system/boots", s.requireAuth(s.handleSystemBoots))
 	mux.HandleFunc("GET /sharing", s.serveSPA)
+	mux.HandleFunc("GET /api/storage/devices", s.requireAuth(s.handleStorageDevices))
+	mux.HandleFunc("POST /api/storage/mount", s.requireAuth(s.handleStorageMount))
+	mux.HandleFunc("POST /api/storage/unmount", s.requireAuth(s.handleStorageUnmount))
+	mux.HandleFunc("POST /api/storage/eject", s.requireAuth(s.handleStorageEject))
+	mux.HandleFunc("POST /api/storage/ignore", s.requireAuth(s.handleStorageIgnore))
+	mux.HandleFunc("POST /api/storage/settings", s.requireAuth(s.handleStorageSettings))
 	mux.HandleFunc("GET /api/sharing/status", s.requireAuth(s.handleSharingStatus))
 	mux.HandleFunc("GET /api/sharing/folders", s.requireAuth(s.handleSharingFolders))
 	mux.HandleFunc("POST /api/sharing/smb/adopt", s.requireAuth(s.handleSharingAdopt))

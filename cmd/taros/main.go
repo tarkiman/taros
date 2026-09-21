@@ -31,6 +31,7 @@ import (
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/sharing"
+	"github.com/tarkiman/taros/internal/storage"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/web"
@@ -48,6 +49,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		runSetup(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "storage-status" {
+		runStorageStatus()
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "sharing-status" {
@@ -202,6 +207,25 @@ func runServer(args []string) {
 		sharingMgr = sharing.NewManager(sharing.NewDetector(), store, sharing.PathPolicy{Roots: cfg.FileSharing.AllowedRoots, Denied: cfg.FileSharing.DeniedPaths})
 	}
 
+	// External drives (USB flash drives, hard disks, SSDs): found, mounted under
+	// storage.mountBase, listed on the dashboard and in the file explorer. Linux only.
+	var storageMgr *storage.Manager
+	if runtime.GOOS == "linux" && cfg.Storage.Enabled {
+		store, err := storage.LoadStore(cfg.Storage.File)
+		if err != nil {
+			slog.Warn("gagal membuka pengaturan penyimpanan, memakai bawaan", "path", cfg.Storage.File, "err", err)
+			store = storage.NewStore(cfg.Storage.File)
+		}
+		storageMgr = storage.New(storage.Config{
+			Enabled: true, MountBase: cfg.Storage.MountBase, OwnerUser: cfg.Storage.OwnerUser, Umask: cfg.Storage.Umask,
+			Poll: time.Duration(cfg.Storage.PollSeconds) * time.Second, ExtraExternal: cfg.Storage.ExtraExternal,
+		}, store)
+		if sharingMgr != nil {
+			storageMgr.UsedBy = sharingMgr.UsingPath
+		}
+		go storageMgr.Watch(ctx)
+	}
+
 	// Wi-Fi management via NetworkManager's nmcli (Linux only). Absent nmcli is
 	// normal (macOS, or a host not using NetworkManager): the feature simply
 	// reports itself unavailable.
@@ -244,6 +268,7 @@ func runServer(args []string) {
 		BootLog:                   bootLedger,
 		Wifi:                      wifiClient,
 		Sharing:                   sharingMgr,
+		Storage:                   storageMgr,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {
@@ -407,6 +432,21 @@ func runSharingStatus() {
 	out, err := json.MarshalIndent(sharing.NewDetector().Detect(ctx), "", "  ")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "sharing-status:", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(out))
+}
+
+// runStorageStatus prints the external drives TarOS sees (read-only; it never
+// mounts anything) — handy for checking a host before enabling auto-mount.
+func runStorageStatus() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	def := config.Default().Storage
+	m := storage.New(storage.Config{Enabled: def.Enabled, MountBase: def.MountBase, Umask: def.Umask}, storage.NewStore(""))
+	out, err := json.MarshalIndent(m.Status(ctx), "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "storage-status:", err)
 		os.Exit(1)
 	}
 	fmt.Println(string(out))

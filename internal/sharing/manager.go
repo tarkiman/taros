@@ -776,3 +776,24 @@ func (m *Manager) ServiceOf(ctx context.Context, svc, action string) error {
 	}
 	return nil
 }
+
+// UsingPath lists what TarOS shares from inside dir — SMB shares by name and
+// accounts with an FTP folder there ("FTP: name") — so a drive that is about to
+// be unmounted can say what would stop working.
+func (m *Manager) UsingPath(dir string) []string {
+	dir = filepath.Clean(dir)
+	in := func(p string) bool { return p == dir || strings.HasPrefix(p, dir+"/") }
+	mdl := m.Store.Get()
+	var out []string
+	for _, s := range mdl.Shares {
+		if in(s.Path) {
+			out = append(out, s.Name)
+		}
+	}
+	for _, a := range mdl.Accounts {
+		if a.FTP != nil && in(a.FTP.Path) {
+			out = append(out, "FTP: "+a.Name)
+		}
+	}
+	return out
+}

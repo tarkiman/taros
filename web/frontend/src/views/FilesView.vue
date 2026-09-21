@@ -45,6 +45,7 @@ import AppShell from '../layouts/AppShell.vue'
 import FileTree from '../components/files/FileTree.vue'
 import FilePreviewOverlay from '../components/files/FilePreviewOverlay.vue'
 import ShortcutModal from '../components/files/ShortcutModal.vue'
+import DevicesSidebar from '../components/files/DevicesSidebar.vue'
 import { isImage, isVideo, isAudio, isPreviewable, iconFor } from '../components/files/filetypes'
 import { usePlayerStore } from '../stores/player'
 import { filesApi, watchJob } from '../api/files'
@@ -677,6 +678,7 @@ onUnmounted(() => stopWatch?.())
             </span>
           </div>
         </div>
+        <DevicesSidebar :active-path="resolvedPath" @navigate="navigateTo" />
         <FileTree :active-path="resolvedPath" @navigate="navigateTo" />
       </aside>
 
