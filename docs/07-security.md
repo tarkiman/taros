@@ -177,6 +177,22 @@ luar project ditolak Docker sendiri (409), tidak di-force. Diakui jujur: siapa p
 memegang akun sudah bisa menghapus container satu per satu; ini bukan celah baru, hanya jalan
 pintas yang diberi pagar yang setara.
 
+### Manajemen Wi-Fi
+
+Fitur ini menangani kredensial jaringan dan bisa memutus perangkat dari jaringan, jadi pagarnya
+berlapis (rincian di docs/04-features.md §4.14): sambung/lupakan butuh **password dashboard lagi**
+(403); password Wi-Fi **tidak pernah lewat argumen perintah** (terlihat di `ps`) — diserahkan ke
+NetworkManager sebagai keyfile 0600 milik root lewat `O_EXCL`, tidak di-log, tidak dikembalikan API,
+tidak ada di pesan error (diverifikasi: 0 kemunculan di 2.653 sampel proses saat uji nyata); input
+divalidasi ketat (SSID ≤32 byte tanpa karakter kontrol, passphrase WPA 8–63 ASCII atau 64 hex) karena
+nilainya ditulis ke file konfigurasi; tidak ada shell (`exec` dengan argumen terpisah); yang sedang
+dipakai tidak bisa dilupakan dan hanya profil Wi-Fi mode infrastructure yang bisa dihapus lewat API;
+scan segar dibatasi 1 per 8 dtk. Risiko yang tersisa dan diakui: fitur ini butuh TarOS berjalan sebagai
+**root** (menulis ke folder konfigurasi NetworkManager) — perluasan hak akses yang sudah ada pada
+instalasi seperti host ini, dan alasan kartunya menolak dengan pesan jelas untuk user biasa. Siapa pun
+yang memegang akun dashboard dapat memindahkan Pi ke jaringan lain; rollback otomatis membatasi
+akibat salah-ketik, bukan penyalahgunaan yang disengaja.
+
 ### Riwayat boot
 
 `boots.yaml` (docs/04-features.md §4.13) berisi `boot_id` kernel, waktu, suhu, dan persentase

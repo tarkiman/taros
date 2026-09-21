@@ -152,4 +152,16 @@ const (
 	AppNameInvalid    = "app_name_invalid"     // params: max
 	MaxAppsReached    = "max_apps_reached"     // params: max
 	AppMetaSaveFailed = "app_meta_save_failed" // params: detail
+
+	// handlers_wifi.go / internal/wifi
+	WifiUnavailable         = "wifi_unavailable" // params: reason
+	WifiBusy                = "wifi_busy"        // a switch is already in progress
+	WifiSSIDInvalid         = "wifi_ssid_invalid"
+	WifiPasswordInvalid     = "wifi_password_invalid" // not a valid WPA passphrase
+	WifiPasswordRequired    = "wifi_password_required"
+	WifiSecurityUnsupported = "wifi_security_unsupported" // enterprise / WEP
+	WifiForgetActive        = "wifi_forget_active"
+	WifiNotFound            = "wifi_not_found"
+	WifiScanFailed          = "wifi_scan_failed" // params: detail
+	WifiFailed              = "wifi_failed"      // params: detail
 )

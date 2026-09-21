@@ -2099,6 +2099,20 @@ naik → status "ditangani" kini disimpan dan pemberitahuan tetap ditawarkan sam
 (2) snapshot pertama berisi CPU/RAM/suhu 0 karena metrik belum ada → ditandai `hasMetrics`
 supaya "belum ada data" tidak tampil sebagai angka nol.
 
+### Manajemen Wi-Fi (scan / sambung / lupakan) dengan rollback otomatis
+
+Permintaan user setelah rilis v0.36.0 ("connect/ganti jaringan wifi, scan yang tersedia, pilih dan
+masukkan password kalau perlu"). Keputusan yang disetujui: verifikasi otomatis + rollback (bukan
+konfirmasi manual 60 dtk), kartu di Settings, lingkup v1 tanpa enterprise/IP statis/matikan radio.
+Pengujian di Wi-Fi asli **tidak** diizinkan (satu-satunya jalur ke Pi), jadi ditutup dengan
+`mac80211_hwsim` — radio virtual di kernel + hotspot buatan NetworkManager — sehingga alur nyata
+(sambung, pindah, password salah, di luar jangkauan, rollback) teruji di NetworkManager sungguhan
+tanpa menyentuh `wlan0`, lalu host dibuktikan identik sesudah pembongkaran. Empat cacat ketahuan
+**hanya** karena uji nyata itu (profil hotspot terbaca "tersimpan", kriteria gateway yang
+me-rollback jaringan sah, pesan password-salah yang ambigu, `Hint:` NetworkManager di pesan). Detail
+dan batasnya di `docs/04-features.md` §4.14 dan `docs/07-security.md`. Belum: WPA-Enterprise, jalur
+non-root/polkit, probing AP tersembunyi sungguhan, dan uji pindah di Wi-Fi asli host.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

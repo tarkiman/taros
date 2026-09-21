@@ -353,6 +353,13 @@ sysfs/procfs tiap 5 detik untuk alarm undervoltage. Tidak mengubah target di ata
 perangkat dengan penyimpanan flash kecil (eMMC/SD) tulis-tiap-menit itu satu-satunya biaya yang
 patut dipertimbangkan.
 
+**Wi-Fi (Settings > Wi-Fi, docs/04-features.md §4.14)** memakai `nmcli`: butuh NetworkManager
+berjalan, adapter Wi-Fi, dan **TarOS berjalan sebagai root** (mode instalasi host pengembangan ini,
+`User=root`) agar bisa menulis profil di `/etc/NetworkManager/system-connections`. Untuk user
+non-root kartu hanya menampilkan alasannya (`needs_root` / `not_authorized`); jalur non-root via
+polkit belum dibangun dan belum diuji. `wifi.device` di config mengunci adapter bila ada lebih dari
+satu (lihat `deploy/config.example.yaml`). Tidak ada pekerjaan latar: nol beban saat kartu tidak dibuka.
+
 ### Benchmark Pembanding: CasaOS
 
 TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM

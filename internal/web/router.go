@@ -14,6 +14,7 @@ import (
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
+	"github.com/tarkiman/taros/internal/wifi"
 )
 
 // Deps are every dependency Server's handlers need. Passed as a struct
@@ -119,6 +120,11 @@ type Deps struct {
 	// the endpoint then reports supported:false.
 	BootLog *bootlog.Ledger
 
+	// Wifi drives NetworkManager for Settings > Wi-Fi (internal/wifi,
+	// docs/04-features.md §4.14). nil when nmcli isn't installed or off
+	// Linux — the endpoints then report unavailable.
+	Wifi *wifi.Client
+
 	// Notify holds Discord alert settings (webhook URL, CPU/RAM/temp
 	// thresholds+durations) — see internal/notify and
 	// docs/04-features.md §4.11. Same "mutated directly, no restart"
@@ -174,6 +180,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/monitoring-status", s.requireAuth(s.handleSystemMonitoringStatus))
 	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
 	mux.HandleFunc("GET /api/system/boots", s.requireAuth(s.handleSystemBoots))
+	mux.HandleFunc("GET /api/wifi/status", s.requireAuth(s.handleWifiStatus))
+	mux.HandleFunc("GET /api/wifi/networks", s.requireAuth(s.handleWifiNetworks))
+	mux.HandleFunc("POST /api/wifi/connect", s.requireAuth(s.handleWifiConnect))
+	mux.HandleFunc("POST /api/wifi/forget", s.requireAuth(s.handleWifiForget))
 	mux.HandleFunc("GET /api/apps/meta", s.requireAuth(s.handleAppMetaList))
 	mux.HandleFunc("PUT /api/apps/meta/{project}", s.requireAuth(s.handleAppMetaSet))
 	mux.HandleFunc("GET /api/stream/metrics", s.requireAuth(s.handleMetricsStream))
