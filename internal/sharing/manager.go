@@ -43,6 +43,8 @@ type Manager struct {
 	LookupUser func(name string) (uid int, group string, err error)
 	IfaceNames func() []string
 	Now        func() time.Time
+	// ProbeFTP replaces the real "start vsftpd on a candidate config" check in tests.
+	ProbeFTP func(ctx context.Context, conf string) error
 }
 
 // NewManager wires the real system in.
@@ -112,6 +114,20 @@ func (m *Manager) guard(ctx context.Context, needManaged bool) (SMBStatus, error
 		return st, ErrNotManaged
 	}
 	return st, nil
+}
+
+// accountGuard: account operations work when TarOS manages Samba, FTP, or both.
+// smbOK/ftpOK say which.
+func (m *Manager) accountGuard(ctx context.Context) (smbOK, ftpOK bool, err error) {
+	_, serr := m.guard(ctx, true)
+	fst, ferr := m.ftpGuard(ctx, true)
+	if serr == nil || ferr == nil {
+		return serr == nil, ferr == nil, nil
+	}
+	if fst.Installed && !m.Det.SMB(ctx).Installed {
+		return false, false, ferr
+	}
+	return false, false, serr
 }
 
 // ---- applying a model ------------------------------------------------------------------
@@ -387,10 +403,17 @@ func (m *Manager) Unadopt(ctx context.Context, removeAccounts bool) error {
 
 	mdl := m.Store.Get()
 	if removeAccounts {
+		hadFTP := anyFTP(mdl)
 		for _, a := range mdl.Accounts {
 			_ = m.removeAccountBackend(ctx, a.Name)
 		}
 		mdl.Accounts = nil
+		if hadFTP { // their FTP folders must not outlive them
+			mdl.FTP.OnlyAccounts = false
+			if fst, err := m.ftpGuard(ctx, true); err == nil {
+				_ = m.applyFTP(ctx, mdl, fst)
+			}
+		}
 	}
 	mdl.Shares, mdl.Interfaces = nil, nil
 	return m.Store.Set(mdl)
@@ -410,7 +433,8 @@ func (m *Manager) removeAccountBackend(ctx context.Context, name string) error {
 	return m.Users.Delete(ctx, name)
 }
 
-// AddAccount creates a share account: a no-login system user plus a Samba password.
+// AddAccount creates a share account: a no-login system user, and — when TarOS
+// manages Samba — a Samba password. FTP access is given separately (SetFTPAccess).
 func (m *Manager) AddAccount(ctx context.Context, name, password string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -420,7 +444,8 @@ func (m *Manager) AddAccount(ctx context.Context, name, password string) error {
 	if err := checkPassword(password); err != nil {
 		return err
 	}
-	if _, err := m.guard(ctx, true); err != nil {
+	smbOK, _, err := m.accountGuard(ctx)
+	if err != nil {
 		return err
 	}
 	if m.Users == nil {
@@ -436,11 +461,13 @@ func (m *Manager) AddAccount(ctx context.Context, name, password string) error {
 	if err := m.Users.Create(ctx, name); err != nil {
 		return fmt.Errorf("sharing: create user: %w", err)
 	}
-	if err := smbSetPassword(ctx, m.Run, true, name, password); err != nil {
-		_ = m.Users.Delete(ctx, name) // don't leave a half-made account behind
-		return err
+	if smbOK {
+		if err := smbSetPassword(ctx, m.Run, true, name, password); err != nil {
+			_ = m.Users.Delete(ctx, name) // don't leave a half-made account behind
+			return err
+		}
 	}
-	mdl.Accounts = append(mdl.Accounts, Account{Name: name, SMB: true, CreatedAt: m.Now().UTC().Truncate(time.Second)})
+	mdl.Accounts = append(mdl.Accounts, Account{Name: name, SMB: smbOK, CreatedAt: m.Now().UTC().Truncate(time.Second)})
 	sort.Slice(mdl.Accounts, func(i, j int) bool { return mdl.Accounts[i].Name < mdl.Accounts[j].Name })
 	if err := m.Store.Set(mdl); err != nil {
 		_ = m.removeAccountBackend(ctx, name)
@@ -449,59 +476,117 @@ func (m *Manager) AddAccount(ctx context.Context, name, password string) error {
 	return nil
 }
 
-// SetPassword changes an account's Samba password.
+// SetPassword changes an account's password everywhere it is used: Samba (when
+// TarOS manages it) and the Linux password behind FTP (when the account has FTP
+// access), so one account has one password.
 func (m *Manager) SetPassword(ctx context.Context, name, password string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := checkPassword(password); err != nil {
 		return err
 	}
-	if _, err := m.guard(ctx, true); err != nil {
-		return err
-	}
-	if _, ok := m.Store.Get().account(name); !ok {
-		return ErrAccountMissing
-	}
-	return smbSetPassword(ctx, m.Run, false, name, password)
-}
-
-// SetDisabled disables or re-enables an account's SMB login (its shares stay defined).
-func (m *Manager) SetDisabled(ctx context.Context, name string, disabled bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, err := m.guard(ctx, true); err != nil {
+	smbOK, ftpOK, err := m.accountGuard(ctx)
+	if err != nil {
 		return err
 	}
 	mdl := m.Store.Get()
-	found := false
+	idx := -1
 	for i := range mdl.Accounts {
 		if mdl.Accounts[i].Name == name {
-			mdl.Accounts[i].Disabled = disabled
-			found = true
+			idx = i
 		}
 	}
-	if !found {
+	if idx < 0 {
 		return ErrAccountMissing
 	}
-	flag := "-e"
-	if disabled {
-		flag = "-d"
+	acc := mdl.Accounts[idx]
+	did := false
+	if smbOK {
+		if err := smbSetPassword(ctx, m.Run, !acc.SMB, name, password); err != nil {
+			return err
+		}
+		did = true
+		if !acc.SMB {
+			mdl.Accounts[idx].SMB = true
+			if err := m.Store.Set(mdl); err != nil {
+				return err
+			}
+		}
 	}
-	if _, err := m.Run.Run(ctx, m.tool("smbpasswd"), flag, name); err != nil {
-		return fmt.Errorf("smbpasswd: %w", err)
+	if ftpOK && acc.FTP != nil {
+		if err := m.unixSetPassword(ctx, name, password); err != nil {
+			return err
+		}
+		if acc.Disabled { // chpasswd replaces the whole hash, which would unlock it: lock the new one again
+			if err := m.unixLock(ctx, name, true); err != nil {
+				return err
+			}
+		}
+		did = true
+	}
+	if !did {
+		return ErrNoLogin
+	}
+	return nil
+}
+
+// SetDisabled disables or re-enables an account's logins (SMB and FTP); its
+// shares and FTP folder stay defined.
+func (m *Manager) SetDisabled(ctx context.Context, name string, disabled bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	smbOK, ftpOK, err := m.accountGuard(ctx)
+	if err != nil {
+		return err
+	}
+	mdl := m.Store.Get()
+	idx := -1
+	for i := range mdl.Accounts {
+		if mdl.Accounts[i].Name == name {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return ErrAccountMissing
+	}
+	acc := mdl.Accounts[idx]
+	mdl.Accounts[idx].Disabled = disabled
+	if smbOK && acc.SMB {
+		flag := "-e"
+		if disabled {
+			flag = "-d"
+		}
+		if _, err := m.Run.Run(ctx, m.tool("smbpasswd"), flag, name); err != nil {
+			return fmt.Errorf("smbpasswd: %w", err)
+		}
+	}
+	if ftpOK && acc.FTP != nil {
+		st, err := m.ftpGuard(ctx, true)
+		if err != nil {
+			return err
+		}
+		if err := m.applyFTP(ctx, mdl, st); err != nil {
+			return err
+		}
+		if err := m.unixLock(ctx, name, disabled); err != nil && !disabled {
+			return err
+		}
 	}
 	return m.Store.Set(mdl)
 }
 
-// DeleteAccount removes an account and its system user. Refused while a share still uses it.
+// DeleteAccount removes an account and its system user. Refused while an SMB
+// share still uses it; its FTP access goes with it.
 func (m *Manager) DeleteAccount(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, err := m.guard(ctx, true); err != nil {
+	_, ftpOK, err := m.accountGuard(ctx)
+	if err != nil {
 		return err
 	}
 	mdl := m.Store.Get()
-	if _, ok := mdl.account(name); !ok {
+	acc, ok := mdl.account(name)
+	if !ok {
 		return ErrAccountMissing
 	}
 	for _, s := range mdl.Shares {
@@ -511,9 +596,6 @@ func (m *Manager) DeleteAccount(ctx context.Context, name string) error {
 			}
 		}
 	}
-	if err := m.removeAccountBackend(ctx, name); err != nil {
-		return err
-	}
 	var keep []Account
 	for _, a := range mdl.Accounts {
 		if a.Name != name {
@@ -521,6 +603,21 @@ func (m *Manager) DeleteAccount(ctx context.Context, name string) error {
 		}
 	}
 	mdl.Accounts = keep
+	if ftpOK && acc.FTP != nil {
+		if mdl.FTP.OnlyAccounts && !anyFTP(mdl) {
+			mdl.FTP.OnlyAccounts = false
+		}
+		st, err := m.ftpGuard(ctx, true)
+		if err != nil {
+			return err
+		}
+		if err := m.applyFTP(ctx, mdl, st); err != nil {
+			return err
+		}
+	}
+	if err := m.removeAccountBackend(ctx, name); err != nil {
+		return err
+	}
 	return m.Store.Set(mdl)
 }
 
@@ -555,7 +652,7 @@ func (m *Manager) SaveShare(ctx context.Context, s Share, replace string) error 
 		if a.Mode != "ro" && a.Mode != "rw" {
 			return ErrShareMode
 		}
-		if acc, ok := mdl.account(a.User); !ok || acc.Disabled {
+		if acc, ok := mdl.account(a.User); !ok || acc.Disabled || !acc.SMB {
 			return ErrShareUser
 		}
 	}
@@ -639,6 +736,11 @@ func (m *Manager) SetInterfaces(ctx context.Context, interfaces []string) error 
 
 // Service starts/stops/restarts/enables/disables Samba (smbd, and nmbd where the distro has it).
 func (m *Manager) Service(ctx context.Context, action string) error {
+	return m.ServiceOf(ctx, "smb", action)
+}
+
+// ServiceOf controls the "smb" or "ftp" service.
+func (m *Manager) ServiceOf(ctx context.Context, svc, action string) error {
 	switch action {
 	case "start", "stop", "restart", "enable", "disable":
 	default:
@@ -646,18 +748,31 @@ func (m *Manager) Service(ctx context.Context, action string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	st, err := m.guard(ctx, false)
-	if err != nil {
-		return err
+	var unit, nmb string
+	switch svc {
+	case "smb":
+		st, err := m.guard(ctx, false)
+		if err != nil {
+			return err
+		}
+		unit, nmb = st.Unit, st.NmbUnit
+	case "ftp":
+		st, err := m.ftpGuard(ctx, false)
+		if err != nil {
+			return err
+		}
+		unit = st.Unit
+	default:
+		return ErrServiceAction
 	}
 	if !m.Det.Exists(m.Det.Paths.SystemdRun) {
 		return ErrNoSystemd
 	}
-	if _, err := m.Run.Run(ctx, "systemctl", action, st.Unit); err != nil {
-		return fmt.Errorf("systemctl %s %s: %w", action, st.Unit, err)
+	if _, err := m.Run.Run(ctx, "systemctl", action, unit); err != nil {
+		return fmt.Errorf("systemctl %s %s: %w", action, unit, err)
 	}
-	if st.NmbUnit != "" { // best effort: NetBIOS name service is optional
-		_, _ = m.Run.Run(ctx, "systemctl", action, st.NmbUnit)
+	if nmb != "" { // best effort: NetBIOS name service is optional
+		_, _ = m.Run.Run(ctx, "systemctl", action, nmb)
 	}
 	return nil
 }

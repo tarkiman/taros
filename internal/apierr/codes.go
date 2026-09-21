@@ -130,6 +130,11 @@ const (
 	SharingNoSystemd        = "sharing_no_systemd"
 	SharingNoUserBackend    = "sharing_no_user_backend"
 	SharingFailed           = "sharing_failed" // params: detail
+	SharingFTPNotManaged    = "sharing_ftp_not_managed"
+	SharingFTPSettings      = "sharing_ftp_settings"
+	SharingFTPNoAccounts    = "sharing_ftp_no_accounts"
+	SharingFTPApplyRejected = "sharing_ftp_apply_rejected" // params: detail
+	SharingNoLogin          = "sharing_no_login"
 
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"

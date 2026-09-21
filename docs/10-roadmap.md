@@ -2155,6 +2155,25 @@ Samba (kini `[]`, ada test); `testparm` keluar 0 pada parameter tak dikenal (jad
 membatasi FTP ke akun TarOS baru setelah perangkat 192.168.1.14 dimigrasi), pemasangan paket dari
 aplikasi, dan uji pengelolaan di Pi asli (Samba/FTP milik Pi sengaja tidak disentuh).
 
+### Berbagi file: pengelolaan FTP (PR2 dari 2)
+
+Kelanjutan entri di atas (jawaban pemilik: akses lewat ZeroTier **dan** LAN diizinkan; perangkat
+192.168.1.14 mendukung FTPS). Dibuktikan dulu di vsftpd sungguhan sebelum ditulis: baris terakhir di
+`vsftpd.conf` menang (jadi cukup satu blok di akhir file), `guest_username` per-user berfungsi sebagai
+padanan `force user` Samba, `chroot_local_user` per-user **tidak** berfungsi (jadi `chroot_list`),
+`allow_writeable_chroot` per-user berfungsi, `pam_shells` menolak akun `nologin` (jadi layanan PAM
+turunan), dan opsi tak dikenal membuat vsftpd gagal start (jadi konfigurasi kandidat dijalankan
+sungguhan). Detail di `docs/04-features.md` §4.16 dan `docs/07-security.md`. Diuji di vsftpd sungguhan
+pada 4 lingkungan, mutation testing (32 mutasi valid tertangkap semua), UI di Chromium headless terhadap
+vsftpd+Samba sungguhan (adopt, akun FTP-saja, pemilih folder, TLS wajib + pratinjau penguncian, port
+pasif, unadopt), serta keadaan belum-terpasang dan bukan-root. Temuan yang diperbaiki: kunci teks
+`sharing.needManaged`/`needSmb` **belum ada di i18n** sejak PR1 (halaman menampilkan kunci mentah pada
+keadaan tertentu; kini ada pemeriksa yang membandingkan semua kunci `t('sharing…')` dan kode error backend
+dengan en/id); mengganti password akun nonaktif membuka kuncinya; opsi TLS 1.1 tidak ada di vsftpd 3.0.3.
+**Belum**: pemasangan paket dari dalam aplikasi (`fileSharing.allowInstall`, opt-in — dipisah agar PR ini
+tetap bisa ditinjau), pengelolaan di Pi asli (vsftpd milik Pi dan perangkat 192.168.1.14 tidak disentuh),
+mengikat FTP ke satu jaringan, dan lebih dari satu folder per akun FTP.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

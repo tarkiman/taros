@@ -162,6 +162,7 @@ async function copy(text: string) {
     <NCard size="small" title="FTP">
       <template #header-extra>
         <NTag v-if="!ftp.installed" size="small" :bordered="false">{{ t('sharing.state.notInstalled') }}</NTag>
+        <NTag v-else-if="ftp.managed" type="success" size="small" :bordered="false">{{ t('sharing.state.managed') }} · {{ ftp.active ? t('sharing.state.running') : t('sharing.state.stopped') }}</NTag>
         <NTag v-else :type="ftp.active ? 'success' : 'default'" size="small" :bordered="false">{{ ftp.active ? t('sharing.state.running') : t('sharing.state.stopped') }}</NTag>
       </template>
       <template v-if="!ftp.installed">
@@ -184,7 +185,7 @@ async function copy(text: string) {
           </template>
         </div>
       </template>
-      <p class="muted small">{{ t('sharing.ftpReadOnly') }}</p>
+      <p v-if="ftp.installed" class="muted small">{{ t('sharing.ftpSeeTab') }}</p>
     </NCard>
 
     <PasswordConfirmModal

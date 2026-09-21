@@ -1469,24 +1469,24 @@ Cara kerja dan keputusan teknis (semuanya diverifikasi terhadap Docker asli):
   sesi; tidak ada pemisahan hak antar-akun dashboard (semua akun sama rata, lihat §7.1); dan jaringan/
   proxy yang memutus WebSocket idle bisa menutup sesi lebih cepat dari idle timeout.
 
-## 4.16 Berbagi File (SMB, dan laporan FTP)
+## 4.16 Berbagi File (SMB dan FTP)
 
 Halaman **Berbagi file** (`/sharing`, `internal/sharing`, `internal/web/handlers_sharing.go`) untuk
-perangkat yang juga jadi NAS. Rilis pertama: **SMB dikelola penuh** (folder yang dibagikan, akun,
-layanan), **FTP hanya dilaporkan** (pengelolaan FTP dikerjakan di PR terpisah). TarOS adalah aplikasi
-publik, jadi halaman ini harus masuk akal di setiap host, bukan hanya di Pi pengembangan:
+perangkat yang juga jadi NAS. **SMB** (Samba) dan **FTP** (vsftpd) dikelola penuh: folder yang
+dibagikan, akun, layanan, dan seberapa aman koneksinya. TarOS adalah aplikasi publik, jadi halaman ini
+harus masuk akal di setiap host, bukan hanya di Pi pengembangan (berlaku untuk keduanya):
 
 | Keadaan host | Yang ditampilkan |
 |---|---|
 | Bukan Linux | "Tidak tersedia di sini" |
-| Samba belum terpasang | Perintah pasang **sesuai distro** (`apt-get install -y samba`, `dnf …`, `apk add samba samba-common-tools`, `pacman -S samba`, `zypper …`; diawali `sudo` bila TarOS bukan root). TarOS **tidak memasang paket sendiri** |
+| Samba/vsftpd belum terpasang | Perintah pasang **sesuai distro** (`apt-get install -y samba` / `vsftpd`, `dnf …`, `apk add samba samba-common-tools`, `pacman -S samba`, `zypper …`; diawali `sudo` bila TarOS bukan root). TarOS **tidak memasang paket sendiri** |
 | Terpasang, kosong | Ajakan "Biarkan TarOS mengelola Samba" |
 | Terpasang dengan konfigurasi orang lain | Share yang sudah ada ditampilkan apa adanya (hanya-baca) + ajakan mengambil alih |
 | Sudah dikelola TarOS | Tab **Folder** (share), **Akun**, kontrol layanan, pilihan jaringan |
 | Bukan root / AD member atau DC / alat tak lengkap | Dibaca saja, dengan alasan yang tertulis (`not_root`, `not_standalone`, `no_tools`) |
 
-Tiga tab: **Ringkasan** (kondisi Samba/FTP, temuan keterpaparan, ambil alih/lepas), **Folder**,
-**Akun**.
+Empat tab: **Ringkasan** (kondisi Samba/FTP, temuan keterpaparan, ambil alih/lepas Samba), **Folder**
+(share SMB), **FTP**, **Akun**.
 
 ### Cara TarOS mengelola Samba — tanpa merusak yang sudah ada
 
@@ -1528,6 +1528,53 @@ pernah** lokasi sistem yang di-hardcode (`/`, `/etc`, `/boot`, `/root`, `/proc`,
 Symlink di-resolve ke path nyata sebelum diperiksa; `.ssh`/`.gnupg`, `%` dan karakter kontrol ditolak.
 Picker folder di UI hanya bisa menelusuri di dalam root yang diizinkan.
 
+### FTP (vsftpd) — PR2
+
+vsftpd **tidak punya `include`**, jadi TarOS menambahkan **satu blok bertanda di akhir
+`vsftpd.conf`**: vsftpd membaca file dari atas ke bawah dan **baris terakhir menang** (diuji di
+vsftpd 3.0.3), sehingga blok itu bisa menimpa tanpa satu baris pun di atasnya disentuh. Sisanya ada di
+berkas milik TarOS di `/etc/vsftpd/` (`taros-users/<akun>`, `taros-chroot`, `taros-allowed`,
+`taros-ftps.pem`) dan satu layanan PAM sendiri, `/etc/pam.d/taros-vsftpd`. "Berhenti mengelola"
+memulihkan `vsftpd.conf` **byte demi byte** (bila belum diedit di luar blok) dan menghapus semuanya.
+
+**Mengambil alih tidak mengubah siapa pun**: semua yang bisa login hari ini tetap bisa; akun TarOS
+ditambahkan di sampingnya. Pengubahan akses (hanya akun TarOS, TLS wajib) adalah langkah terpisah dengan
+pratinjau siapa yang akan terkunci — untuk Pi ini: perangkat yang mengunggah foto dengan akun `tarkiman`
+tidak boleh terkunci sebelum dipindah ke akun TarOS dan FTPS.
+
+- **Akun FTP = akun berbagi yang sama** (user sistem tanpa login) yang diberi **satu folder** + baca-saja
+  atau baca-tulis. Password akun tetap satu: mengaturnya mengubah password Samba (bila dikelola) **dan**
+  password Linux di balik FTP (`chpasswd` lewat stdin); tanpa akses FTP akun tidak punya password Linux
+  (terkunci). Menonaktifkan/mencabut mengunci lagi (`passwd -l`; hash dipertahankan, jadi mengaktifkan
+  kembali mengembalikan password yang sama). Mengganti password akun nonaktif tetap terkunci.
+- **Padanan `force user`**: per akun, `guest_enable=YES` + `guest_username=<pemilik folder>` +
+  `virtual_use_local_privs=YES` — login sebagai akun itu, file dibuat sebagai pemilik folder, tanpa
+  `chown`/`chmod` apa pun; `local_root` = folder itu; `write_enable=NO` untuk baca-saja. Folder milik
+  root ditolak kecuali dipilih user biasa. Kebijakan folder sama dengan SMB (`PathPolicy`).
+- **Terkurung di folder** (diuji: `cd ..`, `../docs`, `/etc/passwd`, `%2e%2e` tidak lolos). vsftpd
+  mengabaikan `chroot_local_user` per-user, jadi: bila host sudah mengurung semua user, tidak ada yang
+  perlu; bila tidak, TarOS mengurung **hanya akunnya** lewat `chroot_list` (user lama tetap tak
+  terkurung, seperti sebelumnya); bila admin punya daftar chroot sendiri (`chroot_custom`), TarOS menolak
+  mengelola karena tidak mau mengedit berkas yang bukan miliknya.
+- **PAM**: paket PAM standar memuat `pam_shells` yang menolak akun ber-shell `nologin` — yaitu semua akun
+  berbagi. TarOS menurunkan `taros-vsftpd` dari PAM `vsftpd` milik distro dan menyisipkan tepat sebelum
+  `pam_shells` "lewati baris berikutnya bila user di grup `taros-share`". Semua yang lain diperiksa persis
+  seperti sebelumnya (diuji: user sistem `nologin` biasa tetap ditolak).
+- **Opsi keamanan**: enkripsi FTPS **Ditawarkan** (FTP biasa tetap jalan) atau **Wajib** (teks biasa
+  ditolak) dengan sertifikat self-signed buatan TarOS (RSA-2048, 10 tahun, satu PEM 0600); **hanya akun
+  TarOS** (daftar izin `userlist_deny=NO`; pratinjau user perangkat yang akan terkunci; ditolak bila belum
+  ada akun berakses FTP); matikan anonim; rentang port pasif. Bila host semula `local_enable=NO`, mengelola
+  FTP otomatis disertai daftar izin agar user perangkat tetap tak bisa masuk.
+- **Perubahan transaksional**: vsftpd tidak punya mode "cek konfigurasi" dan **menolak start pada opsi tak
+  dikenal** (mis. `ssl_tlsv1_1` ada di 3.0.5 tapi tidak di 3.0.3), jadi kandidat konfigurasi **dijalankan
+  sungguhan** sebentar di port loopback sendiri: masih hidup setelah masa tenggang = diterima; keluar =
+  ditolak dan tidak ada yang berubah. Lalu tulis atomik, restart bila layanan berjalan (vsftpd tidak punya
+  reload; transfer yang berjalan terputus sesaat — UI memberi tahu), dan bila layanan tidak naik lagi semua
+  berkas dikembalikan lalu di-restart ke konfigurasi lama. Layanan yang berhenti tidak dinyalakan.
+- **Tidak dikelola** bila: bukan root, `chpasswd`/`passwd`/`useradd|adduser` tak ada, tak ada
+  `vsftpd.conf`, tak ada layanan PAM `vsftpd` (mis. Alpine bawaan), server FTP lain memegang port 21, atau
+  `chroot_custom`. Alasannya tampil di UI.
+
 ### Temuan keterpaparan
 
 Dihitung dari keadaan nyata, ditampilkan terurut menurut tingkat: FTP mengirim password tanpa enkripsi
@@ -1540,8 +1587,8 @@ SELinux enforcing, dan ketiadaan firewall (sekali per host).
 
 `GET /api/sharing/status` (dan `/folders?path=`) hanya-baca, tanpa perlu root. Semua yang mengubah
 sesuatu (`POST /api/sharing/smb/{adopt,unadopt,interfaces,service,shares}`, `…/shares/{name}/delete`,
-`/accounts…`) meminta **password dashboard lagi** (403 `wrong_password`). Pengecualian: menghentikan
-layanan dan menonaktifkan akun (hanya mengurangi keterpaparan). Kode error `sharing_*` diterjemahkan
+`/ftp/{adopt,unadopt,settings,service}`, `/accounts…` termasuk `/accounts/{name}/ftp`) meminta **password dashboard lagi** (403 `wrong_password`). Pengecualian: menghentikan
+layanan, menonaktifkan akun, dan mencabut akses FTP sebuah akun (hanya mengurangi keterpaparan). Kode error `sharing_*` diterjemahkan
 (§4.10). Subcommand `taros sharing-status` mencetak laporan yang sama sebagai JSON.
 
 ### Diuji
@@ -1552,6 +1599,14 @@ layanan dan menonaktifkan akun (hanya mengurangi keterpaparan). Kode error `shar
   byte-exact, koeksistensi dengan share/user milik orang lain.
 - **Mutation testing** pada rangkaian ini (mutasi yang gagal-compile dianggap tidak valid); satu penyintas
   nyata (pemulihan byte-exact) ditutup test baru.
+- **vsftpd sungguhan** (`TestIntegrationFTP`, curl sebagai klien): Debian 12 (vsftpd 3.0.3), Debian 13
+  (3.0.5), Ubuntu 24.04, Fedora 41 — konfigurasi rusak ditolak tanpa mengubah apa pun; user lama tetap
+  bisa login; user `nologin` biasa tetap ditolak; folder terlihat dan terkurung; unggahan dimiliki pemilik
+  folder; akun baca-saja tidak bisa menulis; FTPS ditawarkan vs wajib; mode hanya-akun mengunci user
+  perangkat; nonaktif/ganti password/cabut akses; unadopt memulihkan `vsftpd.conf` byte-exact.
+- **Mutation testing** logika FTP: 32 mutasi valid, semua tertangkap (temuan: ganti password akun
+  nonaktif akan diam-diam membuka kuncinya — kini dikunci lagi dan ada test; deteksi `chroot_custom` hanya
+  tertutup oleh lapisan lain — kini punya test sendiri).
 - UI di Chromium headless terhadap Samba sungguhan di container: ambil alih (password salah → ditolak),
   akun (validasi, bentrok dengan user sistem), share (picker, folder milik root → petunjuk Lanjutan,
   edit, hapus), akun-masih-dipakai, layanan tanpa systemd, unadopt + hapus akun (smb.conf pulih, user
@@ -1560,7 +1615,9 @@ layanan dan menonaktifkan akun (hanya mengurangi keterpaparan). Kode error `shar
 
 ### Batas jujur
 
-Samba yang dikelola hanya **standalone**; FTP belum bisa dikelola dari sini; TarOS tidak memasang
-paket; perubahan Samba butuh root; `/home` bukan root share default (tambahkan lewat
+Samba yang dikelola hanya **standalone**; FTP hanya **vsftpd** (bukan proftpd/pure-ftpd); satu akun FTP =
+satu folder; FTP tidak bisa diikat ke satu jaringan (vsftpd hanya bisa satu alamat — jaringan ZeroTier dan
+LAN sama-sama terjangkau, dan itu yang diminta); sertifikat FTPS self-signed (klien meminta dipercaya
+sekali); TarOS tidak memasang paket; perubahan butuh root; `/home` bukan root share default (tambahkan lewat
 `fileSharing.allowedRoots`); di host tanpa systemd (container) layanan tidak bisa dijalankan dari UI;
 ACL/quota per share dan akun tamu tidak ada.

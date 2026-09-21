@@ -105,7 +105,7 @@ func ComputeFindings(st Status) []Finding {
 		} else if ftp.Config.Anonymous {
 			add(SevWarn, "ftp_anonymous", "ftp", nil)
 		}
-		if ftp.Config.LocalLogin && !ftp.Config.TLS && len(ftp.LoginUsers) > 0 {
+		if ftp.Config.LocalLogin && !ftp.Config.ForceTLS && len(ftp.LoginUsers) > 0 { // TLS offered but not required still lets clear text in
 			sev := SevWarn
 			if live {
 				sev = SevHigh // real Linux passwords crossing the network in clear text, right now

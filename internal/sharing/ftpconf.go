@@ -1,0 +1,251 @@
+package sharing
+
+import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+// vsftpd has no `include`, so TarOS's part of vsftpd.conf is one marked block
+// appended at the END of the file: vsftpd reads the file top to bottom and the
+// last assignment of an option wins (verified against vsftpd 3.0.3), so the
+// block can override without anything above it being edited.
+//
+// Everything else TarOS needs lives in files of its own under the vsftpd
+// directory (default /etc/vsftpd):
+//
+//	taros-users/<account>   per-account settings (user_config_dir): folder + who the files belong to
+//	taros-chroot            accounts to jail (chroot_list) — only when the host does not chroot everybody
+//	taros-allowed           allow-list of logins (userlist) — only in "only TarOS accounts" mode
+//	taros-ftps.pem          self-signed certificate + key, when TLS is on and no certificate of ours exists
+//
+// plus a PAM service of its own, /etc/pam.d/taros-vsftpd (see PAMFor).
+const (
+	ftpUsersDir  = "taros-users"
+	ftpChrootFn  = "taros-chroot"
+	ftpAllowedFn = "taros-allowed"
+	ftpCertFn    = "taros-ftps.pem"
+	ftpPAMName   = "taros-vsftpd"
+)
+
+func hasFTPBlock(conf string) bool {
+	return strings.Contains(conf, markBegin) && strings.Contains(conf, markEnd)
+}
+
+// stripFTPBlock removes TarOS's block (markers included) and nothing else.
+func stripFTPBlock(conf string) string {
+	lines := strings.Split(conf, "\n")
+	out := make([]string, 0, len(lines))
+	skip := false
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		switch {
+		case t == markBegin:
+			skip = true
+		case skip && t == markEnd:
+			skip = false
+		case !skip:
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// appendFTPBlock puts the block at the end, on lines of its own.
+func appendFTPBlock(base, block string) string {
+	if base != "" && !strings.HasSuffix(base, "\n") {
+		base += "\n"
+	}
+	return base + block
+}
+
+// isAccountsOnly: the effective config is an allow-list, and the list is TarOS's.
+func isAccountsOnly(eff map[string]string, dir string) bool {
+	return isYes(eff["userlist_enable"]) && !isYes(eff["userlist_deny"]) && eff["userlist_deny"] != "" &&
+		eff["userlist_file"] == filepath.Join(dir, ftpAllowedFn)
+}
+
+// validFTPSettings checks what a caller may ask for.
+func validFTPSettings(s FTPSettings) error {
+	switch s.TLS {
+	case "", "optional", "required":
+	default:
+		return fmt.Errorf("%w: tls", ErrFTPSettings)
+	}
+	if s.PasvMin != 0 || s.PasvMax != 0 {
+		if s.PasvMin < 1024 || s.PasvMax > 65535 || s.PasvMin > s.PasvMax || s.PasvMax-s.PasvMin > 2000 {
+			return fmt.Errorf("%w: passive port range", ErrFTPSettings)
+		}
+	}
+	return nil
+}
+
+// RenderFTPBlock renders the block for the given settings on top of `base` (the
+// config with TarOS's block removed). It states only what has to change.
+func RenderFTPBlock(dir string, s FTPSettings, base string) (string, error) {
+	eff := ParseVsftpd(base)
+	var l []string
+	add := func(format string, a ...any) { l = append(l, fmt.Sprintf(format, a...)) }
+
+	add("user_config_dir=%s", filepath.Join(dir, ftpUsersDir))
+	add("pam_service_name=%s", ftpPAMName)
+
+	// TarOS accounts must be jailed in their folder. Where the host already jails
+	// everybody nothing is needed; where it jails nobody, TarOS jails its own
+	// accounts by list. A custom list of the admin's cannot be extended by us.
+	if !isYes(eff["chroot_local_user"]) {
+		if isYes(eff["chroot_list_enable"]) {
+			return "", fmt.Errorf("%w: chroot_custom", ErrCannotManage)
+		}
+		add("chroot_list_enable=YES")
+		add("chroot_list_file=%s", filepath.Join(dir, ftpChrootFn))
+	}
+
+	// FTP accounts are local users, so local logins have to be on. If they were off
+	// the host never let device users in — keep it that way with an allow-list.
+	onlyAccounts := s.OnlyAccounts
+	if !isYes(eff["local_enable"]) {
+		add("local_enable=YES")
+		onlyAccounts = true
+	}
+	if onlyAccounts {
+		add("userlist_enable=YES")
+		add("userlist_deny=NO")
+		add("userlist_file=%s", filepath.Join(dir, ftpAllowedFn))
+	}
+	if s.NoAnonymous {
+		add("anonymous_enable=NO")
+	}
+	if s.TLS != "" {
+		force := "NO"
+		if s.TLS == "required" {
+			force = "YES"
+		}
+		cert := filepath.Join(dir, ftpCertFn)
+		add("ssl_enable=YES")
+		add("rsa_cert_file=%s", cert)
+		add("rsa_private_key_file=%s", cert)
+		add("force_local_logins_ssl=%s", force)
+		add("force_local_data_ssl=%s", force)
+		// Only options every vsftpd version knows: an unknown option makes the
+		// daemon refuse to start (ssl_tlsv1_1 exists in 3.0.5 but not in 3.0.3).
+		add("ssl_sslv2=NO")
+		add("ssl_sslv3=NO")
+		add("require_ssl_reuse=NO")
+		add("ssl_ciphers=HIGH")
+	}
+	if s.PasvMin != 0 {
+		add("pasv_min_port=%d", s.PasvMin)
+		add("pasv_max_port=%d", s.PasvMax)
+	}
+
+	var b strings.Builder
+	b.WriteString(markBegin + "\n")
+	b.WriteString("# Generated by TarOS — edit in the TarOS UI; manual changes here are overwritten.\n")
+	for _, x := range l {
+		b.WriteString(x + "\n")
+	}
+	b.WriteString(markEnd + "\n")
+	return b.String(), nil
+}
+
+// RenderFTPUser is the per-account file. The account authenticates as itself
+// (a no-login system user, through PAM) and is then mapped to the folder's owner
+// (guest_username) — the FTP counterpart of Samba's `force user`, so files keep
+// belonging to whoever owns the folder and no permission is ever changed.
+func RenderFTPUser(a FTPAccess, ownerUser string) string {
+	write := "NO"
+	if a.Mode == "rw" {
+		write = "YES"
+	}
+	var b strings.Builder
+	b.WriteString("# Generated by TarOS — edit in the TarOS UI; manual changes here are overwritten.\n")
+	fmt.Fprintf(&b, "local_root=%s\n", a.Path)
+	b.WriteString("allow_writeable_chroot=YES\n")
+	b.WriteString("guest_enable=YES\n")
+	fmt.Fprintf(&b, "guest_username=%s\n", ownerUser)
+	b.WriteString("virtual_use_local_privs=YES\n")
+	fmt.Fprintf(&b, "write_enable=%s\n", write)
+	b.WriteString("local_umask=002\n")
+	return b.String()
+}
+
+// RenderNameList renders a one-name-per-line list file.
+func RenderNameList(names []string) string {
+	n := append([]string(nil), names...)
+	sort.Strings(n)
+	return strings.Join(n, "\n") + "\n"
+}
+
+// PAMFor derives TarOS's PAM service from the distribution's own vsftpd one, so
+// everything the host requires of an FTP login stays exactly as it is — except
+// for one thing: the stock stack contains `pam_shells`, which rejects any account
+// whose shell is not listed in /etc/shells, i.e. every no-login share account.
+// Immediately before each pam_shells line TarOS inserts "skip the next line if
+// the user is in taros-share", so those accounts pass and everyone else is
+// checked as before (verified: a plain nologin system user is still refused).
+func PAMFor(orig string) string {
+	var b strings.Builder
+	b.WriteString("# Generated by TarOS from the vsftpd PAM service — edit in the TarOS UI; manual changes here are overwritten.\n")
+	skip := "auth\t[success=1 default=ignore]\tpam_succeed_if.so quiet user ingroup " + shareGroup + "\n"
+	prev := ""
+	for _, line := range strings.SplitAfter(orig, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.Contains(t, "pam_shells.so") && !strings.HasPrefix(t, "#") && !strings.Contains(prev, "pam_succeed_if.so") {
+			b.WriteString(skip)
+		}
+		if line != "" {
+			prev = t
+		}
+		b.WriteString(line)
+	}
+	return b.String()
+}
+
+// GenerateFTPCert makes a self-signed certificate (valid ten years) and returns
+// certificate and key in one PEM — vsftpd accepts a combined file for both options.
+func GenerateFTPCert(host string, now time.Time) ([]byte, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 100))
+	if err != nil {
+		return nil, err
+	}
+	if host == "" {
+		host = "taros"
+	}
+	tpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: host, Organization: []string{"TarOS"}},
+		DNSNames:     []string{host, "localhost"},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.AddDate(10, 0, 0),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		return nil, err
+	}
+	out := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	out = append(out, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})...)
+	return out, nil
+}
+
+func hostnameOr(def string) string {
+	if h, err := os.Hostname(); err == nil && h != "" {
+		return h
+	}
+	return def
+}

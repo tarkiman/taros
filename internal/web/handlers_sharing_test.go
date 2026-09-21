@@ -33,6 +33,11 @@ func TestSharingErrorsMapToCodesAndParams(t *testing.T) {
 		{sharing.ErrNameForeign, 409, apierr.SharingShareNameForeign, "", ""},
 		{sharing.ErrNoSystemd, 409, apierr.SharingNoSystemd, "", ""},
 		{&sharing.ApplyError{Output: "bad line 3"}, 422, apierr.SharingApplyRejected, "detail", "bad line 3"},
+		{&sharing.FTPApplyError{Output: "500 OOPS"}, 422, apierr.SharingFTPApplyRejected, "detail", "500 OOPS"},
+		{sharing.ErrFTPNotManaged, 409, apierr.SharingFTPNotManaged, "", ""},
+		{sharing.ErrFTPSettings, 400, apierr.SharingFTPSettings, "", ""},
+		{sharing.ErrFTPNoAccounts, 409, apierr.SharingFTPNoAccounts, "", ""},
+		{sharing.ErrNoLogin, 409, apierr.SharingNoLogin, "", ""},
 		{fmt.Errorf("something unexpected"), 500, apierr.SharingFailed, "detail", "something unexpected"},
 	} {
 		rec := httptest.NewRecorder()
@@ -81,6 +86,8 @@ func TestSharingChangesNeedTheDashboardPassword(t *testing.T) {
 		"share save": s.handleSharingShareSave, "share delete": s.handleSharingShareDelete,
 		"account add": s.handleSharingAccountAdd, "account password": s.handleSharingAccountPassword,
 		"account delete": s.handleSharingAccountDelete,
+		"ftp adopt":      s.handleSharingFTPAdopt, "ftp unadopt": s.handleSharingFTPUnadopt,
+		"ftp settings": s.handleSharingFTPSettings, "ftp access": s.handleSharingFTPAccess,
 	}
 	for name, h := range gated {
 		if code, api := call(h, "/x", `{"password":"wrong"}`); code != http.StatusForbidden || api != apierr.WrongPassword {
@@ -106,6 +113,23 @@ func TestSharingChangesNeedTheDashboardPassword(t *testing.T) {
 		if code, _ := svc(a, ""); code == http.StatusForbidden {
 			t.Errorf("service %s should not need the password", a)
 		}
+	}
+	fsvc := func(action, pw string) (int, string) {
+		return call(s.handleSharingFTPService, "/x", fmt.Sprintf(`{"action":%q,"password":%q}`, action, pw))
+	}
+	for _, a := range []string{"start", "enable", "restart"} {
+		if code, api := fsvc(a, "wrong"); code != http.StatusForbidden || api != apierr.WrongPassword {
+			t.Errorf("ftp service %s with a wrong password → %d %q", a, code, api)
+		}
+	}
+	for _, a := range []string{"stop", "disable"} {
+		if code, _ := fsvc(a, ""); code == http.StatusForbidden {
+			t.Errorf("ftp service %s should not need the password", a)
+		}
+	}
+	// Taking FTP access away only reduces exposure.
+	if code, _ := call(s.handleSharingFTPClear, "/x", `{}`); code == http.StatusForbidden {
+		t.Errorf("clearing FTP access should not need the password")
 	}
 	// Enabling a login needs it; disabling one doesn't.
 	if code, _ := call(s.handleSharingAccountDisabled, "/x", `{"disabled":false,"password":"wrong"}`); code != http.StatusForbidden {

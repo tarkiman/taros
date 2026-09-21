@@ -7,6 +7,7 @@ import { ApiError } from '../api/client'
 import { sharingApi, type SharingResponse } from '../api/sharing'
 import SharingOverview from '../components/sharing/SharingOverview.vue'
 import SharingShares from '../components/sharing/SharingShares.vue'
+import SharingFtp from '../components/sharing/SharingFtp.vue'
 import SharingAccounts from '../components/sharing/SharingAccounts.vue'
 
 // File sharing (internal/sharing, docs/04-features.md §4.16): SMB management,
@@ -55,6 +56,9 @@ onMounted(load)
           </NTabPane>
           <NTabPane name="folders" :tab="t('sharing.tab.folders')">
             <SharingShares :data="data" @changed="load" @goto="(x: string) => (tab = x)" />
+          </NTabPane>
+          <NTabPane name="ftp" tab="FTP">
+            <SharingFtp :data="data" @changed="load" @goto="(x: string) => (tab = x)" />
           </NTabPane>
           <NTabPane name="accounts" :tab="t('sharing.tab.accounts')">
             <SharingAccounts :data="data" @changed="load" />
