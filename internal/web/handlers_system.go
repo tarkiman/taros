@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/tarkiman/taros/internal/apierr"
+	"github.com/tarkiman/taros/internal/bootlog"
 	"github.com/tarkiman/taros/internal/netinfo"
 )
 
@@ -38,4 +39,22 @@ func (s *Server) handleSystemAddresses(w http.ResponseWriter, r *http.Request) {
 		addrs = []netinfo.Address{}
 	}
 	writeJSON(w, http.StatusOK, map[string][]netinfo.Address{"addresses": addrs})
+}
+
+type bootsResponse struct {
+	Supported bool           `json:"supported"`
+	Boots     []bootlog.View `json:"boots"`
+	// Live is a fresh sensor reading (NVMe temperature, undervoltage alarm) —
+	// the ledger only holds the last heartbeat's.
+	Live bootlog.Snapshot `json:"live"`
+}
+
+// handleSystemBoots serves the host-boot ledger for Settings > Riwayat Boot
+// (docs/04-features.md §4.13), newest first. Read-only.
+func (s *Server) handleSystemBoots(w http.ResponseWriter, r *http.Request) {
+	if s.deps.BootLog == nil {
+		writeJSON(w, http.StatusOK, bootsResponse{Supported: false, Boots: []bootlog.View{}})
+		return
+	}
+	writeJSON(w, http.StatusOK, bootsResponse{Supported: true, Boots: s.deps.BootLog.Boots(), Live: s.deps.BootLog.Live()})
 }

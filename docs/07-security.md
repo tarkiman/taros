@@ -177,6 +177,14 @@ luar project ditolak Docker sendiri (409), tidak di-force. Diakui jujur: siapa p
 memegang akun sudah bisa menghapus container satu per satu; ini bukan celah baru, hanya jalan
 pintas yang diberi pagar yang setara.
 
+### Riwayat boot
+
+`boots.yaml` (docs/04-features.md §4.13) berisi `boot_id` kernel, waktu, suhu, dan persentase
+CPU/RAM — bukan rahasia, jadi 0644 seperti `quick-links.yaml`, dan endpoint `GET
+/api/system/boots` read-only di belakang sesi login. Yang perlu dicatat: `boot_id` adalah
+pengenal mesin per-boot (tidak sensitif, tidak dikirim ke luar); pesan Discord "mati mendadak"
+hanya memuat waktu dan pembacaan sensor, tanpa log atau path.
+
 ## 7.5 Jaringan
 
 - Rekomendasi default: bind ke `0.0.0.0` port custom (misal `8090`), **tanpa TLS built-in**

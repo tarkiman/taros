@@ -25,6 +25,7 @@ type Config struct {
 	Dashboard       DashboardConfig       `yaml:"dashboard"`
 	Notify          NotifyConfig          `yaml:"notify"`
 	FolderShortcuts FolderShortcutsConfig `yaml:"folderShortcuts"`
+	BootLog         BootLogConfig         `yaml:"bootLog"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
@@ -182,6 +183,13 @@ type FolderShortcutsConfig struct {
 	SettingsFile string `yaml:"settingsFile"`
 }
 
+// BootLogConfig — see docs/04-features.md §4.13 "Riwayat Boot". File is the
+// boot ledger (one entry per host boot, rewritten by a once-a-minute
+// heartbeat). Not secret, so 0644 like quick-links.yaml.
+type BootLogConfig struct {
+	File string `yaml:"file"`
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -247,6 +255,7 @@ func Default() Config {
 		FolderShortcuts: FolderShortcutsConfig{
 			SettingsFile: "./folder-shortcuts.yaml",
 		},
+		BootLog: BootLogConfig{File: "./boots.yaml"},
 	}
 }
 
@@ -276,6 +285,12 @@ func Load(path string) (Config, error) {
 	// upgrading needs no config edit.
 	if cfg.Dashboard.AppsFile == Default().Dashboard.AppsFile && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
 		cfg.Dashboard.AppsFile = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "apps.yaml")
+	}
+	// Same upgrade story for bootLog.file: an install whose config predates it
+	// gets boots.yaml beside quick-links.yaml (already service-writable)
+	// instead of a relative path that resolves against the working directory.
+	if cfg.BootLog.File == Default().BootLog.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
+		cfg.BootLog.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "boots.yaml")
 	}
 	return cfg, nil
 }

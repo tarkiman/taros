@@ -2084,6 +2084,21 @@ dengan unit test bermutasi dan langsung ke Docker asli (0 false positive dari 33
 Sengaja belum ada: alert dari luar mesin (heartbeat eksternal), mute per aplikasi (cukup restart
 policy), status insiden yang bertahan lintas restart TarOS.
 
+### Riwayat Boot & deteksi mati mendadak (+ notifikasi Discord)
+
+Saran #4 dari diskusi "fitur apa lagi". Pitch awalnya ("catat undervoltage") **dikoreksi sebelum
+dibangun**: jurnal kernel dari 8 boot tidak punya satu pun catatan undervoltage, termasuk sekitar
+dua crash yang ditelusuri — polanya pemutusan mendadak, bukan tegangan turun pelan. Jadi yang
+dibangun adalah buku catatan boot: detak per menit + tanda "berhenti bersih" saat SIGTERM, dan
+ketiadaan tanda itu di boot berikutnya = mati mendadak (satu entri per `boot_id`, waktu boot
+dihitung dari uptime karena tanpa RTC). Detail dan batasnya di `docs/04-features.md` §4.13.
+Keputusan yang disetujui: cakupan v1 (ledger + kartu + pesan Discord + suhu NVMe), detak tetap 60
+dtk, aturan Discord default mati. Alert undervoltage terpisah ditunda. Dua temuan saat membangun:
+(1) mutasi yang lolos menunjukkan pemberitahuan bisa hilang kalau TarOS di-restart sebelum Wi-Fi
+naik → status "ditangani" kini disimpan dan pemberitahuan tetap ditawarkan sampai ditangani;
+(2) snapshot pertama berisi CPU/RAM/suhu 0 karena metrik belum ada → ditandai `hasMetrics`
+supaya "belum ada data" tidak tampil sebagai angka nol.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

@@ -1205,3 +1205,74 @@ digarap, dicatat sebagai ide lanjutan di [10-roadmap.md](10-roadmap.md).
   - Hanya satu scan berjalan di satu waktu — permintaan scan kedua saat satu masih berjalan
     langsung ditolak (`disk_analysis_scan_busy`, HTTP 409) alih-alih menjalankan dua walk
     penuh sekaligus (dua kali beban I/O yang justru sedang coba dibatasi).
+
+## 4.13 Riwayat Boot & Deteksi Mati Mendadak
+
+Pi ini dua kali mati tanpa jejak (26 dan 28 Agustus) dan penyebabnya hanya bisa disimpulkan dari
+bukti tidak langsung ("power event"). Jurnal tidak bisa diandalkan untuk ini: Pi **tanpa RTC**
+(dua boot pernah sama-sama berstempel 23:31:21) dan pemutusan listrik mendadak tidak sempat
+meninggalkan catatan. Saat diperiksa, jurnal kernel dari 8 boot tercatat juga **tidak punya satu
+pun catatan undervoltage** — jadi log undervoltage saja tidak akan menangkap apa-apa; yang bisa
+ditangkap adalah *fakta* dan *waktu* mati mendadak, plus keadaan mesin sesaat sebelumnya.
+
+Kartu **Riwayat Boot** (Settings, paling bawah) menampilkan satu baris per boot host (maks. 50):
+waktu boot, terakhir terlihat, uptime, cara berakhir, pembacaan terakhir, dan jumlah start/crash
+TarOS. Datanya dari `internal/bootlog` — file `bootLog.file` (default `/opt/taros/boots.yaml`,
+0644, tidak rahasia):
+
+- **Detak tiap 60 detik** menulis "masih hidup" + pembacaan: suhu CPU, suhu NVMe, CPU/RAM, dan
+  status undervoltage. Penulisan atomik (file sementara + rename) — pemutusan listrik di tengah
+  penulisan itu sendiri tidak boleh meninggalkan file setengah jadi. Satu tulisan kecil per
+  menit di NVMe itu sepele; di perangkat eMMC/SD kecil pertimbangkan ini.
+- **Tanda "berhenti bersih"** ditulis sinkron saat TarOS menerima SIGTERM (systemd saat stop,
+  reboot, atau shutdown) atau Ctrl-C. Listrik putus, `kill -9`, dan crash tidak pernah sampai ke
+  sana — itulah buktinya.
+- **Satu entri per boot host**, dikenali dari `boot_id` kernel, bukan per proses TarOS: restart
+  TarOS (redeploy, crash) di dalam satu boot hanya menaikkan penghitung `start`/`crash` di entri
+  itu. Klasifikasi saat start:
+  - `boot_id` sama, penutup bersih → restart TarOS biasa.
+  - `boot_id` sama, tanpa penutup → **TarOS crash** (dihitung, dicatat di log).
+  - `boot_id` beda, penutup ada → boot sebelumnya **berakhir bersih**.
+  - `boot_id` beda, tanpa penutup → boot sebelumnya **mati mendadak** (listrik putus, reset
+    paksa, atau sistem hang).
+- **Waktu tanpa RTC**: waktu boot dihitung ulang tiap detak sebagai `sekarang − /proc/uptime`,
+  jadi salah-jam saat boot mengoreksi diri begitu NTP sinkron. Sinkron tidaknya jam ditanyakan
+  ke kernel lewat `adjtimex` (bukan file khusus `timesyncd`, jadi tetap benar kalau memakai
+  `chrony`); baris yang jamnya belum sinkron diberi tanda "≈" di UI.
+- **Sensor yang dibaca** semuanya sysfs/procfs yang bisa dibaca user biasa: NVMe dari `hwmon`
+  (`nvme`, Composite) dan undervoltage dari `hwmon` `rpi_volt/in0_lcrit_alarm`. `vcgencmd
+  get_throttled` sengaja **tidak** dipakai — `/dev/vcio` hanya untuk root, padahal TarOS
+  direkomendasikan jalan sebagai user biasa. Harganya: hanya kondisi undervoltage *saat itu* yang
+  terbaca (bukan bit "pernah terjadi sejak boot"), jadi alarm diambil tiap 5 detik dan disimpan
+  "menempel" sampai detak berikutnya supaya sag singkat di antara dua detak tidak terlewat.
+  Suhu NVMe tidak dicampur ke gauge/alert suhu CPU di Dashboard (alert "Suhu CPU" memakai suhu
+  tertinggi dari sensor termal; menambah NVMe ke sana akan mengubah artinya) — ia tampil di
+  kartu ini.
+- **Notifikasi Discord** (Settings > Notifikasi, "Pi menyala kembali setelah mati mendadak",
+  default mati, master switch tetap harus nyala): satu pesan setelah Pi pulih, memuat kapan
+  terakhir terlihat, lama berjalan, pembacaan terakhir, dan petunjuk — pembacaan terakhir normal
+  lalu putus tiba-tiba biasanya berarti listrik terputus mendadak (adaptor/kabel/konektor),
+  sedangkan undervoltage tepat sebelum mati mengarah ke catu daya yang kurang kuat; sistem hang
+  bisa terlihat sama dengan pemutusan listrik. Ini sekaligus menutup sebagian batas alert
+  container ("kalau Pi mati tidak ada yang terkirim"): kita tetap tahu begitu Pi menyala lagi.
+  - Dikirim saat start, biasanya **selagi boot** — Wi-Fi baru naik 19–90 detik kemudian — jadi
+    dicoba ulang tiap 30 detik sampai 15 menit, bukan sekali lalu hilang.
+  - Status "sudah ditangani" disimpan di ledger: restart TarOS sebelum pesan terkirim **tidak
+    menghilangkannya** (ditawarkan lagi), dan setelah ditangani tidak diumumkan ulang. Ditangani
+    = terkirim, atau aturan sedang mati (tidak retroaktif: menyalakannya nanti tidak menggali
+    kejadian lama), atau menyerah. Hanya boot **tepat sebelum** boot sekarang yang dianggap
+    berita; yang lebih lama adalah riwayat.
+- **Batas jujur**: penyebab pemutusan tidak bisa dipastikan dari dalam mesin — hanya kapan,
+  seberapa sering, dan keadaan terakhirnya. Boot yang berakhir karena TarOS mati lama (dihentikan
+  paksa dan tidak pernah jalan lagi sampai host reboot) juga terbaca "mati mendadak". Entri
+  pertama setelah upgrade tidak punya riwayat sebelumnya. File yang rusak dipindah ke `.bad` dan
+  riwayat dimulai ulang, bukan menolak start. Hanya Linux (`/proc`, `/sys`).
+- Diuji: 20 unit test ledger + notifier (klasifikasi, kejadian sag di antara detak, jam yang
+  mengoreksi diri, penulisan atomik, file rusak, retry/menyerah/dibatalkan) dicek dengan mutasi
+  — mutasi yang awalnya lolos menunjukkan **celah nyata** (restart TarOS sebelum pesan terkirim
+  menghilangkan pemberitahuan), diperbaiki dan diuji. Di mesin asli (instance scratch): `boot_id`
+  cocok dengan `/proc`, waktu boot **persis sama dengan `uptime -s`**, `adjtimex` melaporkan jam
+  sinkron, NVMe 30,85°C dan alarm undervoltage terbaca sebagai user biasa; tiap skenario akhir
+  sesi (SIGTERM bersih, `kill -9`, dan mati mendadak yang disimulasikan dengan mengganti
+  `boot_id`) terklasifikasi benar dan tidak diumumkan ulang. Pengiriman Discord sungguhan tidak
+  dicoba (webhook asli tidak dipakai) — jalurnya `sendWebhook` yang sama dengan alert lain.

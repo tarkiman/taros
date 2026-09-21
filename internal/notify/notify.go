@@ -107,6 +107,12 @@ type ContainerRules struct {
 	IncludeLogs bool `yaml:"includeLogs" json:"includeLogs"`
 }
 
+// BootRules configures the "Pi came back after an abrupt power loss" notice
+// (see boot.go).
+type BootRules struct {
+	PowerLoss bool `yaml:"powerLoss" json:"powerLoss"`
+}
+
 const defaultGraceMin = 3
 
 // Settings is the full Discord notification configuration.
@@ -117,6 +123,7 @@ type Settings struct {
 	Mem        MetricRule     `yaml:"mem" json:"mem"`
 	Temp       MetricRule     `yaml:"temp" json:"temp"`
 	Containers ContainerRules `yaml:"containers" json:"containers"`
+	Boot       BootRules      `yaml:"boot" json:"boot"`
 }
 
 // Default returns sane, inert defaults — Enabled=false and every rule
@@ -217,7 +224,7 @@ func (s *Store) Update(next Settings) (Settings, error) {
 }
 
 func validate(s Settings) error {
-	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled || s.Containers.Enabled
+	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled || s.Containers.Enabled || s.Boot.PowerLoss
 	if (s.Enabled || anyRuleEnabled) && strings.TrimSpace(s.WebhookURL) == "" {
 		return invalid(apierr.NotifyWebhookRequired, "URL webhook Discord wajib diisi untuk mengaktifkan notifikasi", nil)
 	}

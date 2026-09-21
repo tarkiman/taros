@@ -347,6 +347,12 @@ dirender di browser klien yang mengakses dashboard (laptop/HP), bukan di proses 
 target itu sendiri. Ukuran bundle JS (lihat rincian per-chunk di komit yang menambahkan
 `web/frontend/`) memengaruhi waktu-muat/RAM browser klien, bukan resource budget STB.
 
+**Tambahan v0.36.0 — Riwayat Boot** (docs/04-features.md §4.13): satu tulisan file kecil
+(`boots.yaml`, beberapa KB, atomik) per menit ke `bootLog.file`, plus pembacaan tiga file
+sysfs/procfs tiap 5 detik untuk alarm undervoltage. Tidak mengubah target di atas; di
+perangkat dengan penyimpanan flash kecil (eMMC/SD) tulis-tiap-menit itu satu-satunya biaya yang
+patut dipertimbangkan.
+
 ### Benchmark Pembanding: CasaOS
 
 TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM
