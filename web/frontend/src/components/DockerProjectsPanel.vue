@@ -6,9 +6,10 @@ import { ChevronDown, ChevronRight, FolderOpen, Trash2 } from '@lucide/vue'
 import type { Container } from '../types/docker'
 import { formatBytes } from '../utils/format'
 import { groupProjects, type ProjectGroup, type Verdict } from '../utils/dockerProjects'
+import AppLifecycle from './AppLifecycle.vue'
 
 const props = defineProps<{ containers: Container[]; focus?: string }>()
-const emit = defineEmits<{ (e: 'logs', c: Container): void; (e: 'env', c: Container): void; (e: 'uninstall', name: string): void }>()
+const emit = defineEmits<{ (e: 'logs', c: Container): void; (e: 'env', c: Container): void; (e: 'uninstall', name: string): void; (e: 'changed'): void }>()
 const { t } = useI18n()
 
 const groups = computed<ProjectGroup[]>(() => groupProjects(props.containers))
@@ -86,12 +87,14 @@ function dot(c: Container): string {
             </span>
           </li>
         </ul>
-        <div v-if="g.name" class="app-actions">
-          <NButton size="small" quaternary type="error" @click="emit('uninstall', g.name)">
-            <template #icon><NIcon :component="Trash2" /></template>
-            {{ t('docker.apps.uninstall.button') }}
-          </NButton>
-        </div>
+        <AppLifecycle v-if="g.name" :name="g.name" :containers="g.containers" @changed="emit('changed')">
+          <template #extra>
+            <NButton size="small" quaternary type="error" @click="emit('uninstall', g.name)">
+              <template #icon><NIcon :component="Trash2" /></template>
+              {{ t('docker.apps.uninstall.button') }}
+            </NButton>
+          </template>
+        </AppLifecycle>
       </div>
     </div>
 
@@ -122,7 +125,6 @@ function dot(c: Container): string {
 .svc-status { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .svc-res { font-size: 0.78rem; text-align: right; white-space: nowrap; }
 .svc-btns { display: inline-flex; gap: 2px; }
-.app-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
 .hint { font-size: 0.78rem; margin: 4px 0 0; }
 .text-muted { color: var(--text-muted); }
 @media (max-width: 720px) { .svc-list li { grid-template-columns: 10px 1fr auto; } .svc-status, .svc-res { display: none; } }

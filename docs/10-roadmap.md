@@ -2113,6 +2113,17 @@ me-rollback jaringan sah, pesan password-salah yang ambigu, `Hint:` NetworkManag
 dan batasnya di `docs/04-features.md` §4.14 dan `docs/07-security.md`. Belum: WPA-Enterprise, jalur
 non-root/polkit, probing AP tersembunyi sungguhan, dan uji pindah di Wi-Fi asli host.
 
+### Docker: Start/Stop/Restart per aplikasi dengan urutan `depends_on`
+
+Saran #3 dari diskusi "fitur apa lagi" (bersama #5, shell container — dikerjakan di PR terpisah).
+Desain yang disetujui: urutan dari label `com.docker.compose.depends_on` (tanpa CLI compose), job
+asinkron dengan progres per container, dependen dari kegagalan dilewati dan dilaporkan, konfirmasi
+tanpa password untuk Stop/Restart. Detail dan batasnya di `docs/04-features.md` §4.2. Dua temuan:
+`StopContainer` lama berbenturan dengan timeout klien 10 dtk (diperbaiki); dan `go test -race`
+**tidak bisa dijalankan** di kernel Pi ini (detektor menolak tata letak memori aarch64:
+"FATAL: Found 47 - Supported 48"), jadi konkurensi dijaga lewat kunci yang hati-hati, `go vet`, dan
+test — dua peta yang diakses lintas-goroutine ketahuan saat tinjauan kode, bukan oleh detektor.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

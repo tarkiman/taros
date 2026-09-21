@@ -556,7 +556,7 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="apps" :tab="t('docker.apps.tab')">
         <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
-        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" @uninstall="openUninstall" />
+        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" @uninstall="openUninstall" @changed="loadContainers" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />

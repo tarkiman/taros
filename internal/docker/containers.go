@@ -149,13 +149,23 @@ func (c *Client) StartContainer(ctx context.Context, id string) error {
 	return err
 }
 
+// StopContainer/RestartContainer wait for Docker's graceful stop (SIGTERM,
+// then SIGKILL after the container's stop timeout — 10 s by default), so they
+// go through doSlow: the client's own 10 s HTTP timeout would otherwise fire
+// at the very moment a slow-to-stop container is about to be killed, and
+// report a failure for an action that then succeeds. Bounded by ctx.
 func (c *Client) StopContainer(ctx context.Context, id string) error {
-	_, err := c.do(ctx, "POST", "/containers/"+id+"/stop", nil)
+	_, err := c.doSlow(ctx, "POST", "/containers/"+id+"/stop")
 	return err
 }
 
 func (c *Client) RestartContainer(ctx context.Context, id string) error {
-	_, err := c.do(ctx, "POST", "/containers/"+id+"/restart", nil)
+	_, err := c.doSlow(ctx, "POST", "/containers/"+id+"/restart")
+	return err
+}
+
+func (c *Client) UnpauseContainer(ctx context.Context, id string) error {
+	_, err := c.do(ctx, "POST", "/containers/"+id+"/unpause", nil)
 	return err
 }
 
