@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -61,7 +60,7 @@ func (s *Server) handleSettingsTerminal(w http.ResponseWriter, r *http.Request) 
 
 	go func() {
 		time.Sleep(700 * time.Millisecond)
-		os.Exit(0)
+		s.exit(0)
 	}()
 }
 
@@ -94,7 +93,7 @@ func (s *Server) handleSettingsDiskAnalysis(w http.ResponseWriter, r *http.Reque
 
 	go func() {
 		time.Sleep(700 * time.Millisecond)
-		os.Exit(0)
+		s.exit(0)
 	}()
 }
 
@@ -167,6 +166,6 @@ func (s *Server) handleSettingsPort(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		time.Sleep(700 * time.Millisecond)
-		os.Exit(0)
+		s.exit(0)
 	}()
 }

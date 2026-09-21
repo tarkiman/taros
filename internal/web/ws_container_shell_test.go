@@ -531,3 +531,76 @@ func TestAStuckClientCannotHoldASlot(t *testing.T) {
 		t.Fatal("a client that never answers the close handshake held the only session slot")
 	}
 }
+
+func TestEveryDeliberateRestartGoesThroughTheInjectedExit(t *testing.T) {
+	// A restart requested from Settings must end the process via Deps.Exit — main
+	// uses that to mark the boot ledger "stopped cleanly" first. A bare os.Exit
+	// bypasses it and the ledger records a TarOS crash for every toggle.
+	r := newShellRig(t, nil)
+	calls := make(chan int, 8)
+	r.s.exit = func(code int) { calls <- code }
+
+	cfg := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(cfg, []byte("terminal:\n  enabled: false\n\ndiskAnalysis:\n  enabled: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.s.deps.ConfigPath = cfg
+
+	mux := http.NewServeMux()
+	withSession := func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, req *http.Request) {
+			ctx := context.WithValue(req.Context(), sessionCtxKey{}, &auth.Session{Username: "tester"})
+			h(w, req.WithContext(ctx))
+		}
+	}
+	mux.HandleFunc("POST /terminal", withSession(r.s.handleSettingsTerminal))
+	mux.HandleFunc("POST /disk", withSession(r.s.handleSettingsDiskAnalysis))
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	for _, tc := range []struct{ path, body string }{
+		{"/terminal", `{"enabled":true,"password":"correct-horse-1"}`},
+		{"/disk", `{"enabled":true}`},
+		{"/terminal", `{"enabled":false,"password":"correct-horse-1"}`},
+	} {
+		resp, err := http.Post(ts.URL+tc.path, "application/json", strings.NewReader(tc.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s → %d", tc.path, resp.StatusCode)
+		}
+		select {
+		case code := <-calls:
+			if code != 0 {
+				t.Fatalf("%s: exit code %d, want 0", tc.path, code)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s: the restart did not go through the injected Exit (a bare os.Exit would be counted as a crash)", tc.path)
+		}
+	}
+	// A rejected request (wrong password) must not restart at all.
+	resp, err := http.Post(ts.URL+"/terminal", "application/json", strings.NewReader(`{"enabled":true,"password":"nope"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	select {
+	case <-calls:
+		t.Fatal("restarted after a rejected password")
+	case <-time.After(1200 * time.Millisecond):
+	}
+}
+
+func TestNewServerUsesTheInjectedExit(t *testing.T) {
+	var got atomic.Int32
+	s := NewServer(Deps{Exit: func(c int) { got.Store(int32(c) + 100) }})
+	s.exit(3)
+	if got.Load() != 103 {
+		t.Fatal("Deps.Exit is ignored by NewServer")
+	}
+	if NewServer(Deps{}).exit == nil {
+		t.Fatal("no default exit")
+	}
+}

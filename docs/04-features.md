@@ -1314,6 +1314,13 @@ TarOS. Datanya dari `internal/bootlog` — file `bootLog.file` (default `/opt/ta
     = terkirim, atau aturan sedang mati (tidak retroaktif: menyalakannya nanti tidak menggali
     kejadian lama), atau menyerah. Hanya boot **tepat sebelum** boot sekarang yang dianggap
     berita; yang lebih lama adalah riwayat.
+- **Restart yang disengaja bukan crash**: toggle di Settings (Terminal, Disk Analysis, Port, Shell
+  Container) dan self-update me-restart servis lewat `os.Exit`, yang dulu melewati penanda "berhenti
+  bersih" sehingga tiap kali tercatat sebagai *TarOS crash* di kartu ini (ketahuan di instance asli:
+  1 "crash" yang sebenarnya toggle yang ditekan pengguna; direproduksi 3 restart → 3 crash). Semua
+  jalur keluar yang disengaja kini lewat `Deps.Exit`, yang menandai ledger bersih dulu; crash sungguhan
+  (`kill -9`) tetap terhitung (diuji dengan binary sungguhan sebelum/sesudah). Entri boot yang sudah
+  terlanjur menghitung "crash" palsu tidak dikoreksi mundur.
 - **Batas jujur**: penyebab pemutusan tidak bisa dipastikan dari dalam mesin — hanya kapan,
   seberapa sering, dan keadaan terakhirnya. Boot yang berakhir karena TarOS mati lama (dihentikan
   paksa dan tidak pernah jalan lagi sampai host reboot) juga terbaca "mati mendadak". Entri

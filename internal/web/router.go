@@ -38,6 +38,12 @@ type Deps struct {
 	// ContainerShellEnabled gates the container-shell WebSocket route
 	// (docs/04-features.md §4.15) — not registered at all when false, like the
 	// host terminal. ContainerShellIdle/Max bound a session (0 = defaults).
+	// Exit ends the process after a deliberate restart (a Settings toggle or a
+	// self-update; systemd brings it straight back). main sets it to first mark the
+	// boot ledger "stopped cleanly" — a bare os.Exit would be recorded as a TarOS
+	// crash. nil = os.Exit.
+	Exit func(code int)
+
 	ContainerShellEnabled bool
 	ContainerShellIdle    time.Duration
 	ContainerShellMax     int
@@ -157,11 +163,15 @@ type Server struct {
 	deps Deps
 
 	shellSessions atomic.Int32 // open container-shell sessions
-	exit          func(int)    // process exit after a restart-requiring settings change; os.Exit, replaced in tests
+	exit          func(int)    // deliberate process exit (see Deps.Exit)
 }
 
 func NewServer(deps Deps) *Server {
-	return &Server{deps: deps, exit: os.Exit}
+	exit := deps.Exit
+	if exit == nil {
+		exit = os.Exit
+	}
+	return &Server{deps: deps, exit: exit}
 }
 
 func (s *Server) Handler() http.Handler {

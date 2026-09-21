@@ -2138,6 +2138,16 @@ menunggu balasan close klien sampai 5 dtk sambil menahan slot sesi — klien mac
 batas sesi; (4) teks error runtime sempat ikut dilukis ke terminal. Pengujian container hanya
 memakai container tiruan; container asli tidak dimasuki.
 
+### Perbaikan: restart yang disengaja tidak lagi tercatat sebagai TarOS crash
+
+Ditemukan setelah rilis v0.39.0: pengguna menyalakan Shell Container di instance asli lewat Settings
+dan kartu Riwayat Boot menampilkan 1 "crash". Penyebabnya `os.Exit(0)` langsung di empat handler
+(toggle Terminal/Disk Analysis/Port dan self-update, plus toggle shell yang ikut pola itu) yang
+melewati penanda berhenti-bersih milik ledger. Diperbaiki lewat `Deps.Exit`; direproduksi dan
+diverifikasi dengan binary sungguhan (3 restart: 3 crash → 0; `kill -9` tetap 1 crash). Pelajaran:
+fitur yang menyentuh siklus hidup proses (ledger boot) harus diperiksa terhadap SEMUA jalur keluar,
+bukan hanya SIGTERM — jalur `os.Exit` toggle lama luput waktu ledger dibangun.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
