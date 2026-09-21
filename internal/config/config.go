@@ -28,6 +28,7 @@ type Config struct {
 	BootLog         BootLogConfig         `yaml:"bootLog"`
 	Wifi            WifiConfig            `yaml:"wifi"`
 	ContainerShell  ContainerShellConfig  `yaml:"containerShell"`
+	FileSharing     FileSharingConfig     `yaml:"fileSharing"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
@@ -204,6 +205,18 @@ type ContainerShellConfig struct {
 	MaxConcurrentSessions int  `yaml:"maxConcurrentSessions"`
 }
 
+// FileSharingConfig — see docs/04-features.md §4.16. File is where TarOS keeps
+// what it manages (accounts and shares; no passwords). AllowedRoots are the
+// only places a folder may be shared from — a share picker that accepted `/`
+// would be one click from publishing the whole machine. DeniedPaths are refused
+// even inside a root (application data, for instance). System locations (/etc,
+// /root, /var/lib…) can never be shared whatever is configured here.
+type FileSharingConfig struct {
+	File         string   `yaml:"file"`
+	AllowedRoots []string `yaml:"allowedRoots"`
+	DeniedPaths  []string `yaml:"deniedPaths"`
+}
+
 // WifiConfig — see docs/04-features.md §4.14. Device pins the adapter TarOS
 // scans/connects with ("" = auto: the connected one, else the first). A
 // configured adapter that doesn't exist is an error, never a silent fallback
@@ -277,7 +290,12 @@ func Default() Config {
 		FolderShortcuts: FolderShortcutsConfig{
 			SettingsFile: "./folder-shortcuts.yaml",
 		},
-		BootLog:        BootLogConfig{File: "./boots.yaml"},
+		BootLog: BootLogConfig{File: "./boots.yaml"},
+		FileSharing: FileSharingConfig{
+			File:         "./sharing.yaml",
+			AllowedRoots: []string{"/srv", "/mnt", "/media", "/data", "/DATA"},
+			DeniedPaths:  []string{"/DATA/AppData"}, // CasaOS keeps app data here
+		},
 		ContainerShell: ContainerShellConfig{Enabled: false, IdleTimeoutMin: 15, MaxConcurrentSessions: 2},
 	}
 }
@@ -314,6 +332,9 @@ func Load(path string) (Config, error) {
 	// instead of a relative path that resolves against the working directory.
 	if cfg.BootLog.File == Default().BootLog.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
 		cfg.BootLog.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "boots.yaml")
+	}
+	if cfg.FileSharing.File == Default().FileSharing.File && filepath.IsAbs(cfg.Dashboard.QuickLinksFile) {
+		cfg.FileSharing.File = filepath.Join(filepath.Dir(cfg.Dashboard.QuickLinksFile), "sharing.yaml")
 	}
 	return cfg, nil
 }

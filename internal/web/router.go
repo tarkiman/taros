@@ -14,6 +14,7 @@ import (
 	"github.com/tarkiman/taros/internal/foldershortcuts"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
+	"github.com/tarkiman/taros/internal/sharing"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/wifi"
@@ -137,6 +138,11 @@ type Deps struct {
 	// Linux — the endpoints then report unavailable.
 	Wifi *wifi.Client
 
+	// Sharing manages Samba and reports on FTP for the File Sharing page
+	// (internal/sharing, docs/04-features.md §4.16). nil off Linux — the
+	// endpoints then answer 503.
+	Sharing *sharing.Manager
+
 	// Notify holds Discord alert settings (webhook URL, CPU/RAM/temp
 	// thresholds+durations) — see internal/notify and
 	// docs/04-features.md §4.11. Same "mutated directly, no restart"
@@ -195,6 +201,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/monitoring-status", s.requireAuth(s.handleSystemMonitoringStatus))
 	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
 	mux.HandleFunc("GET /api/system/boots", s.requireAuth(s.handleSystemBoots))
+	mux.HandleFunc("GET /sharing", s.serveSPA)
+	mux.HandleFunc("GET /api/sharing/status", s.requireAuth(s.handleSharingStatus))
+	mux.HandleFunc("GET /api/sharing/folders", s.requireAuth(s.handleSharingFolders))
+	mux.HandleFunc("POST /api/sharing/smb/adopt", s.requireAuth(s.handleSharingAdopt))
+	mux.HandleFunc("POST /api/sharing/smb/unadopt", s.requireAuth(s.handleSharingUnadopt))
+	mux.HandleFunc("POST /api/sharing/smb/interfaces", s.requireAuth(s.handleSharingInterfaces))
+	mux.HandleFunc("POST /api/sharing/smb/service", s.requireAuth(s.handleSharingService))
+	mux.HandleFunc("POST /api/sharing/smb/shares", s.requireAuth(s.handleSharingShareSave))
+	mux.HandleFunc("POST /api/sharing/smb/shares/{name}/delete", s.requireAuth(s.handleSharingShareDelete))
+	mux.HandleFunc("POST /api/sharing/accounts", s.requireAuth(s.handleSharingAccountAdd))
+	mux.HandleFunc("POST /api/sharing/accounts/{name}/password", s.requireAuth(s.handleSharingAccountPassword))
+	mux.HandleFunc("POST /api/sharing/accounts/{name}/disabled", s.requireAuth(s.handleSharingAccountDisabled))
+	mux.HandleFunc("POST /api/sharing/accounts/{name}/delete", s.requireAuth(s.handleSharingAccountDelete))
 	mux.HandleFunc("GET /api/wifi/status", s.requireAuth(s.handleWifiStatus))
 	mux.HandleFunc("GET /api/wifi/networks", s.requireAuth(s.handleWifiNetworks))
 	mux.HandleFunc("POST /api/wifi/connect", s.requireAuth(s.handleWifiConnect))

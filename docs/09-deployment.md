@@ -367,6 +367,15 @@ bisa menulis `config.yaml` dan dijalankan systemd dengan `Restart=always` (sama 
 Terminal). Config lama tanpa section ini tidak menyalakan apa pun. Butuh akses ke Docker socket
 seperti fitur Docker lain; tidak ada beban saat tidak ada sesi terbuka.
 
+**Berbagi file (docs/04-features.md §4.16)**: section `fileSharing` di `config.yaml` (`file`,
+`allowedRoots`, `deniedPaths`; lihat `deploy/config.example.yaml`). Mengelola Samba butuh TarOS
+berjalan sebagai **root** dan paket Samba (`samba`; Alpine juga `samba-common-tools`) sudah terpasang —
+TarOS tidak memasangnya. Untuk user non-root halaman hanya menampilkan kondisi dan alasannya. Data yang
+dikelola (akun dan share, tanpa password) ada di `sharing.yaml` di folder yang sama dengan
+`quick-links.yaml`, 0600. Butuh `useradd`/`adduser`, `smbpasswd`, `testparm`; layanan dikendalikan
+lewat `systemctl` (di host tanpa systemd, mis. container, tombol layanan menjawab error yang jelas).
+Tidak ada pekerjaan latar: nol beban saat halaman tidak dibuka.
+
 ### Benchmark Pembanding: CasaOS
 
 TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM
