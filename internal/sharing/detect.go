@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -17,6 +18,8 @@ type Paths struct {
 	SmbConf     string
 	SambaDir    string // where TarOS's managed include files live
 	VsftpdConfs []string
+	VsftpdDir   string // where TarOS's managed vsftpd files live
+	PamDir      string
 	Passwd      string
 	SystemdRun  string // exists only when systemd is PID 1
 }
@@ -27,6 +30,8 @@ func DefaultPaths() Paths {
 		SmbConf:     "/etc/samba/smb.conf",
 		SambaDir:    "/etc/samba",
 		VsftpdConfs: []string{"/etc/vsftpd.conf", "/etc/vsftpd/vsftpd.conf"},
+		VsftpdDir:   "/etc/vsftpd",
+		PamDir:      "/etc/pam.d",
 		Passwd:      "/etc/passwd",
 		SystemdRun:  "/run/systemd/system",
 	}
@@ -91,6 +96,12 @@ type FTPStatus struct {
 	LoginUsers []string    `json:"loginUsers,omitempty"`
 	Listeners  []Listener  `json:"listeners"`
 	Install    InstallHint `json:"install"`
+	// Managed: TarOS's marker block is in vsftpd.conf.
+	Managed bool `json:"managed"`
+	// CanManage / ManageBlocked: "not_installed", "not_root", "no_tools", "no_config",
+	// "no_pam", "other_server" (another FTP daemon owns port 21), "chroot_custom".
+	CanManage     bool   `json:"canManage"`
+	ManageBlocked string `json:"manageBlocked,omitempty"`
 }
 
 // FTPConfig: the vsftpd settings that decide who can do what, and how safely.
@@ -104,6 +115,8 @@ type FTPConfig struct {
 	Chroot       bool   `json:"chroot"`
 	UserListMode string `json:"userListMode,omitempty"` // "", "allow", "deny"
 	PasvRange    string `json:"pasvRange,omitempty"`
+	// AccountsOnly: an allow-list that is TarOS's own — device users cannot log in.
+	AccountsOnly bool `json:"accountsOnly"`
 }
 
 type Firewall struct {
@@ -190,6 +203,12 @@ func (d *Detector) unitState(ctx context.Context, unit string) (active, enabled 
 func (d *Detector) SMB(ctx context.Context) SMBStatus {
 	st := Status{Root: d.IsRoot(), OS: DetectDistro(d.Paths.OSRelease), Systemd: d.Exists(d.Paths.SystemdRun)}
 	return d.detectSMB(ctx, st, nil)
+}
+
+// FTP detects just vsftpd (used before every change to see whether TarOS may act).
+func (d *Detector) FTP(ctx context.Context) FTPStatus {
+	st := Status{Root: d.IsRoot(), OS: DetectDistro(d.Paths.OSRelease), Systemd: d.Exists(d.Paths.SystemdRun)}
+	return d.detectFTP(ctx, st, d.listeners(ctx))
 }
 
 // Detect inspects the machine. It never changes anything.
@@ -403,13 +422,49 @@ func (d *Detector) detectFTP(ctx context.Context, st Status, all []Listener) FTP
 		}
 	}
 	f.LoginUsers = d.loginUsers()
+	if f.ConfigPath != "" {
+		data, _ := os.ReadFile(f.ConfigPath)
+		f.Managed = hasFTPBlock(string(data))
+		f.Config.AccountsOnly = f.Managed && isAccountsOnly(ParseVsftpd(string(data)), d.Paths.VsftpdDir)
+		if f.Config.AccountsOnly || !f.Config.LocalLogin {
+			f.LoginUsers = []string{} // nobody outside TarOS's accounts can get in
+		}
+		f.ManageBlocked = d.ftpBlocked(st, f, ParseVsftpd(string(data)))
+	} else {
+		f.ManageBlocked = "no_config"
+	}
+	f.CanManage = f.ManageBlocked == ""
 	return f
+}
+
+// ftpBlocked says why TarOS must not touch this vsftpd ("" = it may).
+func (d *Detector) ftpBlocked(st Status, f FTPStatus, eff map[string]string) string {
+	switch {
+	case !st.Root:
+		return "not_root"
+	case d.find("chpasswd") == "" || d.find("passwd") == "" || (d.find("useradd") == "" && d.find("adduser") == ""):
+		return "no_tools"
+	case !d.Exists(filepath.Join(d.Paths.PamDir, "vsftpd")):
+		return "no_pam"
+	}
+	// Someone else's daemon already answers on port 21.
+	for _, l := range f.Listeners {
+		if l.Process != "" && !strings.Contains(l.Process, "vsftpd") {
+			return "other_server"
+		}
+	}
+	// chroot_local_user=NO with a chroot list of the admin's own: TarOS accounts would
+	// need to be in *their* file to be jailed, and TarOS does not edit files it doesn't own.
+	if !isYes(eff["chroot_local_user"]) && isYes(eff["chroot_list_enable"]) && !f.Managed {
+		return "chroot_custom"
+	}
+	return ""
 }
 
 func ftpConfigFrom(m map[string]string) FTPConfig {
 	c := FTPConfig{
 		Anonymous: isYes(m["anonymous_enable"]), LocalLogin: isYes(m["local_enable"]), Write: isYes(m["write_enable"]),
-		TLS: isYes(m["ssl_enable"]), ForceTLS: isYes(m["force_local_logins_ssl"]) || isYes(m["force_local_data_ssl"]),
+		TLS: isYes(m["ssl_enable"]), ForceTLS: isYes(m["ssl_enable"]) && (isYes(m["force_local_logins_ssl"]) || isYes(m["force_local_data_ssl"])),
 		Chroot: isYes(m["chroot_local_user"]),
 	}
 	c.AnonWrite = c.Anonymous && (isYes(m["anon_upload_enable"]) || isYes(m["anon_mkdir_write_enable"]) || isYes(m["anon_other_write_enable"]))

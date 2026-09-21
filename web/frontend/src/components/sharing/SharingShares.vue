@@ -3,8 +3,9 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NCard, NInput, NModal, NSelect, NSwitch, NTag, useMessage } from 'naive-ui'
 import { ApiError } from '../../api/client'
-import { sharingApi, type Folder, type Share, type SharingResponse } from '../../api/sharing'
+import { sharingApi, type Share, type SharingResponse } from '../../api/sharing'
 import { currentPassword, noAutofill } from '../../utils/inputProps'
+import FolderPicker from './FolderPicker.vue'
 import PasswordConfirmModal from './PasswordConfirmModal.vue'
 
 // Folders tab: the shares TarOS manages (create / edit / delete) plus, read-only,
@@ -42,7 +43,6 @@ function openEdit(s: Share) {
 function begin(name: string) {
   error.value = ''
   formPw.value = ''
-  picking.value = false
   advanced.value = !!form.value.runAs
   editing.value = name
 }
@@ -86,34 +86,9 @@ async function save() {
   }
 }
 
-// ---- folder picker -------------------------------------------------------
-const picking = ref(false)
-const pickPath = ref('')
-const pickFolders = ref<Folder[]>([])
-const pickError = ref('')
-async function browse(path: string) {
-  pickError.value = ''
-  try {
-    pickFolders.value = (await sharingApi.folders(path)).folders
-    pickPath.value = path
-  } catch (e) {
-    pickError.value = e instanceof ApiError ? e.message : t('sharing.failed')
-  }
-}
-async function startPick() {
-  picking.value = true
-  const start = form.value.path.trim()
-  await browse(start && props.data.roots.some((r) => start === r || start.startsWith(r + '/')) ? start : '')
-}
-function parentOf(p: string): string {
-  const i = p.lastIndexOf('/')
-  const up = i <= 0 ? '' : p.slice(0, i)
-  return props.data.roots.some((r) => r === p) ? '' : up
-}
-function usePicked() {
-  form.value.path = pickPath.value
-  if (!form.value.name.trim()) form.value.name = pickPath.value.split('/').filter(Boolean).pop() ?? ''
-  picking.value = false
+// A picked folder names the share when it has no name yet.
+function fillName(path: string) {
+  if (!form.value.name.trim()) form.value.name = path.split('/').filter(Boolean).pop() ?? ''
 }
 
 // ---- delete --------------------------------------------------------------
@@ -197,25 +172,7 @@ const accessText = (s: Share) => s.access.map((a) => `${a.user} (${a.mode === 'r
       </div>
       <div class="field">
         <label>{{ t('sharing.share.folder') }}</label>
-        <div class="pathrow">
-          <NInput v-model:value="form.path" size="small" :input-props="noAutofill('taros-share-path')" placeholder="/srv/…" />
-          <NButton size="small" @click="startPick">{{ t('sharing.share.browse') }}</NButton>
-        </div>
-        <div v-if="picking" class="picker">
-          <div class="pickhead">
-            <span class="mono">{{ pickPath || t('sharing.share.roots') }}</span>
-            <span class="spacer" />
-            <NButton v-if="pickPath" size="tiny" @click="browse(parentOf(pickPath))">↑</NButton>
-            <NButton v-if="pickPath" size="tiny" type="primary" @click="usePicked">{{ t('sharing.share.useFolder') }}</NButton>
-            <NButton size="tiny" quaternary @click="picking = false">{{ t('common.close') }}</NButton>
-          </div>
-          <p v-if="pickError" class="err small">{{ pickError }}</p>
-          <p v-else-if="pickFolders.length === 0" class="muted small">{{ t('sharing.share.noSubfolders') }}</p>
-          <ul v-else class="folders">
-            <li v-for="f in pickFolders" :key="f.path" @click="browse(f.path)">📁 {{ f.name }}</li>
-          </ul>
-        </div>
-        <p class="muted small">{{ t('sharing.share.folderHint', { roots: data.roots.join(', ') }) }}</p>
+        <FolderPicker v-model="form.path" :roots="data.roots" name="taros-share-path" @picked="fillName" />
       </div>
       <div class="field">
         <label>{{ t('sharing.share.comment') }}</label>
@@ -276,13 +233,6 @@ const accessText = (s: Share) => s.access.map((a) => `${a.user} (${a.mode === 'r
 .field { margin-bottom: 12px; }
 .field label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; }
 .field.inline { display: flex; align-items: center; gap: 8px; }
-.pathrow { display: flex; gap: 8px; }
-.picker { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
-.pickhead { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
-.spacer { flex: 1; }
-.folders { list-style: none; margin: 0; padding: 0; max-height: 200px; overflow: auto; }
-.folders li { padding: 5px 6px; cursor: pointer; border-radius: 4px; font-size: 0.88rem; }
-.folders li:hover { background: var(--hover, rgba(128, 128, 128, 0.12)); }
 .accessrow { display: flex; gap: 8px; margin-bottom: 6px; align-items: center; }
 .footer { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

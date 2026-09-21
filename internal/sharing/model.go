@@ -22,6 +22,31 @@ type Account struct {
 	SMB       bool      `yaml:"smb" json:"smb"` // can log in over SMB
 	Disabled  bool      `yaml:"disabled,omitempty" json:"disabled"`
 	CreatedAt time.Time `yaml:"createdAt" json:"createdAt"`
+	// FTP: nil until the account has been given a folder over FTP.
+	FTP *FTPAccess `yaml:"ftp,omitempty" json:"ftp"`
+}
+
+// FTPAccess is what an account sees over FTP: one folder (its chroot), read-only
+// or read/write. Unlike SMB shares an FTP login has exactly one root.
+type FTPAccess struct {
+	Path  string `yaml:"path" json:"path"`
+	Mode  string `yaml:"mode" json:"mode"` // "ro" | "rw"
+	RunAs string `yaml:"runAs,omitempty" json:"runAs"`
+}
+
+// FTPSettings are the vsftpd options TarOS owns once it manages FTP. Zero values
+// mean "leave what is there".
+type FTPSettings struct {
+	// TLS: "" leave as found, "optional" (FTPS offered, plain still works),
+	// "required" (plain logins and data refused).
+	TLS string `yaml:"tls,omitempty" json:"tls"`
+	// OnlyAccounts: only TarOS accounts may log in over FTP (device users cannot).
+	OnlyAccounts bool `yaml:"onlyAccounts,omitempty" json:"onlyAccounts"`
+	// NoAnonymous forces anonymous_enable=NO.
+	NoAnonymous bool `yaml:"noAnonymous,omitempty" json:"noAnonymous"`
+	// PasvMin/PasvMax: passive-mode port range (0 = leave).
+	PasvMin int `yaml:"pasvMin,omitempty" json:"pasvMin"`
+	PasvMax int `yaml:"pasvMax,omitempty" json:"pasvMax"`
 }
 
 // Access grants one account access to one share.
@@ -45,16 +70,23 @@ type Share struct {
 // Model is everything TarOS manages. It is the source of truth: the Samba
 // files and the system users are derived from it.
 type Model struct {
-	Accounts   []Account `yaml:"accounts" json:"accounts"`
-	Shares     []Share   `yaml:"shares" json:"shares"`
-	Interfaces []string  `yaml:"interfaces,omitempty" json:"interfaces"` // bind SMB to these (empty = unrestricted)
-	Workgroup  string    `yaml:"workgroup,omitempty" json:"workgroup"`
+	Accounts   []Account   `yaml:"accounts" json:"accounts"`
+	Shares     []Share     `yaml:"shares" json:"shares"`
+	Interfaces []string    `yaml:"interfaces,omitempty" json:"interfaces"` // bind SMB to these (empty = unrestricted)
+	Workgroup  string      `yaml:"workgroup,omitempty" json:"workgroup"`
+	FTP        FTPSettings `yaml:"ftp,omitempty" json:"ftp"`
 }
 
 func (m Model) clone() Model {
 	// Non-nil slices throughout: this is serialised to the UI, where [] and null differ.
-	c := Model{Workgroup: m.Workgroup, Interfaces: append([]string{}, m.Interfaces...), Shares: []Share{}}
+	c := Model{Workgroup: m.Workgroup, FTP: m.FTP, Interfaces: append([]string{}, m.Interfaces...), Shares: []Share{}}
 	c.Accounts = append([]Account{}, m.Accounts...)
+	for i, a := range c.Accounts {
+		if a.FTP != nil {
+			f := *a.FTP
+			c.Accounts[i].FTP = &f
+		}
+	}
 	for _, s := range m.Shares {
 		s.Access = append([]Access{}, s.Access...)
 		c.Shares = append(c.Shares, s)
@@ -157,6 +189,10 @@ var (
 	ErrNotManaged     = errors.New("sharing: TarOS is not managing Samba yet")
 	ErrCannotManage   = errors.New("sharing: this Samba cannot be managed here")
 	ErrComment        = errors.New("sharing: invalid comment")
+	ErrFTPNotManaged  = errors.New("sharing: TarOS is not managing FTP yet")
+	ErrFTPSettings    = errors.New("sharing: invalid FTP settings")
+	ErrFTPNoAccounts  = errors.New("sharing: no account has FTP access, so \"only TarOS accounts\" would lock everybody out")
+	ErrNoLogin        = errors.New("sharing: the account has no login to change (no SMB and no FTP access)")
 )
 
 const minPasswordLen = 8

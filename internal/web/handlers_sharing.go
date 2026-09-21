@@ -51,9 +51,20 @@ func sharingErr(w http.ResponseWriter, err error) {
 	code, status := apierr.SharingFailed, http.StatusInternalServerError
 	params := map[string]any{}
 	var ae *sharing.ApplyError
+	var fe *sharing.FTPApplyError
 	switch {
 	case errors.As(err, &ae):
 		code, status, params["detail"] = apierr.SharingApplyRejected, http.StatusUnprocessableEntity, ae.Output
+	case errors.As(err, &fe):
+		code, status, params["detail"] = apierr.SharingFTPApplyRejected, http.StatusUnprocessableEntity, fe.Output
+	case errors.Is(err, sharing.ErrFTPNotManaged):
+		code, status = apierr.SharingFTPNotManaged, http.StatusConflict
+	case errors.Is(err, sharing.ErrFTPSettings):
+		code, status = apierr.SharingFTPSettings, http.StatusBadRequest
+	case errors.Is(err, sharing.ErrFTPNoAccounts):
+		code, status = apierr.SharingFTPNoAccounts, http.StatusConflict
+	case errors.Is(err, sharing.ErrNoLogin):
+		code, status = apierr.SharingNoLogin, http.StatusConflict
 	case errors.Is(err, sharing.ErrAccountName):
 		code, status = apierr.SharingAccountInvalid, http.StatusBadRequest
 	case errors.Is(err, sharing.ErrAccountExists):
@@ -331,5 +342,102 @@ func (s *Server) handleSharingAccountDelete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	slog.Info("sharing: akun dihapus", "account", name, "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ---- FTP ------------------------------------------------------------------------
+
+func (s *Server) handleSharingFTPAdopt(w http.ResponseWriter, r *http.Request) {
+	var req sharingPasswordReq
+	if !s.requireSharing(w) || !decode(w, r, &req) || !s.confirmPassword(w, r, req.Password) {
+		return
+	}
+	if err := s.deps.Sharing.FTPAdopt(r.Context()); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: pengelolaan FTP diambil alih", "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleSharingFTPUnadopt(w http.ResponseWriter, r *http.Request) {
+	var req sharingPasswordReq
+	if !s.requireSharing(w) || !decode(w, r, &req) || !s.confirmPassword(w, r, req.Password) {
+		return
+	}
+	if err := s.deps.Sharing.FTPUnadopt(r.Context()); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: pengelolaan FTP dilepas", "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type sharingFTPSettingsReq struct {
+	sharingPasswordReq
+	Settings sharing.FTPSettings `json:"settings"`
+}
+
+func (s *Server) handleSharingFTPSettings(w http.ResponseWriter, r *http.Request) {
+	var req sharingFTPSettingsReq
+	if !s.requireSharing(w) || !decode(w, r, &req) || !s.confirmPassword(w, r, req.Password) {
+		return
+	}
+	if err := s.deps.Sharing.SetFTPSettings(r.Context(), req.Settings); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: pengaturan FTP diubah", "tls", req.Settings.TLS, "onlyAccounts", req.Settings.OnlyAccounts,
+		"noAnonymous", req.Settings.NoAnonymous, "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleSharingFTPService(w http.ResponseWriter, r *http.Request) {
+	var req sharingServiceReq
+	if !s.requireSharing(w) || !decode(w, r, &req) {
+		return
+	}
+	if (req.Action == "start" || req.Action == "enable" || req.Action == "restart") && !s.confirmPassword(w, r, req.Password) {
+		return
+	}
+	if err := s.deps.Sharing.ServiceOf(r.Context(), "ftp", req.Action); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: layanan FTP", "action", req.Action, "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type sharingFTPAccessReq struct {
+	sharingPasswordReq
+	Access          sharing.FTPAccess `json:"access"`
+	AccountPassword string            `json:"accountPassword"` // required the first time
+}
+
+func (s *Server) handleSharingFTPAccess(w http.ResponseWriter, r *http.Request) {
+	var req sharingFTPAccessReq
+	if !s.requireSharing(w) || !decode(w, r, &req) || !s.confirmPassword(w, r, req.Password) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.deps.Sharing.SetFTPAccess(r.Context(), name, req.Access, req.AccountPassword); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: akses FTP akun diatur", "account", name, "path", req.Access.Path, "mode", req.Access.Mode, "by", sessionFromContext(r.Context()).Username)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleSharingFTPClear takes FTP access away — that only reduces exposure, so no password is asked.
+func (s *Server) handleSharingFTPClear(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSharing(w) {
+		return
+	}
+	name := r.PathValue("name")
+	if err := s.deps.Sharing.ClearFTPAccess(r.Context(), name); err != nil {
+		sharingErr(w, err)
+		return
+	}
+	slog.Info("sharing: akses FTP akun dicabut", "account", name, "by", sessionFromContext(r.Context()).Username)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

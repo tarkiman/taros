@@ -225,6 +225,22 @@ tersisa dan diakui: mengelola Samba butuh TarOS berjalan sebagai **root** (menul
 membuat user sistem) — perluasan hak akses yang sama dengan fitur Wi-Fi; siapa pun yang memegang akun
 dashboard dapat mempublikasikan folder di dalam akar yang diizinkan.
 
+### Berbagi file (FTP)
+
+Semua pagar SMB di atas berlaku (password dashboard lagi untuk tiap perubahan, tidak ada password di
+argumen/log/respons, akun tanpa login, folder dibatasi akar yang diizinkan dan tak bisa keluar dari
+lokasi sistem). Tambahan khusus FTP: akun terkurung di **satu folder** (`local_root` + chroot; diuji
+tidak bisa keluar lewat `..`, path absolut, atau `%2e%2e`); file dibuat sebagai pemilik folder
+(`guest_username`), izin tidak pernah diubah; password Linux di balik FTP hanya ada untuk akun berakses
+FTP (dikunci saat dinonaktifkan/dicabut/unadopt); layanan PAM sendiri diturunkan dari PAM distro dan
+hanya melonggarkan `pam_shells` untuk grup `taros-share` — user sistem `nologin` lain tetap ditolak
+(diuji); konfigurasi yang tak mau di-start vsftpd tidak pernah menggantikan yang live; FTPS memakai
+sertifikat self-signed yang kuncinya 0600 di `/etc/vsftpd/`. **Risiko yang tersisa dan diakui**: FTP
+biasa mengirim password sebagai teks biasa — karena itu ada mode FTPS **Wajib** dan temuan peringatan
+selama tidak diaktifkan; mengelola vsftpd butuh TarOS berjalan sebagai **root**; mengaktifkan
+"hanya akun TarOS" mengunci user perangkat (UI menampilkan siapa sebelum diterapkan); restart vsftpd
+memutus transfer yang berjalan.
+
 ### Riwayat boot
 
 `boots.yaml` (docs/04-features.md §4.13) berisi `boot_id` kernel, waktu, suhu, dan persentase

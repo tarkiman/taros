@@ -62,6 +62,10 @@ export interface SMBStatus {
 
 export interface FTPStatus {
   installed: boolean
+  managed: boolean
+  canManage: boolean
+  manageBlocked?: 'not_installed' | 'not_root' | 'no_tools' | 'no_config' | 'no_pam' | 'other_server' | 'chroot_custom' | ''
+  binary?: string
   unit?: string
   active: boolean
   enabled: boolean
@@ -77,6 +81,7 @@ export interface FTPStatus {
     chroot: boolean
     userListMode?: string
     pasvRange?: string
+    accountsOnly: boolean
   }
   loginUsers?: string[]
   listeners: Listener[]
@@ -99,11 +104,26 @@ export interface SharingStatus {
   findings: Finding[]
 }
 
+export interface FTPAccess {
+  path: string
+  mode: 'ro' | 'rw'
+  runAs: string
+}
+
+export interface FTPSettings {
+  tls: '' | 'optional' | 'required'
+  onlyAccounts: boolean
+  noAnonymous: boolean
+  pasvMin: number
+  pasvMax: number
+}
+
 export interface Account {
   name: string
   smb: boolean
   disabled: boolean
   createdAt: string
+  ftp: FTPAccess | null
 }
 
 export interface Access {
@@ -125,6 +145,7 @@ export interface SharingModel {
   shares: Share[]
   interfaces: string[]
   workgroup: string
+  ftp: FTPSettings
 }
 
 export interface SharingResponse {
@@ -162,5 +183,12 @@ export const sharingApi = {
     api.post<{ ok: boolean }>(`${p}/accounts/${enc(name)}/password`, { accountPassword, password }),
   setAccountDisabled: (name: string, disabled: boolean, password: string) =>
     api.post<{ ok: boolean }>(`${p}/accounts/${enc(name)}/disabled`, { disabled, password }),
+  ftpAdopt: (password: string) => api.post<{ ok: boolean }>(`${p}/ftp/adopt`, { password }),
+  ftpUnadopt: (password: string) => api.post<{ ok: boolean }>(`${p}/ftp/unadopt`, { password }),
+  ftpSettings: (settings: FTPSettings, password: string) => api.post<{ ok: boolean }>(`${p}/ftp/settings`, { settings, password }),
+  ftpService: (action: ServiceAction, password: string) => api.post<{ ok: boolean }>(`${p}/ftp/service`, { action, password }),
+  setFtpAccess: (name: string, access: FTPAccess, accountPassword: string, password: string) =>
+    api.post<{ ok: boolean }>(`${p}/accounts/${enc(name)}/ftp`, { access, accountPassword, password }),
+  clearFtpAccess: (name: string) => api.post<{ ok: boolean }>(`${p}/accounts/${enc(name)}/ftp/clear`, {}),
   deleteAccount: (name: string, password: string) => api.post<{ ok: boolean }>(`${p}/accounts/${enc(name)}/delete`, { password }),
 }

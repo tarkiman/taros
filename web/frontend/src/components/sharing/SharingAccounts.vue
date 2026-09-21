@@ -14,7 +14,11 @@ const { t } = useI18n()
 const message = useMessage()
 
 const smb = computed(() => props.data.status.smb)
-const enabled = computed(() => smb.value.installed && smb.value.canManage && smb.value.managed)
+const ftp = computed(() => props.data.status.ftp)
+// Accounts serve SMB and FTP: they can be managed once TarOS manages either.
+const enabled = computed(
+  () => (smb.value.installed && smb.value.canManage && smb.value.managed) || (ftp.value.installed && ftp.value.canManage && ftp.value.managed),
+)
 const usedBy = (name: string) => props.data.model.shares.filter((s) => s.access.some((a) => a.user === name)).map((s) => s.name)
 
 type Dlg = { kind: 'add' } | { kind: 'password'; acc: Account } | { kind: 'delete'; acc: Account } | { kind: 'enable'; acc: Account }
@@ -85,7 +89,7 @@ const title = computed(() => {
 
 <template>
   <div class="stack">
-    <NAlert v-if="!enabled" type="info" :show-icon="false">{{ t('sharing.needManaged') }}</NAlert>
+    <NAlert v-if="!enabled" type="info" :show-icon="false">{{ t('sharing.needAnyManaged') }}</NAlert>
     <NCard size="small" :title="t('sharing.account.title')">
       <template #header-extra>
         <NButton size="small" type="primary" :disabled="!enabled" @click="open({ kind: 'add' })">{{ t('sharing.account.add') }}</NButton>
@@ -98,7 +102,8 @@ const title = computed(() => {
             <b>{{ a.name }}</b>
             <span class="muted small">
               <NTag v-if="a.disabled" size="small" :bordered="false">{{ t('sharing.account.disabled') }}</NTag>
-              {{ usedBy(a.name).length ? t('sharing.account.usedBy', { shares: usedBy(a.name).join(', ') }) : t('sharing.account.unused') }}
+              <NTag v-if="a.ftp" size="small" :bordered="false" type="info">FTP · {{ a.ftp.path }}</NTag>
+              {{ usedBy(a.name).length ? t('sharing.account.usedBy', { shares: usedBy(a.name).join(', ') }) : a.ftp ? '' : t('sharing.account.unused') }}
             </span>
           </div>
           <div class="btns">

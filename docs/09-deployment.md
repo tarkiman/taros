@@ -374,6 +374,14 @@ TarOS tidak memasangnya. Untuk user non-root halaman hanya menampilkan kondisi d
 dikelola (akun dan share, tanpa password) ada di `sharing.yaml` di folder yang sama dengan
 `quick-links.yaml`, 0600. Butuh `useradd`/`adduser`, `smbpasswd`, `testparm`; layanan dikendalikan
 lewat `systemctl` (di host tanpa systemd, mis. container, tombol layanan menjawab error yang jelas).
+Untuk **FTP** TarOS mengelola **vsftpd** saja: butuh `vsftpd`, `chpasswd`, `passwd`,
+`useradd`/`adduser`, dan layanan PAM `/etc/pam.d/vsftpd` (Debian/Ubuntu/Fedora/RHEL/SUSE/Arch; Alpine
+bawaan tidak punya PAM untuk vsftpd sehingga hanya dilaporkan). Berkasnya di `/etc/vsftpd/` (dibuat bila
+belum ada), konfigurasi di `vsftpd.conf` (`/etc/vsftpd.conf` atau `/etc/vsftpd/vsftpd.conf`, dengan
+salinan `.taros-original`/`.taros-bak`). vsftpd tidak punya reload, jadi menerapkan perubahan me-restart
+layanan bila berjalan (via `systemctl`; tanpa systemd perubahan berlaku pada start berikutnya). Port
+pasif (bila diatur) harus dibuka di firewall/router oleh pemilik host.
+
 Tidak ada pekerjaan latar: nol beban saat halaman tidak dibuka.
 
 ### Benchmark Pembanding: CasaOS
