@@ -21,6 +21,7 @@ import (
 
 	"github.com/tarkiman/taros/internal/appmeta"
 	"github.com/tarkiman/taros/internal/auth"
+	"github.com/tarkiman/taros/internal/bootlog"
 	"github.com/tarkiman/taros/internal/collector"
 	"github.com/tarkiman/taros/internal/config"
 	"github.com/tarkiman/taros/internal/docker"
@@ -155,6 +156,33 @@ func runServer(args []string) {
 		go notifyMonitor.Run(ctx, 10*time.Second)
 	}
 
+	// Boot ledger: one heartbeat a minute, plus a clean-stop marker on
+	// graceful shutdown (see below). The next start reads the *absence* of
+	// that marker as "the host lost power". Same non-critical, don't-block-
+	// startup treatment as the stores above. Linux only (/proc, /sys).
+	var bootLedger *bootlog.Ledger
+	if systemMonitoringSupported {
+		ledger, start, err := bootlog.Open(cfg.BootLog.File, bootSources{metrics: metricsStore})
+		if err != nil {
+			slog.Warn("gagal membuka riwayat boot, fitur dimatikan", "path", cfg.BootLog.File, "err", err)
+		} else {
+			bootLedger = ledger
+			go ledger.Run(ctx.Done(), time.Minute)
+			if start.Crashed {
+				slog.Warn("TarOS sebelumnya berhenti tanpa shutdown bersih (crash/kill) di boot yang sama")
+			}
+			if p := start.PowerLoss; p != nil {
+				slog.Warn("boot sebelumnya berakhir tanpa shutdown bersih — kemungkinan listrik terputus", "bootedAt", p.BootedAt, "lastSeen", p.LastSeen)
+				go notify.WatchPowerLoss(ctx, notifySettings, notify.PowerLossInfo{
+					BootID: p.BootID, BootedAt: p.BootedAt, LastSeen: p.LastSeen, ClockSynced: p.ClockSynced,
+					HasMetrics: p.Last.HasMetrics, CPUTempC: p.Last.CPUTempC, NVMeTempC: p.Last.NVMeTempC, HasNVMe: p.Last.HasNVMe,
+					Undervoltage: p.Last.Undervoltage, HasUndervolt: p.Last.HasUndervolt,
+					CPUPercent: p.Last.CPUPercent, MemPercent: p.Last.MemPercent,
+				}, func() { ledger.MarkNotified(p.BootID) })
+			}
+		}
+	}
+
 	// Same "non-critical, don't block startup" reasoning as quickLinks
 	// above.
 	folderShortcuts, err := foldershortcuts.Load(cfg.FolderShortcuts.SettingsFile)
@@ -184,6 +212,7 @@ func runServer(args []string) {
 		AppMeta:                   appMeta,
 		Notify:                    notifySettings,
 		FolderShortcuts:           folderShortcuts,
+		BootLog:                   bootLedger,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {
@@ -231,6 +260,34 @@ func runServer(args []string) {
 		slog.Error("server stopped", "err", err)
 		os.Exit(1)
 	}
+	// Reached only via the signal path above (SIGTERM from systemd on a
+	// normal stop/reboot/shutdown, or Ctrl-C): record it as deliberate. It
+	// must happen here, synchronously — the process exits as soon as main
+	// returns. A power cut, kill -9 or crash never gets here, which is the
+	// whole point.
+	if bootLedger != nil {
+		bootLedger.MarkClean()
+	}
+}
+
+// bootSources adapts the real machine (bootlog.OSSources) plus TarOS's own
+// latest metrics to bootlog.Sources.
+type bootSources struct {
+	bootlog.OSSources
+	metrics *store.Store
+}
+
+func (b bootSources) Metrics() (cpu, mem, cpuTemp float64, ok bool) {
+	snap := b.metrics.Latest()
+	if snap == nil {
+		return 0, 0, 0, false
+	}
+	for _, t := range snap.Temps {
+		if t.Celsius > cpuTemp {
+			cpuTemp = t.Celsius
+		}
+	}
+	return snap.CPU.TotalPercent, snap.Mem.UsedPercent, cpuTemp, true
 }
 
 func runSetup(args []string) {

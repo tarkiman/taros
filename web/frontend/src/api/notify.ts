@@ -24,6 +24,7 @@ export interface NotifySettings {
   mem: MetricRule
   temp: MetricRule
   containers: ContainerRules
+  boot: { powerLoss: boolean }
 }
 
 export const notifyApi = {

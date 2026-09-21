@@ -103,3 +103,10 @@ folderShortcuts:
   # "Shortcut Folder") — bukan secret (cuma path), jadi 0644 seperti
   # quickLinksFile, tidak seperti notify.yaml di atas.
   settingsFile: "/opt/taros/folder-shortcuts.yaml"
+
+bootLog:
+  # Riwayat boot (lihat docs/04-features.md §4.13): satu entri per boot host,
+  # ditulis ulang tiap menit oleh heartbeat. Ketiadaan tanda "shutdown bersih"
+  # pada boot berikutnya = Pi mati mendadak. Di /opt/taros karena direktori
+  # itu sudah ditulis user servis, sama alasannya dengan quickLinksFile.
+  file: "/opt/taros/boots.yaml"

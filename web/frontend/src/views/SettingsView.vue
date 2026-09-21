@@ -5,6 +5,7 @@ import { NCard, NSpace, NSwitch, NInput, NInputNumber, NSlider, NButton, NAlert,
 import { TriangleAlert } from '@lucide/vue'
 import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
+import BootHistoryCard from '../components/BootHistoryCard.vue'
 import { terminalApi } from '../api/terminal'
 import { diskAnalysisApi } from '../api/diskAnalysis'
 import { settingsApi } from '../api/settings'
@@ -441,6 +442,7 @@ const notifyForm = ref<NotifySettings>({
   mem: { enabled: false, thresholdPct: 90, durationMin: 5 },
   temp: { enabled: false, thresholdC: 80, durationMin: 5 },
   containers: { enabled: false, restartLoop: true, unhealthy: true, crashed: true, graceMin: 3, includeLogs: false },
+  boot: { powerLoss: false },
 })
 
 async function loadNotifySettings() {
@@ -908,6 +910,14 @@ async function sendNotifyTest() {
               <p class="text-muted">{{ t('settings.notify.containers.limits') }}</p>
             </div>
 
+            <div class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.boot.label') }}</span>
+                <NSwitch v-model:value="notifyForm.boot.powerLoss" size="small" />
+              </NSpace>
+              <p class="text-muted">{{ t('settings.notify.boot.desc') }}</p>
+            </div>
+
             <NSpace justify="end">
               <NButton type="primary" size="small" :loading="notifySaving" @click="saveNotifySettings">
                 {{ t('settings.notify.save') }}
@@ -915,6 +925,8 @@ async function sendNotifyTest() {
             </NSpace>
           </NSpace>
         </NCard>
+
+        <BootHistoryCard />
       </template>
     </NCard>
   </AppShell>
