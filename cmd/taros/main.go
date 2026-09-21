@@ -234,6 +234,12 @@ func runServer(args []string) {
 		deps.Docker = dockerClient
 		deps.DockerWatcher = dockerWatcher
 		deps.Lifecycle = docker.NewLifecycle(dockerClient, func() { dockerWatcher.RefreshNow(ctx) })
+		if cfg.ContainerShell.Enabled {
+			deps.ContainerShellEnabled = true
+			deps.ContainerShellIdle = time.Duration(cfg.ContainerShell.IdleTimeoutMin) * time.Minute
+			deps.ContainerShellMax = cfg.ContainerShell.MaxConcurrentSessions
+			slog.Warn("shell container AKTIF — akun dashboard dapat menjalankan perintah di dalam container mana pun (setara root di host untuk container ber-docker.sock/host-mount)")
+		}
 		// Container-health alerts (crash loops, unhealthy, unexpected exits):
 		// idle unless enabled in Settings > Notifications, so this costs one
 		// settings read per tick by default.

@@ -181,3 +181,66 @@ func SetServerListen(path string, listen string) error {
 
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
 }
+
+// SetContainerShellEnabled flips containerShell.enabled — same in-place
+// single-line edit as SetTerminalEnabled (comments in a file seeded from
+// deploy/config.example.yaml survive). Only the `enabled:` line *inside the
+// containerShell: block* is touched: docker.enabled and every other section's
+// `enabled:` must stay exactly as they are.
+func SetContainerShellEnabled(path string, enabled bool) error {
+	return setSectionEnabled(path, "containerShell", enabled,
+		"\ncontainerShell:\n  enabled: %s\n  idleTimeoutMin: 15\n  maxConcurrentSessions: 2")
+}
+
+// setSectionEnabled rewrites `enabled:` inside the top-level `section:` block,
+// or appends the block (newBlockFmt with %s = the value) when the section is
+// absent. A section that exists without an `enabled:` line is an error.
+func setSectionEnabled(path, section string, enabled bool, newBlockFmt string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("config: read %s: %w", path, err)
+	}
+	newVal := "false"
+	if enabled {
+		newVal = "true"
+	}
+
+	lines := strings.Split(string(data), "\n")
+	inSection, foundSection, foundEnabled := false, false, false
+	for i, line := range lines {
+		isTopLevel := line != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && !strings.HasPrefix(strings.TrimSpace(line), "#")
+		if isTopLevel && strings.HasPrefix(line, section+":") {
+			inSection, foundSection = true, true
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		if isTopLevel {
+			break // the next top-level key ends the block
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "enabled:") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			// Keep a trailing comment if there is one.
+			rest := strings.TrimPrefix(strings.TrimSpace(line), "enabled:")
+			comment := ""
+			if i := strings.Index(rest, "#"); i >= 0 {
+				comment = " " + strings.TrimSpace(rest[i:])
+			}
+			lines[i] = indent + "enabled: " + newVal + comment
+			foundEnabled = true
+			break
+		}
+	}
+
+	switch {
+	case !foundSection:
+		for len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+		lines = append(lines, strings.Split(fmt.Sprintf(newBlockFmt, newVal), "\n")...)
+	case !foundEnabled:
+		return fmt.Errorf("config: %s punya bagian '%s:' tapi tidak ada baris 'enabled:' — edit manual", path, section)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}

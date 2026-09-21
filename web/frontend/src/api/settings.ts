@@ -3,6 +3,9 @@ import { api } from './client'
 export const settingsApi = {
   setTerminalEnabled: (enabled: boolean, password: string) =>
     api.post<{ enabled: boolean }>('/api/settings/terminal', { enabled, password }),
+  // Password-gated like the host terminal; the server restarts itself after saving.
+  setContainerShellEnabled: (enabled: boolean, password: string) =>
+    api.post<{ enabled: boolean }>('/api/settings/container-shell', { enabled, password }),
   setDiskAnalysisEnabled: (enabled: boolean) =>
     api.post<{ enabled: boolean }>('/api/settings/disk-analysis', { enabled }),
   getPort: () => api.get<{ listen: string }>('/api/settings/port'),

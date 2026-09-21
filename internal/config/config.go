@@ -27,6 +27,7 @@ type Config struct {
 	FolderShortcuts FolderShortcutsConfig `yaml:"folderShortcuts"`
 	BootLog         BootLogConfig         `yaml:"bootLog"`
 	Wifi            WifiConfig            `yaml:"wifi"`
+	ContainerShell  ContainerShellConfig  `yaml:"containerShell"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
 }
 
@@ -191,6 +192,18 @@ type BootLogConfig struct {
 	File string `yaml:"file"`
 }
 
+// ContainerShellConfig — see docs/04-features.md §4.15 & docs/07-security.md.
+// A shell inside a container is a code-execution capability the Docker page
+// never had (start/stop/remove don't run anything), and for a container with
+// the Docker socket or a host path mounted it is effectively root on the host.
+// So it is the same risk tier as the host Terminal: off by default, and when
+// off the WebSocket route isn't registered at all.
+type ContainerShellConfig struct {
+	Enabled               bool `yaml:"enabled"`
+	IdleTimeoutMin        int  `yaml:"idleTimeoutMin"`
+	MaxConcurrentSessions int  `yaml:"maxConcurrentSessions"`
+}
+
 // WifiConfig — see docs/04-features.md §4.14. Device pins the adapter TarOS
 // scans/connects with ("" = auto: the connected one, else the first). A
 // configured adapter that doesn't exist is an error, never a silent fallback
@@ -264,7 +277,8 @@ func Default() Config {
 		FolderShortcuts: FolderShortcutsConfig{
 			SettingsFile: "./folder-shortcuts.yaml",
 		},
-		BootLog: BootLogConfig{File: "./boots.yaml"},
+		BootLog:        BootLogConfig{File: "./boots.yaml"},
+		ContainerShell: ContainerShellConfig{Enabled: false, IdleTimeoutMin: 15, MaxConcurrentSessions: 2},
 	}
 }
 

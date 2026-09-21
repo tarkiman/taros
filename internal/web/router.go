@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/tarkiman/taros/internal/appmeta"
@@ -33,6 +35,13 @@ type Deps struct {
 	DockerEnabled bool
 	Docker        *docker.Client
 	DockerWatcher *docker.Watcher
+	// ContainerShellEnabled gates the container-shell WebSocket route
+	// (docs/04-features.md §4.15) — not registered at all when false, like the
+	// host terminal. ContainerShellIdle/Max bound a session (0 = defaults).
+	ContainerShellEnabled bool
+	ContainerShellIdle    time.Duration
+	ContainerShellMax     int
+
 	// Lifecycle runs start/stop/restart on a whole compose project in
 	// dependency order (docs/04-features.md §4.2). nil with Docker off.
 	Lifecycle *docker.Lifecycle
@@ -146,10 +155,13 @@ type Deps struct {
 // ServeMux), see docs/03-tech-stack.md.
 type Server struct {
 	deps Deps
+
+	shellSessions atomic.Int32 // open container-shell sessions
+	exit          func(int)    // process exit after a restart-requiring settings change; os.Exit, replaced in tests
 }
 
 func NewServer(deps Deps) *Server {
-	return &Server{deps: deps}
+	return &Server{deps: deps, exit: os.Exit}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -227,6 +239,14 @@ func (s *Server) Handler() http.Handler {
 	// Always registered, regardless of terminal.enabled, so the Vue page
 	// can show a clear "not enabled" state instead of a failed connection.
 	mux.HandleFunc("GET /api/terminal/status", s.requireAuth(s.handleAPITerminalStatus))
+	// Container shell: status and the password-gated toggle are always
+	// registered (turning it ON is how someone with it off gets to it); the
+	// WebSocket itself only when enabled — removed from routing, not hidden.
+	mux.HandleFunc("GET /api/docker/shell/status", s.requireAuth(s.handleContainerShellStatus))
+	mux.HandleFunc("POST /api/settings/container-shell", s.requireAuth(s.handleSettingsContainerShell))
+	if s.deps.ContainerShellEnabled && s.deps.DockerEnabled {
+		mux.HandleFunc("GET /api/docker/containers/{id}/shell/ws", s.requireAuth(s.handleContainerShellWS))
+	}
 	// The actual WS endpoint is only registered when enabled — see
 	// docs/07-security.md §7.6 (highest risk-surface feature; removed from
 	// routing entirely when off, not just hidden client-side).

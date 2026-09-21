@@ -2124,6 +2124,20 @@ tanpa password untuk Stop/Restart. Detail dan batasnya di `docs/04-features.md` 
 "FATAL: Found 47 - Supported 48"), jadi konkurensi dijaga lewat kunci yang hati-hati, `go vet`, dan
 test — dua peta yang diakses lintas-goroutine ketahuan saat tinjauan kode, bukan oleh detektor.
 
+### Docker: shell ke dalam container (default mati, setingkat terminal host)
+
+Saran #5 dari diskusi "fitur apa lagi" (pasangan #3, dikerjakan di PR terpisah setelahnya karena
+risikonya lebih tinggi). Keputusan yang disetujui: default mati dengan toggle + password + restart
+seperti terminal host, batas sesi + idle timeout + audit, shell bash→sh dengan user default,
+drawer di halaman Docker. Detail dan batasnya di `docs/04-features.md` §4.15 dan
+`docs/07-security.md`. Empat temuan dari uji nyata, semuanya diperbaiki dan diberi test:
+(1) Docker menjawab 101 walau shell tak bisa dijalankan — kegagalan "tanpa shell" hanya terlihat
+di stream + exit code 127; (2) `COLUMNS`/`LINES` di environment membuat busybox melaporkan ukuran
+terminal yang basi (kesalahan saya, ketahuan karena `stty size` di container busybox); (3) `conn.Close`
+menunggu balasan close klien sampai 5 dtk sambil menahan slot sesi — klien macet bisa menghabiskan
+batas sesi; (4) teks error runtime sempat ikut dilukis ke terminal. Pengujian container hanya
+memakai container tiruan; container asli tidak dimasuki.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

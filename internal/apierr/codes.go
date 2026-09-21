@@ -91,6 +91,16 @@ const (
 	DockerProjectActionInvalid  = "docker_project_action_invalid"   // not start|stop|restart
 	DockerProjectBusy           = "docker_project_busy"             // another action is already running on it
 
+	// ws_container_shell.go / handlers_settings.go — sent as {"type":"error","code":…}
+	// frames on the WebSocket (a failed handshake's body never reaches the browser)
+	ContainerShellToggleFailed = "container_shell_toggle_failed"  // params: detail
+	ShellTooManySessions       = "docker_shell_too_many_sessions" // params: max
+	ShellNotRunning            = "docker_shell_not_running"
+	ShellNotFound              = "docker_shell_not_found"
+	ShellNoShell               = "docker_shell_no_shell"
+	ShellStartFailed           = "docker_shell_start_failed" // params: detail
+	ShellIdleTimeout           = "docker_shell_idle_timeout" // params: minutes
+
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"
 

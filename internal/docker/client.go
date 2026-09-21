@@ -14,7 +14,8 @@ import (
 )
 
 type Client struct {
-	http *http.Client
+	socket string // unix socket path, kept for the raw hijacked exec stream (exec.go)
+	http   *http.Client
 	// streamHTTP shares http's Transport (same Unix socket dialer) but has
 	// no client-level Timeout — used only by stream() for long-lived
 	// requests like follow=1 log tailing, where the response body is
@@ -33,6 +34,7 @@ func NewClient(socketPath string) *Client {
 		},
 	}
 	return &Client{
+		socket:     socketPath,
 		http:       &http.Client{Transport: transport, Timeout: 10 * time.Second},
 		streamHTTP: &http.Client{Transport: transport},
 	}
