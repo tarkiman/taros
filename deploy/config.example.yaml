@@ -118,6 +118,19 @@ wifi:
   # mis. "wlan0" kalau ada lebih dari satu adapter Wi-Fi.
   device: ""
 
+fileSharing:
+  # Halaman Berbagi file (lihat docs/04-features.md §4.16): kelola Samba dari
+  # TarOS. Butuh TarOS berjalan sebagai root dan paket Samba terpasang.
+  # Data yang dikelola (akun + share, tanpa password) — kosongkan/biarkan
+  # untuk otomatis di folder yang sama dengan quickLinksFile.
+  file: "/opt/taros/sharing.yaml"
+  # Satu-satunya lokasi yang boleh dibagikan (folder di bawahnya). Lokasi
+  # sistem (/etc, /root, /var/lib, ...) tidak pernah bisa dibagikan, apa pun
+  # isi daftar ini. Tambahkan mis. "/home" kalau memang mau.
+  allowedRoots: ["/srv", "/mnt", "/media", "/data", "/DATA"]
+  # Ditolak walau berada di dalam salah satu akar di atas.
+  deniedPaths: ["/DATA/AppData"]
+
 containerShell:
   # Shell interaktif di dalam container dari halaman Docker (lihat
   # docs/04-features.md §4.15 dan docs/07-security.md). Setingkat terminal

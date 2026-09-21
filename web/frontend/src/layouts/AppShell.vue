@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin } from 'naive-ui'
-import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings, HardDrive } from '@lucide/vue'
+import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings, HardDrive, Share2 } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
 import { useDiskAnalysisStore } from '../stores/diskAnalysis'
@@ -42,6 +42,7 @@ const navLinks = computed(() => {
   ]
   if (terminal.enabled) links.push({ to: '/terminal', label: t('nav.terminal'), icon: SquareTerminal })
   if (diskAnalysis.enabled) links.push({ to: '/disk-analysis', label: t('nav.diskAnalysis'), icon: HardDrive })
+  links.push({ to: '/sharing', label: t('nav.sharing'), icon: Share2 })
   links.push({ to: '/settings', label: t('nav.settings'), icon: Settings })
   return links
 })

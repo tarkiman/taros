@@ -1,0 +1,28 @@
+# Global parameters
+[global]
+	bind interfaces only = Yes
+	interfaces = lo eth0
+	map to guest = Bad User
+	server min protocol = NT1
+	server role = standalone server
+	workgroup = HOME
+	idmap config * : backend = tdb
+
+
+[media]
+	comment = Family media
+	guest ok = Yes
+	path = /srv/media
+	read only = No
+
+
+[private]
+	browseable = No
+	path = /srv/private
+	read only = No
+	valid users = alice bob
+
+
+[docs]
+	path = /srv/docs
+	valid users = @staff

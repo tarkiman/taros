@@ -2138,6 +2138,23 @@ menunggu balasan close klien sampai 5 dtk sambil menahan slot sesi — klien mac
 batas sesi; (4) teks error runtime sempat ikut dilukis ke terminal. Pengujian container hanya
 memakai container tiruan; container asli tidak dimasuki.
 
+### Berbagi file: SMB dikelola, FTP dilaporkan (PR1 dari 2)
+
+Permintaan: pengaturan file sharing FTP dan/atau SMB lengkap dengan akun dan folder yang dibagikan,
+untuk aplikasi **publik** — jadi harus menangani "belum terpasang", "terpasang kosong", dan
+"terpasang dengan konfigurasi orang lain". Keputusan yang disetujui (ikut rekomendasi): dua PR —
+PR1 = deteksi + pengelolaan SMB (akun, share, layanan, ambil alih/lepas), PR2 = pengelolaan FTP
+(+ pasang dari dalam aplikasi, opt-in). Detail dan batas di `docs/04-features.md` §4.16 dan
+`docs/07-security.md`. Prinsip: **tidak pernah merusak yang sudah ada** (include blocks, pemulihan
+byte-exact, tidak mengadopsi user sistem, tidak menimpa share orang lain), **aman secara default**, dan
+**dibuktikan di Samba sungguhan** (5 lingkungan distro) bukan hanya dengan tiruan. Temuan dari
+pengujian yang diperbaiki: `useradd -M` masih meninggalkan home `/home/<nama>` (kini `-d /nonexistent`);
+Alpine hanya punya `adduser`; daftar kosong dikirim sebagai `null` dan merusak halaman di host tanpa
+Samba (kini `[]`, ada test); `testparm` keluar 0 pada parameter tak dikenal (jadi ada
+`verifyEffective`). **Belum**: PR2 (FTP: allow-list vsftpd, `local_root` per user, FTPS, port pasif;
+membatasi FTP ke akun TarOS baru setelah perangkat 192.168.1.14 dimigrasi), pemasangan paket dari
+aplikasi, dan uji pengelolaan di Pi asli (Samba/FTP milik Pi sengaja tidak disentuh).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

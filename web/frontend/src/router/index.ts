@@ -16,6 +16,7 @@ const router = createRouter({
     { path: '/files/edit', name: 'files-edit', component: () => import('../views/EditorView.vue') },
     { path: '/terminal', name: 'terminal', component: () => import('../views/TerminalView.vue') },
     { path: '/disk-analysis', name: 'disk-analysis', component: () => import('../views/DiskAnalysisView.vue') },
+    { path: '/sharing', name: 'sharing', component: () => import('../views/SharingView.vue') },
     { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
   ],
 })

@@ -1468,3 +1468,99 @@ Cara kerja dan keputusan teknis (semuanya diverifikasi terhadap Docker asli):
   sesi tidak bisa dilanjutkan setelah koneksi putus (shell-nya ikut berakhir); tidak ada perekaman
   sesi; tidak ada pemisahan hak antar-akun dashboard (semua akun sama rata, lihat §7.1); dan jaringan/
   proxy yang memutus WebSocket idle bisa menutup sesi lebih cepat dari idle timeout.
+
+## 4.16 Berbagi File (SMB, dan laporan FTP)
+
+Halaman **Berbagi file** (`/sharing`, `internal/sharing`, `internal/web/handlers_sharing.go`) untuk
+perangkat yang juga jadi NAS. Rilis pertama: **SMB dikelola penuh** (folder yang dibagikan, akun,
+layanan), **FTP hanya dilaporkan** (pengelolaan FTP dikerjakan di PR terpisah). TarOS adalah aplikasi
+publik, jadi halaman ini harus masuk akal di setiap host, bukan hanya di Pi pengembangan:
+
+| Keadaan host | Yang ditampilkan |
+|---|---|
+| Bukan Linux | "Tidak tersedia di sini" |
+| Samba belum terpasang | Perintah pasang **sesuai distro** (`apt-get install -y samba`, `dnf …`, `apk add samba samba-common-tools`, `pacman -S samba`, `zypper …`; diawali `sudo` bila TarOS bukan root). TarOS **tidak memasang paket sendiri** |
+| Terpasang, kosong | Ajakan "Biarkan TarOS mengelola Samba" |
+| Terpasang dengan konfigurasi orang lain | Share yang sudah ada ditampilkan apa adanya (hanya-baca) + ajakan mengambil alih |
+| Sudah dikelola TarOS | Tab **Folder** (share), **Akun**, kontrol layanan, pilihan jaringan |
+| Bukan root / AD member atau DC / alat tak lengkap | Dibaca saja, dengan alasan yang tertulis (`not_root`, `not_standalone`, `no_tools`) |
+
+Tiga tab: **Ringkasan** (kondisi Samba/FTP, temuan keterpaparan, ambil alih/lepas), **Folder**,
+**Akun**.
+
+### Cara TarOS mengelola Samba — tanpa merusak yang sudah ada
+
+- **Include blocks, bukan menulis ulang `smb.conf`.** Saat "ambil alih", TarOS hanya **menambah** dua
+  blok bertanda `# >>> TarOS managed` … `# <<< TarOS managed`: satu `include = taros-global.conf` di
+  ujung `[global]` (yang terakhir menang, jadi pilihan jaringan TarOS berlaku) dan satu `include =
+  taros-shares.conf` di akhir file. Semua baris milik pengguna tidak disentuh. Salinan asli disimpan
+  (`smb.conf.taros-original`, `.taros-bak`).
+- **"Berhenti mengelola"** memulihkan `smb.conf` **byte demi byte** bila belum berubah sejak
+  pengambilalihan; bila pengguna sudah mengeditnya, hanya blok TarOS yang dipotong. Folder data tidak
+  pernah disentuh; akun buatan TarOS boleh ikut dihapus (opsional).
+- **Perubahan transaksional.** Tiap perubahan: render → tulis kandidat → `testparm -s` pada **salinan**
+  `smb.conf` yang menunjuk ke kandidat → **`verifyEffective`** (bandingkan konfigurasi hasil-resolusi
+  dengan model: path, `valid users`, `write list`, guest, interfaces — karena `testparm` keluar 0 pada
+  parameter tak dikenal) → tukar atomik → `testparm` akhir dengan rollback → `smbcontrol smbd
+  reload-config` bila layanan berjalan. Konfigurasi yang ditolak Samba tidak pernah sampai ke file live.
+- **Nama share bentrok** dengan share di luar TarOS ditolak; TarOS tidak pernah menimpa share milik orang lain.
+
+### Akun
+
+Akun share adalah **user sistem khusus tanpa login** (`useradd -M -N -d /nonexistent -g taros-share -s
+nologin`; `adduser` busybox di Alpine) plus password Samba (`smbpasswd -a -s`, password lewat
+**stdin**, tidak pernah lewat argumen). Password itu terpisah dari password dashboard. TarOS
+**hanya menghapus user yang grup utamanya `taros-share`** dan tidak pernah mengadopsi user sistem yang
+sudah ada (nama yang bentrok ditolak). Akun yang masih dipakai sebuah share tidak bisa dihapus (pesan
+menyebut share-nya). Akun bisa dinonaktifkan tanpa password dashboard; mengaktifkan lagi butuh password.
+
+### Share — aman secara default
+
+`read only = yes`, `guest ok = no`, `valid users` = akun yang dipilih, `write list` = akun baca-tulis;
+minimal satu akun per share (tidak ada akses tamu). File dibaca/ditulis sebagai **pemilik folder**
+(`force user/group`); TarOS **tidak pernah `chown`/`chmod` data**. Folder milik root ditolak kecuali
+pengguna memilih user biasa di "Lanjutan → dijalankan sebagai".
+
+**Kebijakan folder** (`PathPolicy`): hanya di bawah `fileSharing.allowedRoots` (default `/srv`, `/mnt`,
+`/media`, `/data`, `/DATA`), tidak di `fileSharing.deniedPaths` (default `/DATA/AppData`), dan **tidak
+pernah** lokasi sistem yang di-hardcode (`/`, `/etc`, `/boot`, `/root`, `/proc`, `/sys`, `/dev`, `/run`,
+`/usr`, `/bin`, `/sbin`, `/lib*`, `/var/lib`, `/var/log`, `/opt/taros`, `/snap`) — apa pun isi config.
+Symlink di-resolve ke path nyata sebelum diperiksa; `.ssh`/`.gnupg`, `%` dan karakter kontrol ditolak.
+Picker folder di UI hanya bisa menelusuri di dalam root yang diizinkan.
+
+### Temuan keterpaparan
+
+Dihitung dari keadaan nyata, ditampilkan terurut menurut tingkat: FTP mengirim password tanpa enkripsi
+dan mengizinkan akun perangkat login (**penting** bila layanan hidup), FTP anonim (+tulis), share tamu,
+protokol SMB lama, layanan terjangkau dari jaringan lain (hanya overlay ZeroTier/Tailscale yang dihitung —
+bridge Docker sengaja tidak), bentrok port, alat lain yang mengelola berbagi file (CasaOS, Cockpit…),
+SELinux enforcing, dan ketiadaan firewall (sekali per host).
+
+### API
+
+`GET /api/sharing/status` (dan `/folders?path=`) hanya-baca, tanpa perlu root. Semua yang mengubah
+sesuatu (`POST /api/sharing/smb/{adopt,unadopt,interfaces,service,shares}`, `…/shares/{name}/delete`,
+`/accounts…`) meminta **password dashboard lagi** (403 `wrong_password`). Pengecualian: menghentikan
+layanan dan menonaktifkan akun (hanya mengurangi keterpaparan). Kode error `sharing_*` diterjemahkan
+(§4.10). Subcommand `taros sharing-status` mencetak laporan yang sama sebagai JSON.
+
+### Diuji
+
+- Unit dengan OS palsu (perintah, argumen, stdin, urutan) dan fixture nyata dari Pi serta image distro.
+- **Samba sungguhan** (`TAROS_SHARING_IT=1`, biner uji statis di container sekali-pakai): Debian 12/13,
+  Ubuntu 24.04, Fedora 41, Alpine 3.20 — adopt, akun, share, verifikasi lewat `smbclient`, unadopt
+  byte-exact, koeksistensi dengan share/user milik orang lain.
+- **Mutation testing** pada rangkaian ini (mutasi yang gagal-compile dianggap tidak valid); satu penyintas
+  nyata (pemulihan byte-exact) ditutup test baru.
+- UI di Chromium headless terhadap Samba sungguhan di container: ambil alih (password salah → ditolak),
+  akun (validasi, bentrok dengan user sistem), share (picker, folder milik root → petunjuk Lanjutan,
+  edit, hapus), akun-masih-dipakai, layanan tanpa systemd, unadopt + hapus akun (smb.conf pulih, user
+  hilang), tampilan ponsel 390px, id/en, serta keadaan "belum terpasang" dan "bukan root". Di Pi asli
+  hanya **dibaca** (tanpa root).
+
+### Batas jujur
+
+Samba yang dikelola hanya **standalone**; FTP belum bisa dikelola dari sini; TarOS tidak memasang
+paket; perubahan Samba butuh root; `/home` bukan root share default (tambahkan lewat
+`fileSharing.allowedRoots`); di host tanpa systemd (container) layanan tidak bisa dijalankan dari UI;
+ACL/quota per share dan akun tamu tidak ada.

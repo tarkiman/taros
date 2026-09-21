@@ -208,6 +208,23 @@ instalasi seperti host ini, dan alasan kartunya menolak dengan pesan jelas untuk
 yang memegang akun dashboard dapat memindahkan Pi ke jaringan lain; rollback otomatis membatasi
 akibat salah-ketik, bukan penyalahgunaan yang disengaja.
 
+### Berbagi file (SMB)
+
+Fitur ini membuka folder ke jaringan dan membuat login, jadi pagarnya berlapis (rincian di
+docs/04-features.md §4.16): semua perubahan meminta **password dashboard lagi** (403; hanya
+menghentikan layanan dan menonaktifkan akun yang tidak); password akun share **hanya lewat body
+request dan stdin** `smbpasswd` — tidak pernah argumen perintah, log, respons API, atau pesan error
+(`CmdError` memuat stderr/stdout, tidak pernah argumen); akun share adalah user **tanpa login**
+(`nologin`, tanpa home) dengan grup khusus `taros-share`, dan TarOS hanya menghapus user dari grup itu;
+share **deny-by-default** (`read only`, `guest ok = no`, `valid users`, tanpa akses tamu); folder
+dibatasi ke akar yang diizinkan, lokasi sistem tak bisa dibagikan apa pun isi config, symlink di-resolve
+sebelum diperiksa; `smb.conf` hanya **ditambah** blok bertanda dan tiap perubahan divalidasi `testparm`
++ pembandingan konfigurasi efektif sebelum menggantikan file live. Layanan default hanya mengikat
+jaringan yang dipilih (bukan ZeroTier/Tailscale kecuali dicentang, dengan peringatan). Risiko yang
+tersisa dan diakui: mengelola Samba butuh TarOS berjalan sebagai **root** (menulis `/etc/samba`,
+membuat user sistem) — perluasan hak akses yang sama dengan fitur Wi-Fi; siapa pun yang memegang akun
+dashboard dapat mempublikasikan folder di dalam akar yang diizinkan.
+
 ### Riwayat boot
 
 `boots.yaml` (docs/04-features.md §4.13) berisi `boot_id` kernel, waktu, suhu, dan persentase
@@ -346,6 +363,7 @@ bagian ini fokus ke kontrol keamanannya.
 | Unit systemd kritikal ke-restart tidak sengaja | Daftar unit "terproteksi" butuh extra-confirm |
 | File besar/berbahaya diupload lalu dieksekusi | Tidak ada eksekusi otomatis; batas ukuran; scoping direktori |
 | Shell interaktif disalahgunakan kalau kredensial dashboard bocor | Non-root, idle timeout, 1 sesi konkuren, bisa di-disable total, rekomendasi network isolation |
+| Folder sensitif (sistem, kunci SSH, data aplikasi) terpublikasi lewat SMB | Akar yang diizinkan + daftar tolak + lokasi sistem hardcode + resolusi symlink; share tanpa akses tamu; perubahan butuh password dashboard (§7.4 "Berbagi file") |
 | Proses/PTY menumpuk (resource exhaustion) dari sesi terminal | Kill otomatis saat koneksi terputus, batas sesi konkuren |
 | Kredensial dashboard bocor → akses root instan (kalau sudo NOPASSWD aktif) | Sudo tidak aktif default; mode "dengan password" direkomendasikan; NOPASSWD didokumentasikan eksplisit sebagai risiko tinggi, bukan default |
 | Terminal langsung exit karena shell akun `taros` adalah `nologin` | `terminal.shell` di config wajib eksplisit (`/bin/bash`), tidak bergantung shell akun |

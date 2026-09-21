@@ -101,6 +101,36 @@ const (
 	ShellStartFailed           = "docker_shell_start_failed" // params: detail
 	ShellIdleTimeout           = "docker_shell_idle_timeout" // params: minutes
 
+	// handlers_sharing.go / internal/sharing
+	SharingUnavailable      = "sharing_unavailable"   // not Linux / not wired
+	SharingCannotManage     = "sharing_cannot_manage" // params: reason
+	SharingNotManaged       = "sharing_not_managed"
+	SharingAccountInvalid   = "sharing_account_invalid"
+	SharingAccountExists    = "sharing_account_exists"
+	SharingAccountMissing   = "sharing_account_missing"
+	SharingAccountInUse     = "sharing_account_in_use" // params: share
+	SharingPasswordWeak     = "sharing_password_weak"  // params: min
+	SharingPasswordInvalid  = "sharing_password_invalid"
+	SharingShareInvalid     = "sharing_share_invalid"
+	SharingShareExists      = "sharing_share_exists"
+	SharingShareMissing     = "sharing_share_missing"
+	SharingShareNoAccess    = "sharing_share_no_access"
+	SharingShareUser        = "sharing_share_user"
+	SharingShareMode        = "sharing_share_mode"
+	SharingShareNameForeign = "sharing_share_name_foreign"
+	SharingCommentInvalid   = "sharing_comment_invalid"
+	SharingPathInvalid      = "sharing_path_invalid"
+	SharingPathDenied       = "sharing_path_denied"
+	SharingPathOutside      = "sharing_path_outside"
+	SharingOwnedByRoot      = "sharing_owned_by_root"
+	SharingRunAsInvalid     = "sharing_run_as_invalid"
+	SharingInterfaceInvalid = "sharing_interface_invalid"
+	SharingApplyRejected    = "sharing_apply_rejected" // params: detail
+	SharingServiceAction    = "sharing_service_action"
+	SharingNoSystemd        = "sharing_no_systemd"
+	SharingNoUserBackend    = "sharing_no_user_backend"
+	SharingFailed           = "sharing_failed" // params: detail
+
 	// handlers_system.go / sse.go / handlers_processes.go (shared helper)
 	MonitoringUnsupported = "monitoring_unsupported"
 

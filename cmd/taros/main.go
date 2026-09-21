@@ -6,6 +6,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -29,6 +30,7 @@ import (
 	"github.com/tarkiman/taros/internal/foldershortcuts"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
+	"github.com/tarkiman/taros/internal/sharing"
 	"github.com/tarkiman/taros/internal/store"
 	"github.com/tarkiman/taros/internal/terminal"
 	"github.com/tarkiman/taros/internal/web"
@@ -46,6 +48,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		runSetup(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "sharing-status" {
+		runSharingStatus()
 		return
 	}
 	runServer(os.Args[1:])
@@ -184,6 +190,18 @@ func runServer(args []string) {
 		}
 	}
 
+	// File sharing (Samba management, FTP report). Linux only; usable changes need root,
+	// but the read-only status works for anyone.
+	var sharingMgr *sharing.Manager
+	if runtime.GOOS == "linux" {
+		store, err := sharing.LoadStore(cfg.FileSharing.File)
+		if err != nil {
+			slog.Warn("gagal membuka data berbagi file, mulai kosong", "path", cfg.FileSharing.File, "err", err)
+			store = sharing.NewStore(cfg.FileSharing.File)
+		}
+		sharingMgr = sharing.NewManager(sharing.NewDetector(), store, sharing.PathPolicy{Roots: cfg.FileSharing.AllowedRoots, Denied: cfg.FileSharing.DeniedPaths})
+	}
+
 	// Wi-Fi management via NetworkManager's nmcli (Linux only). Absent nmcli is
 	// normal (macOS, or a host not using NetworkManager): the feature simply
 	// reports itself unavailable.
@@ -225,6 +243,7 @@ func runServer(args []string) {
 		FolderShortcuts:           folderShortcuts,
 		BootLog:                   bootLedger,
 		Wifi:                      wifiClient,
+		Sharing:                   sharingMgr,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,
 	}
 	if cfg.Docker.Enabled {
@@ -377,4 +396,18 @@ func readPassword(fallback *bufio.Reader, prompt string) (string, error) {
 	}
 	line, err := fallback.ReadString('\n')
 	return strings.TrimSpace(line), err
+}
+
+// runSharingStatus prints what TarOS sees of file sharing on this machine
+// (distro, Samba/FTP install state, exposure findings) as JSON, and changes
+// nothing. Handy for bug reports: run it as root for the complete picture.
+func runSharingStatus() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := json.MarshalIndent(sharing.NewDetector().Detect(ctx), "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sharing-status:", err)
+		os.Exit(1)
+	}
+	fmt.Println(string(out))
 }
