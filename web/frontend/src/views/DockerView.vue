@@ -25,6 +25,8 @@ import AppShell from '../layouts/AppShell.vue'
 import DockerProjectsPanel from '../components/DockerProjectsPanel.vue'
 import ContainerEnvDrawer from '../components/ContainerEnvDrawer.vue'
 import AppUninstallModal from '../components/AppUninstallModal.vue'
+import ContainerShellDrawer from '../components/ContainerShellDrawer.vue'
+import { useContainerShellStore } from '../stores/containerShell'
 import { dockerApi, type SettingsResponse } from '../api/docker'
 import { ApiError } from '../api/client'
 import { useContainerLogsStream } from '../composables/useContainerLogsStream'
@@ -121,6 +123,15 @@ const logSinceOptions = [
   { label: t('docker.logs.last6h'), value: 360 },
   { label: t('docker.logs.last24h'), value: 1440 },
 ]
+
+// --- Shell inside a container (only offered when containerShell is enabled) ---
+const shellStore = useContainerShellStore()
+const shellShow = ref(false)
+const shellContainer = ref<Container | null>(null)
+function openShell(c: Container) {
+  shellContainer.value = c
+  shellShow.value = true
+}
 
 // --- Uninstall a whole compose project (see AppUninstallModal.vue) ---
 const uninstallShow = ref(false)
@@ -277,7 +288,7 @@ const containerColumns = computed<DataTableColumns<Container>>(() => [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 270,
+    width: 330,
     render: (row) =>
       h(NSpace, { size: 'small' }, () => [
         row.state === 'running'
@@ -287,6 +298,9 @@ const containerColumns = computed<DataTableColumns<Container>>(() => [
             ]
           : h(NButton, { size: 'tiny', type: 'primary', onClick: () => containerAction(row.id, 'start') }, () => 'Start'),
         h(NButton, { size: 'tiny', quaternary: true, onClick: () => openLogs(row) }, () => t('docker.logs.button')),
+        shellStore.enabled && row.state === 'running'
+          ? h(NButton, { size: 'tiny', quaternary: true, onClick: () => openShell(row) }, () => t('docker.shell.button'))
+          : null,
         h(
           NPopconfirm,
           { onPositiveClick: () => containerAction(row.id, 'remove') },
@@ -530,6 +544,7 @@ watch(activeTab, (tab) => {
 })
 
 onMounted(() => {
+  shellStore.ensureLoaded()
   loadContainers()
   containersTimer = setInterval(loadContainers, 5000)
 })
@@ -556,7 +571,7 @@ onUnmounted(() => {
       </NTabPane>
       <NTabPane name="apps" :tab="t('docker.apps.tab')">
         <NAlert v-if="containersUnavailable" type="warning" :title="containersUnavailable.error" />
-        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" @uninstall="openUninstall" @changed="loadContainers" />
+        <DockerProjectsPanel v-else :containers="containers" :focus="focusApp" @logs="openLogs" @env="openEnv" @shell="openShell" :shell-enabled="shellStore.enabled" @uninstall="openUninstall" @changed="loadContainers" />
       </NTabPane>
       <NTabPane name="images" tab="Images">
         <NAlert v-if="imagesUnavailable" type="warning" :title="imagesUnavailable.error" />
@@ -612,6 +627,7 @@ onUnmounted(() => {
     </NTabs>
 
     <ContainerEnvDrawer v-model:show="envShow" :container="envContainer" />
+    <ContainerShellDrawer v-model:show="shellShow" :container="shellContainer" />
     <AppUninstallModal v-model:show="uninstallShow" :name="uninstallName" @done="loadContainers" />
 
     <NDrawer v-model:show="logDrawerOpen" :width="640" placement="right">

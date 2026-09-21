@@ -60,7 +60,15 @@ export interface LifecycleJob {
   finishedAt?: string
 }
 
+export interface ShellStatus {
+  enabled: boolean
+  idleTimeoutMin: number
+  maxSessions: number
+}
+
 export const dockerApi = {
+  // Always available; `enabled` tells the UI whether to offer the Shell button at all.
+  shellStatus: () => api.get<ShellStatus>('/api/docker/shell/status'),
   containers: () => api.get<ContainersResponse>('/api/docker/containers'),
   containerAction: (id: string, action: 'start' | 'stop' | 'restart' | 'remove') =>
     api.post<ContainersResponse>(`/api/docker/containers/${encodeURIComponent(id)}/${action}`),

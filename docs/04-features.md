@@ -1399,3 +1399,72 @@ jalan kembali selain akses fisik. Karena itu:
   dan satu-satunya jalur ke Pi); probing AP yang benar-benar menyembunyikan SSID (hotspot virtual tetap
   menyiarkannya — yang teruji jalur flag `hidden` dan keyfile-nya); jalur non-root/polkit (butuh root
   sekarang); WPA3-SAE-only pada radio sungguhan; dan jaringan captive-portal (dianggap tersambung).
+
+## 4.15 Shell ke dalam container
+
+Tombol **Shell** di tabel Containers dan di baris service tab Aplikasi (hanya untuk container yang
+sedang berjalan, dan hanya kalau fitur ini dinyalakan) membuka drawer berisi terminal interaktif di
+dalam container itu — `docker exec -it`, lewat browser. Ini pasangan terminal host (§4.5): xterm.js
+di depan, WebSocket di tengah, exec API Docker di belakang (`internal/docker/exec.go`,
+`internal/web/ws_container_shell.go`).
+
+**Ini eskalasi hak akses, bukan fitur biasa.** Halaman Docker sampai sekarang bisa menghentikan dan
+menghapus container tapi tidak menjalankan kode di dalamnya. Shell membuka itu untuk **setiap akun
+dashboard**, dan untuk container yang me-mount `docker.sock` atau folder host (di host ini,
+`watchtower` mem-mount socket) itu setara root di mesin. Karena itu levelnya sama dengan terminal
+host, bukan level per-container:
+
+- **Default mati, dan saat mati route-nya tidak ada** — request terautentikasi ke WebSocket dijawab
+  **404**, bukan ditolak (diuji di server asli). Dinyalakan lewat toggle di Settings > "Shell
+  Container": dialog menyatakan apa yang diberikan, meminta **password dashboard lagi** (403 kalau
+  salah, config tidak berubah), mengedit **satu baris** `containerShell.enabled` di config.yaml
+  (komentar terjaga; `docker.enabled` dan `terminal.enabled` tidak tersentuh — diuji), lalu server
+  restart sendiri. Setelah restart sesi login hilang (sesi ada di memori) — sama dengan toggle Terminal.
+  Saat aktif, log start memuat WARN tebal.
+- **Batas sesi**: maksimal `containerShell.maxConcurrentSessions` (default 2) sesi bersamaan —
+  yang ketiga menerima error terjemahan, bukan koneksi macet — dan **idle timeout**
+  `containerShell.idleTimeoutMin` (default 15) tanpa lalu-lintas di kedua arah; ditutup dalam
+  rentang batas..batas×1,25 (pemeriksaan tiap seperempat batas, maks. 15 dtk). Slot dilepas begitu
+  keputusan menutup diambil, bukan setelah handshake close selesai — klien yang macet tidak bisa
+  menahan slot (test khusus).
+- **Audit**: `container shell opened/closed` — siapa, container mana, asal, lama, jumlah byte masuk/
+  keluar, exit code. **Isi ketikan tidak pernah direkam.**
+- **Asal**: pemeriksaan same-origin bawaan library WebSocket (mitigasi cross-site WebSocket hijacking):
+  handshake dari origin lain dijawab **403** dan tidak membuat exec apa pun (diuji, juga di server asli).
+
+Cara kerja dan keputusan teknis (semuanya diverifikasi terhadap Docker asli):
+
+- **Exec + Upgrade**: `POST /containers/{id}/exec` (Tty, stdin/stdout terpasang) lalu `POST
+  /exec/{id}/start` dengan `Connection: Upgrade` — koneksinya menjadi stream TTY mentah dua arah.
+  Karena `net/http.Client` tidak menyerahkan soketnya kembali, request ditulis manual di koneksi unix
+  baru (byte stream yang datang bersama jawaban 101 tidak boleh hilang — ada test).
+- **Shell**: `sh -c 'command -v bash && exec bash || exec sh'` — bash kalau ada, kalau tidak sh;
+  user default container (sering root), direktori kerja default; `TERM=xterm-256color`.
+- **Container tanpa shell** (mis. distroless): Docker tetap menjawab 101 lalu stream berisi
+  "OCI runtime exec failed: … executable file not found" dan exit code 127 — jadi kegagalan hanya
+  bisa dikenali setelah stream berakhir (`Failure()` mensyaratkan **kedua** tanda itu, sehingga
+  teks yang kebetulan diketik pengguna tidak dikira gagal-mulai). Teks mentah runtime **tidak**
+  dilukis ke terminal; UI menampilkan pesan terjemahan "container ini tidak punya shell".
+- **Ukuran terminal**: resize diteruskan ke pty (`h=rows&w=cols`). **Sengaja tidak** menyetel `COLUMNS`/
+  `LINES` di environment: busybox dan ncurses memberi prioritas pada variabel itu di atas ukuran pty
+  yang sebenarnya, jadi nilainya basi begitu terminal diubah ukurannya — ini ketahuan di container
+  busybox sungguhan (`stty size` terus melaporkan ukuran awal) dan diperbaiki; kini ukuran di dalam
+  container sama persis dengan xterm di browser (56×113 diuji di `sh`, `ash`, dan `bash`).
+- **Protokol** sama dengan terminal host (frame biner = byte mentah; frame teks = kontrol JSON). Error
+  dikirim sebagai **frame** (`{"type":"error","code":…}`), bukan handshake gagal, karena isi kegagalan
+  upgrade WebSocket tidak pernah terlihat browser; `ready` dan `exit` (dengan exit code) juga frame.
+- **Diuji**: 22 test baru (Docker palsu yang mendukung handshake Upgrade; klien WebSocket sungguhan
+  terhadap handler — round trip, resize, exit code, error sebagai frame, batas sesi + pelepasan slot,
+  klien macet, idle timeout beserta bahwa aktivitas menahannya, asal lintas-situs, route hanya ada saat
+  aktif, toggle wajib password dan memicu restart, pengeditan config in-place) dicek dengan **21 mutasi**,
+  semuanya tertangkap. Di **Docker asli** dengan container tiruan (busybox `sh`, `bash` dari image
+  mariadb, alpine `ash`, satu tanpa shell — biner Go statis, satu yang berhenti): exit code, ukuran,
+  user, container tanpa shell, container mati/tidak ada; **UI di Chromium headless** (toggle beserta
+  password salah/benar dan restart lewat supervisor, tombol Shell hanya untuk container berjalan, mengetik
+  perintah dan membaca keluaran xterm, exit, pesan tanpa-shell); dan di server asli: batas 2 sesi,
+  idle timeout 1 menit (bertahan >60 dtk selama diketik, ditutup setelah menganggur), lintas-origin 403,
+  tanpa cookie 303, mati→404. Container aslimu tidak dimasuki.
+- **Batas jujur**: user selalu user default container (tidak bisa memilih user/direktori kerja);
+  sesi tidak bisa dilanjutkan setelah koneksi putus (shell-nya ikut berakhir); tidak ada perekaman
+  sesi; tidak ada pemisahan hak antar-akun dashboard (semua akun sama rata, lihat §7.1); dan jaringan/
+  proxy yang memutus WebSocket idle bisa menutup sesi lebih cepat dari idle timeout.

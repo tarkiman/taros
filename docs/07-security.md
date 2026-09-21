@@ -177,6 +177,21 @@ luar project ditolak Docker sendiri (409), tidak di-force. Diakui jujur: siapa p
 memegang akun sudah bisa menghapus container satu per satu; ini bukan celah baru, hanya jalan
 pintas yang diberi pagar yang setara.
 
+### Shell container
+
+Fitur ini memberi **setiap akun dashboard** kemampuan menjalankan perintah di dalam container mana
+pun (docs/04-features.md §4.15) — kemampuan yang halaman Docker sebelumnya tidak punya (stop/hapus
+tidak mengeksekusi apa pun). Untuk container yang me-mount `docker.sock` atau folder host itu setara
+root di mesin; di host ini `watchtower` mem-mount socket. Levelnya sama dengan Terminal host, bukan
+sama dengan aksi container biasa: **default mati dan route tidak terdaftar sama sekali** (404, bukan
+403); dinyalakan hanya dengan re-konfirmasi password dashboard di dialog yang menyebut apa yang
+diberikan, lalu restart; sesi dibatasi jumlahnya dan ditutup saat menganggur; handshake WebSocket
+lintas-origin ditolak (403) tanpa membuat exec; tiap sesi tercatat (siapa, container, lama, jumlah
+byte, exit code — **tidak pernah isi ketikan**). Risiko yang diterima dan diakui: akun dashboard mana
+pun yang sudah login bisa masuk ke container mana pun selama fitur ini menyala, dan TarOS di host ini
+berjalan sebagai root; tidak ada pemisahan hak antar-akun (§7.1) dan tidak ada perekaman sesi (lihat
+§7.6 untuk alasannya). Jika ada akun yang tidak sepenuhnya dipercaya, jangan nyalakan.
+
 ### Manajemen Wi-Fi
 
 Fitur ini menangani kredensial jaringan dan bisa memutus perangkat dari jaringan, jadi pagarnya

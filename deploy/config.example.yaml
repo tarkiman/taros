@@ -117,3 +117,15 @@ wifi:
   # untuk otomatis (adapter yang sedang terhubung, atau yang pertama); isi
   # mis. "wlan0" kalau ada lebih dari satu adapter Wi-Fi.
   device: ""
+
+containerShell:
+  # Shell interaktif di dalam container dari halaman Docker (lihat
+  # docs/04-features.md §4.15 dan docs/07-security.md). Setingkat terminal
+  # host: MATI secara default dan, kalau mati, routenya tidak ada. Untuk
+  # container yang me-mount docker.sock atau folder host ini setara root di
+  # mesin, dan semua akun dashboard mendapatkannya. Nyalakan lewat Settings
+  # (butuh password dashboard, servis restart) — atau ubah baris ini lalu
+  # restart servis.
+  enabled: false
+  idleTimeoutMin: 15        # sesi tanpa lalu-lintas selama ini ditutup
+  maxConcurrentSessions: 2  # sesi shell container bersamaan

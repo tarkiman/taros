@@ -360,6 +360,13 @@ non-root kartu hanya menampilkan alasannya (`needs_root` / `not_authorized`); ja
 polkit belum dibangun dan belum diuji. `wifi.device` di config mengunci adapter bila ada lebih dari
 satu (lihat `deploy/config.example.yaml`). Tidak ada pekerjaan latar: nol beban saat kartu tidak dibuka.
 
+**Shell container (docs/04-features.md §4.15)**: section `containerShell` di `config.yaml`
+(`enabled`, `idleTimeoutMin`, `maxConcurrentSessions`; default mati / 15 / 2). Biasanya dinyalakan
+lewat Settings — itu mengedit baris `enabled:` di file ini dan me-restart servis, jadi servis harus
+bisa menulis `config.yaml` dan dijalankan systemd dengan `Restart=always` (sama dengan toggle
+Terminal). Config lama tanpa section ini tidak menyalakan apa pun. Butuh akses ke Docker socket
+seperti fitur Docker lain; tidak ada beban saat tidak ada sesi terbuka.
+
 ### Benchmark Pembanding: CasaOS
 
 TarOS dibuat sebagai pengganti CasaOS di STB B860H karena CasaOS terasa berat di RAM

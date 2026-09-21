@@ -8,8 +8,8 @@ import { formatBytes } from '../utils/format'
 import { groupProjects, type ProjectGroup, type Verdict } from '../utils/dockerProjects'
 import AppLifecycle from './AppLifecycle.vue'
 
-const props = defineProps<{ containers: Container[]; focus?: string }>()
-const emit = defineEmits<{ (e: 'logs', c: Container): void; (e: 'env', c: Container): void; (e: 'uninstall', name: string): void; (e: 'changed'): void }>()
+const props = defineProps<{ containers: Container[]; focus?: string; shellEnabled?: boolean }>()
+const emit = defineEmits<{ (e: 'logs', c: Container): void; (e: 'env', c: Container): void; (e: 'uninstall', name: string): void; (e: 'changed'): void; (e: 'shell', c: Container): void }>()
 const { t } = useI18n()
 
 const groups = computed<ProjectGroup[]>(() => groupProjects(props.containers))
@@ -82,6 +82,7 @@ function dot(c: Container): string {
             <span class="svc-status text-muted">{{ c.status }}</span>
             <span class="svc-res mono text-muted">{{ c.hasStats ? `${c.stats.cpuPercent.toFixed(1)}% · ${formatBytes(c.stats.memUsageBytes)}` : '—' }}</span>
             <span class="svc-btns">
+              <NButton v-if="shellEnabled && c.state === 'running'" size="tiny" quaternary @click="emit('shell', c)">{{ t('docker.shell.button') }}</NButton>
               <NButton size="tiny" quaternary @click="emit('env', c)">{{ t('docker.env.button') }}</NButton>
               <NButton size="tiny" quaternary @click="emit('logs', c)">{{ t('docker.logs.button') }}</NButton>
             </span>
