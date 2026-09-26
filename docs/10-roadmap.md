@@ -2223,6 +2223,23 @@ ponsel dan id/en; tidak ada password di log. **Belum**: pemeriksaan kekuatan pas
 (daftar password umum), kedaluwarsa password, dan riwayat login/sesi aktif yang bisa dicabut satu per
 satu.
 
+### File Explorer: rename yang mudah ditemukan dan benar
+
+Pertanyaan pengguna "fitur rename belum ada?" — ternyata ada (ikon pensil di Actions) tetapi hampir tak
+terlihat: hanya ikon, tanpa F2/klik-kanan, tak terjangkau di Grid layar sentuh (hanya muncul saat hover),
+dan errornya teks Go mentah dengan path absolut server. Diperbaiki (detail di `docs/04-features.md` §4.4):
+F2, menu klik-kanan (Buka/Unduh/Rename/Salin/Potong/Pin/Hapus), tombol di bar seleksi, nama tanpa ekstensi
+terpilih, error inline dan terjemahan tanpa path, aksi Grid selalu terlihat di sentuh. Temuan yang
+diperbaiki dan diberi test: **rename bisa menimpa** file yang muncul antara pengecekan dan rename (kini
+atomik) dan symlink putus dianggap kosong; **rename bisa memindahkan** ke folder lain lewat `/` di nama;
+**ganti huruf besar/kecil di FAT/exFAT gagal diam-diam** (sukses tapi tak berubah) — ditemukan lewat uji di
+vfat/exfat sungguhan. Diuji: unit + handler, mutation testing (13 mutasi valid tertangkap), vfat/exfat/ext4
+sungguhan di kontainer, dan Chromium (F2, nama terpilih, tiga validasi klien, balapan sisi server, menu
+klik-kanan pada file/folder/banyak item, hapus lewat menu, aksi Grid pada emulasi sentuh). **Belum**:
+rename massal, undo, drag-drop pindah, dan rename lewat long-press di layar sentuh (aksi Grid yang selalu
+terlihat sudah menutup kebutuhan dasarnya). Sisa paket dari audit File Explorer (tempat sampah, pencarian
+rekursif, arsip, properti/izin, thumbnail server-side) belum dikerjakan.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

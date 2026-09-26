@@ -2,13 +2,16 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tarkiman/taros/internal/apierr"
@@ -58,12 +61,12 @@ func (s *Server) currentDir(r *http.Request) (string, error) {
 }
 
 type filesListResponse struct {
-	CurrentPath   string             `json:"currentPath"`
-	ParentPath    string             `json:"parentPath"`
-	Breadcrumbs   []breadcrumbItem   `json:"breadcrumbs"`
+	CurrentPath   string               `json:"currentPath"`
+	ParentPath    string               `json:"parentPath"`
+	Breadcrumbs   []breadcrumbItem     `json:"breadcrumbs"`
 	Entries       []fileexplorer.Entry `json:"entries"`
-	ClipboardSize int                `json:"clipboardSize"`
-	ClipboardCut  bool               `json:"clipboardCut"`
+	ClipboardSize int                  `json:"clipboardSize"`
+	ClipboardCut  bool                 `json:"clipboardCut"`
 }
 
 func (s *Server) handleAPIFilesList(w http.ResponseWriter, r *http.Request) {
@@ -154,17 +157,33 @@ func (s *Server) handleFilesOp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch req.Action {
-	case "mkdir":
-		err = fileexplorer.Mkdir(path)
-	case "create":
-		err = fileexplorer.CreateFile(path)
+	case "mkdir", "create":
+		// The name is the last element of the path. It must be a real name — not
+		// empty, "." or "..", no NUL — whatever Resolve made of the rest.
+		if err = fileexplorer.ValidName(filepath.Base(strings.TrimRight(req.Path, "/"))); err == nil {
+			if req.Action == "mkdir" {
+				err = fileexplorer.Mkdir(path)
+			} else {
+				err = fileexplorer.CreateFile(path)
+			}
+		}
 	case "delete":
 		err = fileexplorer.Delete(path)
 	case "rename":
-		var newPath string
-		newPath, err = s.deps.Jail.Resolve(req.NewPath)
+		// Rename changes the NAME of an entry; it never moves it to another folder
+		// (that is what cut and paste are for). A new path in a different folder,
+		// or with a "/" smuggled into the name, is refused outright.
+		newName := filepath.Base(strings.TrimRight(req.NewPath, "/"))
+		if err = fileexplorer.ValidName(newName); err == nil &&
+			filepath.Dir(filepath.Clean(req.NewPath)) != filepath.Dir(filepath.Clean(req.Path)) {
+			err = fileexplorer.ErrInvalidName
+		}
 		if err == nil {
-			err = fileexplorer.Rename(path, newPath)
+			var newPath string
+			newPath, err = s.deps.Jail.Resolve(req.NewPath)
+			if err == nil {
+				err = fileexplorer.Rename(path, newPath)
+			}
 		}
 	default:
 		writeJSONError(w, http.StatusBadRequest, apierr.UnknownAction, "aksi tidak dikenal: "+req.Action, map[string]any{"action": req.Action})
@@ -172,7 +191,7 @@ func (s *Server) handleFilesOp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, apierr.FileOpFailed, err.Error(), map[string]any{"detail": err.Error()})
+		writeFileOpError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -398,4 +417,26 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Disposition", disposition+`; filename="`+filepath.Base(path)+`"`)
 	http.ServeFile(w, r, path)
+}
+
+// writeFileOpError answers a failed file operation with a code the UI translates,
+// instead of the raw error text (which carries the server's absolute paths). Only
+// what has no specific code falls back to the generic one with the detail.
+func writeFileOpError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, fileexplorer.ErrInvalidName):
+		writeJSONError(w, http.StatusBadRequest, apierr.FileNameInvalid, "nama tidak valid", nil)
+	case errors.Is(err, fileexplorer.ErrExists), errors.Is(err, fs.ErrExist):
+		writeJSONError(w, http.StatusConflict, apierr.FileExists, "nama itu sudah dipakai", nil)
+	case errors.Is(err, fs.ErrNotExist):
+		writeJSONError(w, http.StatusNotFound, apierr.FileNotFound, "file atau folder tidak ditemukan", nil)
+	case errors.Is(err, syscall.EROFS):
+		writeJSONError(w, http.StatusForbidden, apierr.FileReadOnly, "lokasi ini hanya-baca", nil)
+	case errors.Is(err, fs.ErrPermission):
+		writeJSONError(w, http.StatusForbidden, apierr.FilePermissionDenied, "tidak punya izin", nil)
+	case errors.Is(err, syscall.ENOSPC):
+		writeJSONError(w, http.StatusInsufficientStorage, apierr.FileNoSpace, "ruang penyimpanan penuh", nil)
+	default:
+		writeJSONError(w, http.StatusInternalServerError, apierr.FileOpFailed, err.Error(), map[string]any{"detail": err.Error()})
+	}
 }

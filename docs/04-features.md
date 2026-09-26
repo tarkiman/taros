@@ -443,7 +443,29 @@ bukan error 500.
   untuk admin, tapi bisa dibatasi ke direktori tertentu, misal `/home`, `/mnt/data`, `/opt`
   jika ingin lebih aman — lihat [07-security.md](07-security.md) soal path traversal).
 - Create file baru / folder baru.
-- Rename.
+- **Rename** — ikon pensil di kolom Actions (List) atau di kartu (Grid; **selalu terlihat di layar sentuh**,
+  tidak hanya saat hover), **F2** pada satu item yang dipilih, tombol "Rename (F2)" di bar seleksi, atau
+  **klik-kanan → Rename**. Dialog memilih **nama tanpa ekstensi** ("laporan" dari `laporan.txt`) seperti file
+  manager desktop. Nama yang ditolak (sudah dipakai, `.`/`..`, mengandung `/`, ditolak server) muncul
+  **di bawah kolom dan dialog tetap terbuka**, jadi ketikan tidak hilang. Aturannya:
+  - **Rename hanya mengganti nama, tidak pernah memindahkan**: path baru di folder lain atau nama berisi `/`
+    ditolak (server dan klien); untuk memindah pakai Potong + Tempel.
+  - **Tidak pernah menimpa**: tujuan yang sudah ada — termasuk symlink yang putus — ditolak. Pengecekan dan
+    rename satu langkah atomik (`renameat2 RENAME_NOREPLACE`), bukan "cek lalu rename" yang bisa menimpa file
+    yang muncul di antaranya (diuji: nama yang muncul setelah daftar dimuat tetap utuh); di filesystem tanpa
+    `RENAME_NOREPLACE` (sebagian FUSE/jaringan) dipakai cek dulu.
+  - **Ganti huruf besar/kecil di drive USB** (FAT, exFAT — case-insensitive): `Foto.JPG` → `foto.jpg` dulu
+    dianggap "nama sudah dipakai" (oleh file yang sama), dan kalau dipaksa kernel menjawab sukses **tanpa
+    mengubah apa pun**. Kini lewat nama sementara (lama → sementara → baru) dan hanya bila kedua nama memang
+    file yang sama; nama lain yang kebetulan sama saat huruf diabaikan tetap ditolak. Ditemukan lewat uji di
+    vfat/exfat sungguhan.
+  - **Pesan error diterjemahkan dan tanpa path server** (`file_exists`, `file_name_invalid`,
+    `file_not_found`, `file_permission_denied`, `file_read_only` — mis. drive USB yang di-mount read-only
+    karena tidak dilepas dengan bersih, `file_no_space`); dulu teks mentah Go dengan path absolut server.
+    Berlaku juga untuk folder/file baru dan hapus.
+- **Menu klik-kanan** pada baris/kartu: Buka, Unduh (zip untuk folder), Rename, Salin, Potong, Pin shortcut
+  (folder), Hapus (dengan konfirmasi). Klik-kanan pada item yang belum dipilih memilih item itu saja; pada
+  salah satu dari beberapa item terpilih menu berlaku untuk seluruh pilihan (Salin/Potong/Hapus).
 - Delete (soft-confirm dengan dialog, tidak ada "trash/undo" di versi awal — user harus
   yakin sebelum konfirmasi).
 - **Copy** dan **Cut → Paste**: pilih satu/banyak item, "salin"/"potong" disimpan di

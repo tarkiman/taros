@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -17,9 +17,12 @@ import {
   NUpload,
   NEmpty,
   NCheckbox,
+  NDropdown,
+  NAlert,
+  useDialog,
   useMessage,
 } from 'naive-ui'
-import type { DataTableColumns, UploadFileInfo } from 'naive-ui'
+import type { DataTableColumns, DropdownOption, UploadFileInfo } from 'naive-ui'
 import {
   FolderPlus,
   FilePlus,
@@ -60,6 +63,7 @@ const { t, te } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const csrfToken = getCsrfToken()
 const playerStore = usePlayerStore()
 
@@ -267,53 +271,214 @@ function toggleChecked(name: string) {
 }
 
 // --- prompt modal, shared by New Folder / New File / Rename ---
+// A rejected name (already taken, not a valid name, refused by the server) is shown
+// under the field and the dialog stays open, so the typed name is not lost.
 const promptShow = ref(false)
 const promptTitle = ref('')
 const promptValue = ref('')
-let promptOnConfirm: ((value: string) => void) | null = null
+const promptError = ref('')
+const promptBusy = ref(false)
+let promptOnConfirm: ((value: string) => Promise<string | void>) | null = null
+let promptValidate: ((value: string) => string) | null = null
 
-function openPrompt(title: string, initial: string, onConfirm: (value: string) => void) {
+function openPrompt(
+  title: string,
+  initial: string,
+  onConfirm: (value: string) => Promise<string | void>,
+  opts: { selectBase?: boolean; validate?: (value: string) => string } = {},
+) {
   promptTitle.value = title
   promptValue.value = initial
+  promptError.value = ''
   promptOnConfirm = onConfirm
+  promptValidate = opts.validate ?? null
   promptShow.value = true
+  // select the name without its extension, like a desktop file manager ("report" of report.pdf)
+  void nextTick(() => {
+    setTimeout(() => {
+      const el = document.querySelector<HTMLInputElement>('.prompt-input input')
+      if (!el) return
+      el.focus()
+      const dot = opts.selectBase ? initial.lastIndexOf('.') : -1
+      el.setSelectionRange(0, dot > 0 ? dot : initial.length)
+    }, 40)
+  })
 }
-function confirmPrompt() {
+async function confirmPrompt() {
+  if (promptBusy.value) return
   const value = promptValue.value.trim()
   if (!value) return
-  promptOnConfirm?.(value)
-  promptShow.value = false
+  const bad = promptValidate?.(value)
+  if (bad) {
+    promptError.value = bad
+    return
+  }
+  promptBusy.value = true
+  promptError.value = ''
+  try {
+    const err = await promptOnConfirm?.(value)
+    if (err) {
+      promptError.value = err
+      return
+    }
+    promptShow.value = false
+  } finally {
+    promptBusy.value = false
+  }
+}
+
+// The same rules the server enforces, checked first so most mistakes never leave the browser.
+function nameProblem(value: string, current = ''): string {
+  if (value === '.' || value === '..') return t('files.nameInvalid')
+  if (value.includes('/')) return t('files.nameHasSlash')
+  if (value !== current && entries.value.some((e) => e.name === value)) return t('files.nameTaken', { name: value })
+  return ''
 }
 
 function newFolder() {
-  openPrompt(t('files.newFolderTitle'), '', async (name) => {
-    try {
-      await filesApi.mkdir(fullPath(name))
-      loadList()
-    } catch (e) {
-      message.error(e instanceof ApiError ? e.message : t('files.mkdirFailed'))
-    }
-  })
+  openPrompt(
+    t('files.newFolderTitle'),
+    '',
+    async (name) => {
+      try {
+        await filesApi.mkdir(fullPath(name))
+        loadList()
+      } catch (e) {
+        return e instanceof ApiError ? e.message : t('files.mkdirFailed')
+      }
+    },
+    { validate: (v) => nameProblem(v) },
+  )
 }
 function newFile() {
-  openPrompt(t('files.newFileTitle'), '', async (name) => {
-    try {
-      await filesApi.createFile(fullPath(name))
-      loadList()
-    } catch (e) {
-      message.error(e instanceof ApiError ? e.message : t('files.createFileFailed'))
-    }
-  })
+  openPrompt(
+    t('files.newFileTitle'),
+    '',
+    async (name) => {
+      try {
+        await filesApi.createFile(fullPath(name))
+        loadList()
+      } catch (e) {
+        return e instanceof ApiError ? e.message : t('files.createFileFailed')
+      }
+    },
+    { validate: (v) => nameProblem(v) },
+  )
 }
 function renameEntry(entry: Entry) {
-  openPrompt(t('files.renameTitle', { name: entry.name }), entry.name, async (newName) => {
-    try {
-      await filesApi.rename(fullPath(entry.name), fullPath(newName))
-      loadList()
-    } catch (e) {
-      message.error(e instanceof ApiError ? e.message : t('files.renameFailed'))
+  openPrompt(
+    t('files.renameTitle', { name: entry.name }),
+    entry.name,
+    async (newName) => {
+      if (newName === entry.name) return // nothing to do
+      try {
+        await filesApi.rename(fullPath(entry.name), fullPath(newName))
+        checkedKeys.value = []
+        loadList()
+      } catch (e) {
+        return e instanceof ApiError ? e.message : t('files.renameFailed')
+      }
+    },
+    { selectBase: !entry.isDir, validate: (v) => nameProblem(v, entry.name) },
+  )
+}
+// Rename the one selected item (F2, and the "Rename" button of the selection bar).
+function renameSelected() {
+  if (checkedKeys.value.length !== 1) return
+  const entry = entries.value.find((e) => e.name === checkedKeys.value[0])
+  if (entry) renameEntry(entry)
+}
+
+// --- F2 = rename the selected item -------------------------------------------------------------
+function onKeydown(ev: KeyboardEvent) {
+  if (ev.key !== 'F2' || promptShow.value || previewEntry.value) return
+  const el = ev.target as HTMLElement | null
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return
+  if (checkedKeys.value.length !== 1) return
+  ev.preventDefault()
+  renameSelected()
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+
+// --- right-click menu ---------------------------------------------------------------------------
+// Only what the page can already do, in one place: open, download, rename, copy, cut,
+// pin a folder, delete. Right-clicking an item that is not selected selects just that item;
+// right-clicking one of several selected items acts on the whole selection.
+const ctx = reactive({ show: false, x: 0, y: 0, entry: null as Entry | null })
+const ctxMany = computed(() => !!ctx.entry && checkedKeys.value.length > 1 && checkedKeys.value.includes(ctx.entry.name))
+
+function openContext(ev: MouseEvent, entry: Entry) {
+  ev.preventDefault()
+  if (!checkedKeys.value.includes(entry.name)) checkedKeys.value = [entry.name]
+  ctx.entry = entry
+  ctx.x = ev.clientX
+  ctx.y = ev.clientY
+  ctx.show = true
+}
+const ctxIcon = (c: unknown) => () => h(NIcon, { component: c as never })
+const ctxOptions = computed<DropdownOption[]>(() => {
+  const e = ctx.entry
+  if (!e) return []
+  if (ctxMany.value) {
+    return [
+      { label: t('files.copy'), key: 'copy', icon: ctxIcon(Copy) },
+      { label: t('files.cut'), key: 'cut', icon: ctxIcon(Scissors) },
+      { type: 'divider', key: 'd1' },
+      { label: t('common.delete'), key: 'delete', icon: ctxIcon(Trash2) },
+    ]
+  }
+  const opts: DropdownOption[] = [
+    { label: t('files.ctxOpen'), key: 'open' },
+    { label: e.isDir ? t('files.ctxDownloadZip') : t('files.download'), key: 'download' },
+    { type: 'divider', key: 'd1' },
+    { label: t('files.rename'), key: 'rename', icon: ctxIcon(Pencil) },
+    { label: t('files.copy'), key: 'copy', icon: ctxIcon(Copy) },
+    { label: t('files.cut'), key: 'cut', icon: ctxIcon(Scissors) },
+  ]
+  if (e.isDir) {
+    opts.push({ label: shortcutByPath.value.has(fullPath(e.name)) ? t('files.shortcuts.unpin') : t('files.shortcuts.pin'), key: 'pin', icon: ctxIcon(Bookmark) })
+  }
+  opts.push({ type: 'divider', key: 'd2' }, { label: t('common.delete'), key: 'delete', icon: ctxIcon(Trash2) })
+  return opts
+})
+function onContextSelect(key: string | number) {
+  const e = ctx.entry
+  ctx.show = false
+  if (!e) return
+  switch (key) {
+    case 'open':
+      openEntry({ button: 0, ctrlKey: false, metaKey: false, shiftKey: false, preventDefault() {} } as unknown as MouseEvent, e)
+      break
+    case 'download': {
+      const a = document.createElement('a')
+      a.href = filesApi.downloadUrl(fullPath(e.name))
+      a.download = ''
+      a.click()
+      break
     }
-  })
+    case 'rename':
+      renameEntry(e)
+      break
+    case 'copy':
+      void copySelected(false)
+      break
+    case 'cut':
+      void copySelected(true)
+      break
+    case 'pin':
+      void toggleShortcut(e)
+      break
+    case 'delete':
+      dialog.warning({
+        title: t('common.delete'),
+        content: ctxMany.value ? t('files.confirmDeleteSelected', { count: checkedKeys.value.length }) : t('files.confirmDelete', { name: e.name }),
+        positiveText: t('common.delete'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: () => (ctxMany.value ? removeSelected() : removeEntry(e)),
+      })
+      break
+  }
 }
 
 async function removeEntry(entry: Entry) {
@@ -643,6 +808,7 @@ onUnmounted(() => stopWatch?.())
       </NSpace>
       <NSpace v-if="checkedKeys.length > 0" align="center" :size="8" style="margin-top: 8px">
         <span class="text-muted">{{ t('files.selectedCount', { count: checkedKeys.length }) }}</span>
+        <NButton v-if="checkedKeys.length === 1" size="small" @click="renameSelected"><template #icon><NIcon :component="Pencil" /></template>{{ t('files.rename') }} (F2)</NButton>
         <NButton size="small" @click="copySelected(false)"><template #icon><NIcon :component="Copy" /></template>{{ t('files.copy') }}</NButton>
         <NButton size="small" @click="copySelected(true)"><template #icon><NIcon :component="Scissors" /></template>{{ t('files.cut') }}</NButton>
         <NPopconfirm @positive-click="removeSelected">
@@ -706,6 +872,7 @@ onUnmounted(() => stopWatch?.())
             :data="visibleEntries"
             :loading="loading"
             :row-key="(r: Entry) => r.name"
+            :row-props="(r: Entry) => ({ onContextmenu: (ev: MouseEvent) => openContext(ev, r) })"
             v-model:checked-row-keys="checkedKeys"
             :scroll-x="800"
           />
@@ -716,6 +883,7 @@ onUnmounted(() => stopWatch?.())
               :key="entry.name"
               class="grid-tile"
               :class="{ selected: checkedKeys.includes(entry.name) }"
+              @contextmenu="openContext($event, entry)"
             >
               <NCheckbox
                 class="grid-checkbox"
@@ -779,9 +947,25 @@ onUnmounted(() => stopWatch?.())
       </div>
     </div>
 
-    <NModal v-model:show="promptShow" preset="dialog" :title="promptTitle" positive-text="OK" :negative-text="t('common.cancel')" @positive-click="confirmPrompt">
-      <NInput v-model:value="promptValue" @keyup.enter="confirmPrompt" autofocus />
+    <NModal v-model:show="promptShow" preset="card" style="max-width: 460px" :title="promptTitle" :closable="!promptBusy" :mask-closable="false">
+      <NInput v-model:value="promptValue" class="prompt-input" :status="promptError ? 'error' : undefined" @update:value="promptError = ''" @keyup.enter="confirmPrompt" />
+      <NAlert v-if="promptError" type="error" :show-icon="false" class="prompt-error">{{ promptError }}</NAlert>
+      <div class="prompt-footer">
+        <NButton size="small" :disabled="promptBusy" @click="promptShow = false">{{ t('common.cancel') }}</NButton>
+        <NButton size="small" type="primary" :loading="promptBusy" :disabled="!promptValue.trim()" @click="confirmPrompt">OK</NButton>
+      </div>
     </NModal>
+
+    <NDropdown
+      trigger="manual"
+      placement="bottom-start"
+      :show="ctx.show"
+      :x="ctx.x"
+      :y="ctx.y"
+      :options="ctxOptions"
+      @select="onContextSelect"
+      @clickoutside="ctx.show = false"
+    />
 
     <div v-if="activeJob" class="job-panel" :class="{ 'job-panel--player-active': playerStore.current }">
       <NCard size="small" :title="activeJob.kind === 'move' ? t('files.moving') : t('files.copying')">
@@ -1080,6 +1264,21 @@ onUnmounted(() => stopWatch?.())
   margin-top: 6px;
   opacity: 0;
   transition: opacity var(--transition-fast);
+}
+/* No hover on a touch screen: the actions (rename included) must be there without it. */
+@media (hover: none) {
+  .grid-actions {
+    opacity: 1;
+  }
+}
+.prompt-error {
+  margin-top: 10px;
+}
+.prompt-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 .grid-tile:hover .grid-actions,
 .grid-tile.selected .grid-actions {
