@@ -53,16 +53,22 @@ const (
 	PasswordSaveFailed    = "password_save_failed" // params: detail
 
 	// handlers_files.go
-	PathInvalid         = "path_invalid"          // params: detail
-	DirectoryReadFailed = "directory_read_failed" // params: detail
-	UnknownAction       = "unknown_action"        // params: action
-	FileOpFailed        = "file_op_failed"        // params: detail
-	NoItemsSelected     = "no_items_selected"
-	ClipboardEmpty      = "clipboard_empty"
-	PasteFailed         = "paste_failed"  // params: detail
-	UploadFailed        = "upload_failed" // params: detail
-	NoFileUploaded      = "no_file_uploaded"
-	UploadWriteFailed   = "upload_write_failed" // params: detail
+	PathInvalid          = "path_invalid"          // params: detail
+	DirectoryReadFailed  = "directory_read_failed" // params: detail
+	UnknownAction        = "unknown_action"        // params: action
+	FileOpFailed         = "file_op_failed"        // params: detail
+	FileExists           = "file_exists"           // the name is already taken
+	FileNameInvalid      = "file_name_invalid"     // not a valid name for one entry
+	FileNotFound         = "file_not_found"
+	FilePermissionDenied = "file_permission_denied"
+	FileReadOnly         = "file_read_only" // read-only filesystem (e.g. a dirty USB volume)
+	FileNoSpace          = "file_no_space"
+	NoItemsSelected      = "no_items_selected"
+	ClipboardEmpty       = "clipboard_empty"
+	PasteFailed          = "paste_failed"  // params: detail
+	UploadFailed         = "upload_failed" // params: detail
+	NoFileUploaded       = "no_file_uploaded"
+	UploadWriteFailed    = "upload_write_failed" // params: detail
 
 	// handlers_editor.go
 	ContentTooLarge   = "content_too_large"   // 413 — frontend already overrides by status, kept for API completeness
