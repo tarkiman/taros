@@ -14,6 +14,12 @@ export const settingsApi = {
   listUsers: () => api.get<{ usernames: string[] }>('/api/settings/users'),
   addUser: (newUsername: string, newPassword: string, password: string) =>
     api.post<{ usernames: string[] }>('/api/settings/users', { newUsername, newPassword, password }),
+  // Own password: needs the current one. Ends every OTHER session of the account.
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post<{ ok: boolean; otherSessionsClosed: number }>('/api/settings/password', { currentPassword, newPassword }),
+  // Another account's password: needs YOUR password. Ends all of that account's sessions.
+  resetPassword: (username: string, newPassword: string, password: string) =>
+    api.post<{ ok: boolean; sessionsClosed: number }>(`/api/settings/users/${encodeURIComponent(username)}/password`, { newPassword, password }),
   removeUser: (username: string, password: string) =>
     api.post<{ usernames: string[] }>(`/api/settings/users/${encodeURIComponent(username)}/remove`, { password }),
 }

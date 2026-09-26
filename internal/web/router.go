@@ -334,6 +334,8 @@ func (s *Server) Handler() http.Handler {
 	// directly like TOTP setup/confirm/disable.
 	mux.HandleFunc("GET /api/settings/users", s.requireAuth(s.handleSettingsUsersList))
 	mux.HandleFunc("POST /api/settings/users", s.requireAuth(s.handleSettingsUsersAdd))
+	mux.HandleFunc("POST /api/settings/password", s.requireAuth(s.handleSettingsPasswordChange))
+	mux.HandleFunc("POST /api/settings/users/{username}/password", s.requireAuth(s.handleSettingsUsersResetPassword))
 	mux.HandleFunc("POST /api/settings/users/{username}/remove", s.requireAuth(s.handleSettingsUsersRemove))
 
 	// /api/update/check always registered (same "show a clear disabled

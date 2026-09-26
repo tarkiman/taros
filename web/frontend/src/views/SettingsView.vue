@@ -7,6 +7,8 @@ import qrcode from 'qrcode-generator'
 import AppShell from '../layouts/AppShell.vue'
 import BootHistoryCard from '../components/BootHistoryCard.vue'
 import WifiCard from '../components/WifiCard.vue'
+import ChangePasswordCard from '../components/ChangePasswordCard.vue'
+import ResetPasswordModal from '../components/ResetPasswordModal.vue'
 import StorageSettingsCard from '../components/StorageSettingsCard.vue'
 import ContainerShellCard from '../components/ContainerShellCard.vue'
 import { terminalApi } from '../api/terminal'
@@ -364,6 +366,7 @@ const newPassword = ref('')
 const newPasswordConfirm = ref('')
 const usersPassword = ref('')
 const pendingRemoveUsername = ref('')
+const resetPasswordFor = ref<string | null>(null)
 
 async function loadUsers() {
   try {
@@ -705,6 +708,8 @@ async function sendNotifyTest() {
           </NSpace>
         </NCard>
 
+        <ChangePasswordCard />
+
         <NCard embedded size="small" :title="t('settings.usersTitle')" style="margin-top: 16px">
           <NSpace vertical :size="12">
             <template v-if="usersFlow === 'idle'">
@@ -713,13 +718,15 @@ async function sendNotifyTest() {
                 <li v-for="u in usernames" :key="u" class="users-row">
                   <span>{{ u }}</span>
                   <NTag v-if="u === auth.username" size="small">{{ t('settings.usersYou') }}</NTag>
-                  <NButton
-                    v-else
-                    size="tiny"
-                    type="error"
-                    ghost
-                    @click="requestRemoveUser(u)"
-                  >{{ t('settings.removeUser') }}</NButton>
+                  <span v-else class="users-actions">
+                    <NButton size="tiny" @click="resetPasswordFor = u">{{ t('settings.password.reset') }}</NButton>
+                    <NButton
+                      size="tiny"
+                      type="error"
+                      ghost
+                      @click="requestRemoveUser(u)"
+                    >{{ t('settings.removeUser') }}</NButton>
+                  </span>
                 </li>
               </ul>
               <NButton size="small" type="primary" @click="requestAddUser">{{ t('settings.addUser') }}</NButton>
@@ -771,6 +778,7 @@ async function sendNotifyTest() {
             </NAlert>
           </NSpace>
         </NCard>
+        <ResetPasswordModal :username="resetPasswordFor" @close="resetPasswordFor = null" />
 
         <WifiCard />
 
@@ -986,6 +994,10 @@ async function sendNotifyTest() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.users-actions {
+  display: flex;
+  gap: 6px;
 }
 .users-row {
   display: flex;

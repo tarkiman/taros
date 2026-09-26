@@ -110,6 +110,23 @@ func (s *SessionStore) Delete(token string) {
 	s.mu.Unlock()
 }
 
+// DeleteUserSessions ends every session of username except the one whose token is
+// keep ("" keeps none), and returns how many were ended. After a password
+// change or reset, a session somebody else may hold must not survive it; and a
+// removed account must not stay logged in.
+func (s *SessionStore) DeleteUserSessions(username, keep string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for token, sess := range s.sessions {
+		if sess.Username == username && (keep == "" || token != keep) {
+			delete(s.sessions, token)
+			n++
+		}
+	}
+	return n
+}
+
 func (s *SessionStore) reapExpiredLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()

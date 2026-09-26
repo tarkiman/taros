@@ -11,12 +11,6 @@ import (
 	"github.com/tarkiman/taros/internal/auth"
 )
 
-// minPasswordLength only applies to accounts created through this
-// web-facing path — `taros setup`'s CLI bootstrap (cmd/taros/main.go)
-// predates this and only rejects an empty password, left as-is so
-// existing install docs/scripts don't need to change.
-const minPasswordLength = 8
-
 // handleSettingsUsersList is always registered — user management isn't an
 // optional/risky feature like Terminal or Disk Analysis (no
 // enabled-gating), it's core to how the app is used day to day. See
@@ -58,8 +52,7 @@ func (s *Server) handleSettingsUsersAdd(w http.ResponseWriter, r *http.Request) 
 		writeJSONError(w, http.StatusBadRequest, apierr.UsernameRequired, "username tidak boleh kosong", nil)
 		return
 	}
-	if len(req.NewPassword) < minPasswordLength {
-		writeJSONError(w, http.StatusBadRequest, apierr.PasswordTooShort, "password minimal 8 karakter", map[string]any{"min": minPasswordLength})
+	if !writePasswordProblem(w, req.NewPassword) {
 		return
 	}
 
@@ -116,6 +109,9 @@ func (s *Server) handleSettingsUsersRemove(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	slog.Info("settings: user dihapus", "removedUsername", target, "by", sess.Username)
+	// A removed account must not stay logged in: sessions live in memory and are
+	// not re-checked against the account list.
+	closed := s.deps.Sessions.DeleteUserSessions(target, "")
+	slog.Info("settings: user dihapus", "removedUsername", target, "sessionsClosed", closed, "by", sess.Username)
 	writeJSON(w, http.StatusOK, map[string][]string{"usernames": s.deps.Creds.Usernames()})
 }
