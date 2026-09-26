@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -49,6 +50,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		runSetup(os.Args[2:])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "passwd" {
+		runPasswd(os.Args[2:])
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "storage-status" {
@@ -450,4 +455,72 @@ func runStorageStatus() {
 		os.Exit(1)
 	}
 	fmt.Println(string(out))
+}
+
+// runPasswd sets a new password for an existing account — the way back in when
+// every password is forgotten (the web UI needs a login). It edits
+// credentials.yaml directly; the running service keeps its accounts in memory,
+// so it must be restarted to pick the change up (which also logs everybody out).
+//
+//	taros passwd [--config config.yaml] <username>
+func runPasswd(args []string) {
+	fs := flag.NewFlagSet("taros passwd", flag.ExitOnError)
+	configPath := fs.String("config", "./config.yaml", "path to config.yaml")
+	_ = fs.Parse(args)
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "pemakaian: taros passwd [--config config.yaml] <username>")
+		os.Exit(2)
+	}
+	username := fs.Arg(0)
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load config:", err)
+		os.Exit(1)
+	}
+	creds, err := auth.LoadCredentials(cfg.Auth.CredentialsFile)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "baca", cfg.Auth.CredentialsFile+":", err)
+		os.Exit(1)
+	}
+	found := false
+	for _, u := range creds.Usernames() {
+		if u == username {
+			found = true
+		}
+	}
+	if !found {
+		fmt.Fprintf(os.Stderr, "akun %q tidak ada. Akun yang ada: %s\n", username, strings.Join(creds.Usernames(), ", "))
+		os.Exit(1)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	password, err := readPassword(reader, "Password baru untuk "+username+": ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read password:", err)
+		os.Exit(1)
+	}
+	confirm, err := readPassword(reader, "Ulangi password: ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "read password:", err)
+		os.Exit(1)
+	}
+	if password != confirm {
+		fmt.Fprintln(os.Stderr, "password tidak sama")
+		os.Exit(1)
+	}
+	if err := creds.SetPassword(cfg.Auth.CredentialsFile, username, password); err != nil {
+		switch {
+		case errors.Is(err, auth.ErrPasswordTooShort):
+			fmt.Fprintf(os.Stderr, "password minimal %d karakter\n", auth.MinPasswordLength)
+		case errors.Is(err, auth.ErrPasswordTooLong):
+			fmt.Fprintf(os.Stderr, "password maksimal %d byte\n", auth.MaxPasswordBytes)
+		default:
+			fmt.Fprintln(os.Stderr, "simpan password:", err)
+		}
+		os.Exit(1)
+	}
+	fmt.Println("Password", username, "diganti di", cfg.Auth.CredentialsFile)
+	fmt.Println("Layanan yang sedang berjalan baru memakainya setelah di-restart (sekaligus mengeluarkan semua sesi):")
+	fmt.Println("  sudo systemctl restart taros")
 }

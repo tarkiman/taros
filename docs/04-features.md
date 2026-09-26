@@ -966,9 +966,27 @@ ke server).
   kali dibaca, transparan tanpa langkah manual — lihat [07-security.md](07-security.md) §7.1.
   TOTP sekarang juga per-akun (dulu satu akun jadi satu TOTP global secara implisit) — tiap
   akun independen, aktifkan TOTP di satu akun tidak memaksa akun lain ikut pakai 2FA.
-- Ganti password akun sendiri, konfigurasi interval polling, root direktori file explorer,
-  daftar unit systemd "terproteksi" — belum ada di halaman Settings ini, masih di
-  [10-roadmap.md](10-roadmap.md) Fase 6.
+- **Ganti password** — kartu "Ganti password saya" di Settings: password saat ini + password baru
+  (dua kali; minimal 8 karakter, maksimal 72 byte karena bcrypt hanya membaca 72 byte pertama dan
+  menolak yang lebih panjang). Password baru tidak boleh sama dengan yang lama. Begitu berhasil,
+  **semua sesi lain akun itu dikeluarkan** (browser/perangkat lain) sedangkan sesi yang dipakai
+  tetap — supaya sesi yang mungkin dipegang orang lain tidak selamat dari penggantian password.
+  TOTP tidak berubah. Password saat ini dicek dengan **rate limiter yang sama dengan login**
+  (per-IP): sesi yang dibajak tidak boleh jadi cara gratis menebak password. Di baris tiap akun
+  lain di Kelola Pengguna ada tombol **Reset password** (password baru + password akun sendiri
+  untuk konfirmasi; ikut rate limiter): semua sesi akun itu dikeluarkan, TOTP-nya tetap, dan
+  password baru disampaikan langsung ke orangnya (tidak ada email/tautan reset — TarOS tidak
+  punya jalur keluar seperti itu). Menghapus akun sekarang juga **mengeluarkan semua sesinya**
+  (sebelumnya sesi akun yang dihapus tetap hidup sampai idle timeout, karena sesi tidak dicek ulang
+  terhadap daftar akun). Password akun berbagi file (SMB/FTP, §4.16) terpisah dan diganti di halaman
+  Berbagi file.
+- **Lupa semua password** — `taros passwd [--config config.yaml] <username>` di terminal host
+  (baca dua kali tanpa echo, aturan panjang yang sama) menulis hash baru ke `credentials.yaml`.
+  Layanan yang berjalan menyimpan akun di memori, jadi harus di-restart
+  (`sudo systemctl restart taros`), yang sekaligus mengeluarkan semua sesi. Sebelumnya satu-satunya
+  jalan adalah menghapus `credentials.yaml` dan membuat ulang semua akun.
+- Konfigurasi interval polling, root direktori file explorer, daftar unit systemd "terproteksi" —
+  belum ada di halaman Settings ini, masih di [10-roadmap.md](10-roadmap.md) Fase 6.
 
 ## 4.8 Update Aplikasi
 

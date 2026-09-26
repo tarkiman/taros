@@ -2204,6 +2204,25 @@ Uji mount asli di kontainer tanpa disk asli (4 distro), UI di Chromium, dan Pi a
 "pin ke boot" (entri `fstab` `nofail` bertanda untuk drive yang harus siap sebelum Docker), perbaikan
 volume kotor (`ntfsfix`/`fsck`), LUKS, notifikasi Discord colok/cabut, dan mount manual disk non-USB.
 
+### Ganti password (sendiri, reset akun lain, CLI)
+
+Ditemukan saat ditanya "apakah fitur update password sudah ada": belum — hanya tertulis sebagai
+rencana di dokumen API, tanpa route, dan `taros setup` menolak jalan bila `credentials.yaml` sudah ada,
+jadi jalan keluar satu-satunya adalah menghapus file itu. Keputusan yang disetujui: ganti password
+sendiri (password lama diminta, sesi lain dikeluarkan), reset password akun lain (konfirmasi password
+sendiri), dan `taros passwd` untuk keadaan terkunci. Detail di `docs/04-features.md` §4.7 dan
+`docs/07-security.md` §7.1. Temuan dari menulisnya, keduanya diperbaiki dan diberi test:
+**akun yang dihapus tetap login** sampai idle timeout (sesi tidak dicek ulang terhadap daftar akun —
+kini sesinya dikeluarkan), dan **password >72 byte saat membuat akun gagal dengan 500 yang tidak jelas**
+(bcrypt menolaknya — kini 400 dengan pesan). Diuji: 6 test auth + 5 test handler, mutation testing
+(**17 mutasi valid, semua tertangkap** — satu awalnya selamat karena dua lapisan menutupi satu sama
+lain dan kini punya test sendiri), uji nyata di Chromium (dua login terpisah berbeda cookie jar: sesi
+lain benar-benar keluar, sesi sendiri tetap, password lama 401 / baru 200, akun yang direset dan
+yang dihapus keluar) dan `taros passwd` di terminal (akun tak ada, tidak sama, terlalu pendek), tampilan
+ponsel dan id/en; tidak ada password di log. **Belum**: pemeriksaan kekuatan password selain panjang
+(daftar password umum), kedaluwarsa password, dan riwayat login/sesi aktif yang bisa dicabut satu per
+satu.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur
@@ -2220,9 +2239,9 @@ saat ini (lihat [01-overview.md](01-overview.md) "Non-Tujuan") tidak menutup jal
 - Role-based access untuk multi-user (mis. akun viewer read-only vs admin) — multi-user
   sendiri (akses sama rata) sudah selesai, lihat entri "Multi-user (akses sama rata, tanpa
   role-based access)" di atas.
-- Halaman Pengaturan lengkap — ganti password akun sendiri, interval polling, root direktori
-  file explorer, daftar unit systemd "terproteksi". Toggle Terminal, TOTP (2FA), dan Kelola
-  Pengguna sudah ada (lihat entri terkait di atas) — sisanya belum.
+- Halaman Pengaturan lengkap — interval polling, root direktori file explorer, daftar unit systemd
+  "terproteksi". Toggle Terminal, TOTP (2FA), Kelola Pengguna, dan ganti password sudah ada (lihat
+  entri terkait di atas) — sisanya belum.
 - Kategori tambahan untuk Analisis Disk (lihat entri di atas), sengaja belum digarap di v1:
   Docker unused images/volumes (sebagian sudah ada lewat tombol Cleanup di §4.2, belum
   terintegrasi ke laporan analisis), service systemd yang gagal terus-menerus (data-nya sudah

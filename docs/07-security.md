@@ -21,6 +21,17 @@ permukaan risikonya besar jika tidak dijaga. Bagian ini mendefinisikan pagar pen
   tersisa (hindari instance tanpa akun sama sekali). `Verify(username, password)` tetap
   menjalankan bcrypt compare (ke hash dummy) meski username tidak ditemukan — anti-enumeration
   yang sama seperti versi single-user, cuma sekarang berlaku untuk N akun, bukan 1.
+- **Ganti/reset password**: password saat ini (atau milik yang meminta) dicek ulang dengan **rate limiter
+  login yang sama** — sesi yang dibajak tidak boleh menjadi jalan menebak password, karena password
+  adalah satu-satunya hal yang bertahan lebih lama dari sesi. Setelah penggantian **semua sesi lain akun
+  itu dikeluarkan** (`SessionStore.DeleteUserSessions`), dan begitu pula saat akun dihapus — sesi disimpan
+  di memori dan tidak dicek ulang terhadap daftar akun, jadi tanpa ini akun yang dihapus atau di-reset
+  tetap login sampai idle timeout. Panjang password dibatasi 8–72 byte (bcrypt menolak >72; sebelumnya
+  password lebih panjang saat membuat akun gagal dengan error 500 yang tidak jelas). Password tidak
+  pernah masuk log atau respons. `taros passwd` menulis hash langsung ke `credentials.yaml` (0600) dan
+  hanya bisa dijalankan oleh orang yang sudah punya akses shell ke host. Tidak ada reset lewat email
+  atau tautan — sengaja: TarOS tidak punya jalur keluar itu, dan jalur pemulihan seperti itu adalah
+  celah.
 - Login via form → cek bcrypt → jika valid, buat session token random (32 byte,
   `crypto/rand`), simpan di map in-memory `token → session`, set sebagai **cookie
   HTTP-only, Secure (jika HTTPS aktif), SameSite=Strict**.

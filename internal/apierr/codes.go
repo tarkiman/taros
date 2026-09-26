@@ -48,6 +48,9 @@ const (
 	CannotRemoveLastUser  = "cannot_remove_last_user"
 	CannotRemoveSelf      = "cannot_remove_self"
 	UsersSaveFailed       = "users_save_failed" // params: detail
+	PasswordTooLong       = "password_too_long" // params: max
+	PasswordSameAsOld     = "password_same_as_old"
+	PasswordSaveFailed    = "password_save_failed" // params: detail
 
 	// handlers_files.go
 	PathInvalid         = "path_invalid"          // params: detail

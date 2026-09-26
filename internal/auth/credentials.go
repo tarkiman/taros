@@ -133,6 +133,30 @@ func (c *Credentials) Usernames() []string {
 	return out
 }
 
+// bcrypt only looks at the first 72 bytes and refuses longer input, so a longer
+// password would either be silently weakened or fail with an opaque error.
+const (
+	MinPasswordLength = 8
+	MaxPasswordBytes  = 72
+)
+
+var (
+	ErrPasswordTooShort = errors.New("auth: password terlalu pendek")
+	ErrPasswordTooLong  = errors.New("auth: password terlalu panjang (maks 72 byte)")
+)
+
+// CheckPassword is the one rule a new password must satisfy, wherever it comes
+// from (new account, change, reset, `taros passwd`).
+func CheckPassword(pw string) error {
+	if len(pw) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
+	if len(pw) > MaxPasswordBytes {
+		return ErrPasswordTooLong
+	}
+	return nil
+}
+
 var (
 	ErrUsernameExists = errors.New("auth: username sudah dipakai")
 	ErrUserNotFound   = errors.New("auth: user tidak ditemukan")
@@ -157,6 +181,32 @@ func (c *Credentials) AddUser(path, username, password string) error {
 	c.accounts = append(c.accounts, account{Username: username, PasswordHash: string(hash)})
 	if err := c.save(path); err != nil {
 		c.accounts = c.accounts[:len(c.accounts)-1]
+		return err
+	}
+	return nil
+}
+
+// SetPassword replaces an account's password hash and saves it. TOTP and every
+// other property of the account are left alone. On a write error the old
+// password stays in force.
+func (c *Credentials) SetPassword(path, username, password string) error {
+	if err := CheckPassword(password); err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("auth: hash password: %w", err)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	a := c.find(username)
+	if a == nil {
+		return ErrUserNotFound
+	}
+	old := a.PasswordHash
+	a.PasswordHash = string(hash)
+	if err := c.save(path); err != nil {
+		a.PasswordHash = old
 		return err
 	}
 	return nil

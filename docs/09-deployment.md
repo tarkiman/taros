@@ -261,6 +261,8 @@ SERVICE_USER=taros   # ganti sesuai pilihanmu — lihat opsi A/B/C di step 2
    catatan ini ditambahkan — root cause aslinya persis skenario di atas: direktori data dimiliki
    root, servis jalan unprivileged, tidak ada langkah instalasi yang mengurus ini).
 6. Jalankan `taros setup` (interaktif) untuk membuat admin user pertama (username + password
+   Lupa password? `taros passwd --config /etc/taros/config.yaml <username>` mengganti password akun
+   yang sudah ada (lalu `sudo systemctl restart taros` agar layanan yang berjalan memakainya).
    → disimpan ter-hash di `/etc/taros/config.yaml` atau file kredensial terpisah `/etc/taros/credentials`).
 7. (Opsional, untuk kontrol systemd granular tanpa root penuh) copy
    `deploy/polkit/10-taros-systemd.rules` ke `/etc/polkit-1/rules.d/` (sesuaikan nama user
