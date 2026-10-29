@@ -50,11 +50,18 @@ type Partition struct {
 	MountPoint string `json:"mountPoint"`
 	// ManagedBy: who mounted it — "taros" (under our mount base), "fstab", or
 	// "other" (udisks, the user, …). Only "taros" and "other" may be unmounted here.
-	ManagedBy  string   `json:"managedBy,omitempty"`
-	TotalBytes uint64   `json:"totalBytes"`
-	UsedBytes  uint64   `json:"usedBytes"`
-	FreeBytes  uint64   `json:"freeBytes"`
-	UsedBy     []string `json:"usedBy"` // shares/FTP folders inside the mount
+	ManagedBy string `json:"managedBy,omitempty"`
+	// FstabMountPoint: the target path /etc/fstab names for this volume, set
+	// whenever an fstab line matches it — mounted or not. When State is
+	// StateFstab and this volume is not currently mounted, Mount runs exactly
+	// `mount <FstabMountPoint>`: nothing but what that line already promises
+	// (systemd would do the same at boot). It is what a hot-plugged drive misses
+	// — fstab only auto-mounts at boot, not when a USB drive reappears later.
+	FstabMountPoint string   `json:"fstabMountPoint,omitempty"`
+	TotalBytes      uint64   `json:"totalBytes"`
+	UsedBytes       uint64   `json:"usedBytes"`
+	FreeBytes       uint64   `json:"freeBytes"`
+	UsedBy          []string `json:"usedBy"` // shares/FTP folders inside the mount
 }
 
 // Disk is an external drive with its partitions.

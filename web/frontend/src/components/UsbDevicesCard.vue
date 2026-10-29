@@ -109,12 +109,15 @@ const blockedText = computed(() => {
           </template>
           <p v-else-if="p.state === 'unsupported'" class="note">{{ reasonText(p) }}</p>
           <p v-else-if="p.state === 'failed'" class="note err">{{ p.error }}</p>
-          <p v-else-if="p.state === 'fstab'" class="note">{{ t('storage.fstabNote') }}</p>
+          <template v-else-if="p.state === 'fstab'">
+            <p class="note">{{ p.fstabMountPoint ? t('storage.fstabNoteWithPath', { path: p.fstabMountPoint }) : t('storage.fstabNote') }}</p>
+            <p v-if="p.error" class="note err">{{ p.error }}</p>
+          </template>
           <p v-else-if="p.state === 'ignored'" class="note">{{ t('storage.ignoredNote') }}</p>
         </div>
         <div class="btns">
           <NButton v-if="p.state === 'mounted' || p.state === 'mounted_ro'" size="tiny" type="primary" @click="open(p)">{{ t('storage.open') }}</NButton>
-          <NButton v-if="p.state === 'unmounted' || p.state === 'failed' || p.state === 'ignored'" size="tiny" type="primary" :disabled="!canAct" :loading="busy === p.path" @click="mount(p)">{{ t('storage.mount') }}</NButton>
+          <NButton v-if="p.state === 'unmounted' || p.state === 'failed' || p.state === 'ignored' || p.state === 'fstab'" size="tiny" type="primary" :disabled="!canAct" :loading="busy === p.path" @click="mount(p)">{{ t('storage.mount') }}</NButton>
           <NButton v-if="(p.state === 'mounted' || p.state === 'mounted_ro') && p.managedBy !== 'fstab' && canAct" size="tiny" :loading="busy === p.path" @click="unmount(p)">{{ t('storage.unmount') }}</NButton>
           <NButton v-if="p.state === 'ignored' && canAct" size="tiny" quaternary @click="ignore(p, false)">{{ t('storage.autoAgain') }}</NButton>
           <NButton v-else-if="(p.state === 'unmounted' || p.state === 'failed' || p.state === 'mounted' || p.state === 'mounted_ro') && p.managedBy !== 'fstab' && canAct" size="tiny" quaternary @click="ignore(p, true)">{{ t('storage.neverAuto') }}</NButton>

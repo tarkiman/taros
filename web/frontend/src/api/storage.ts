@@ -15,6 +15,10 @@ export interface StoragePartition {
   error?: string
   mountPoint: string
   managedBy?: 'taros' | 'fstab' | 'other'
+  // fstabMountPoint: the target path /etc/fstab names for this volume (set whether
+  // it is currently mounted or not). When state is 'fstab', Mount runs exactly
+  // `mount <fstabMountPoint>` — the line fstab already promises, nothing TarOS invents.
+  fstabMountPoint?: string
   totalBytes: number
   usedBytes: number
   freeBytes: number

@@ -248,6 +248,42 @@ func (w *world) Run(_ context.Context, name string, args ...string) (string, err
 		}
 		return out, nil
 	case "mount":
+		// The fstab form: `mount <target>`, no -t/-o/device — resolve it the same way
+		// `mount(8)` itself would, by matching /etc/fstab's own line for that target.
+		if len(args) == 1 && !strings.HasPrefix(args[0], "-") {
+			target := args[0]
+			var dev, fstype string
+			fstabData, _ := os.ReadFile(filepath.Join(w.dir, "fstab"))
+			for _, e := range parseFstab(string(fstabData)) {
+				if filepath.Clean(e.File) != filepath.Clean(target) {
+					continue
+				}
+				for _, d := range w.disks {
+					for _, part := range d.allParts() {
+						pb := blockDev{Name: part.name, Path: "/dev/" + part.name, FSType: part.fstype, Label: part.label, UUID: part.uuid}
+						if e.matches(pb) {
+							dev, fstype = pb.Path, pb.FSType
+						}
+					}
+				}
+			}
+			if dev == "" {
+				w.mu.Unlock()
+				return "", &CmdError{Stderr: "mount: can't find " + target + " in /etc/fstab", Err: errors.New("exit status 32")}
+			}
+			if msg, bad := w.failRW[dev]; bad {
+				w.mu.Unlock()
+				return "", &CmdError{Stderr: msg, Err: errors.New("exit status 32")}
+			}
+			if fi, err := os.Stat(target); err != nil || !fi.IsDir() {
+				w.mu.Unlock()
+				return "", &CmdError{Stderr: "mount: mount point " + target + " does not exist", Err: errors.New("exit status 32")}
+			}
+			w.mounts[dev], w.mountFS[dev], w.mountOpts[dev] = target, fstype, ""
+			w.mu.Unlock()
+			w.sync()
+			return "", nil
+		}
 		var fstype, opts, dev, mp string
 		for i := 0; i < len(args); i++ {
 			switch args[i] {
@@ -931,17 +967,28 @@ func TestFstabManagedDrivesAreLeftAlone(t *testing.T) {
 		t.Errorf("only the drive that is not in fstab: %v", c)
 	}
 	p := w.part("/dev/sdc1")
-	if p.State != StateFstab || p.ManagedBy != "fstab" {
+	if p.State != StateFstab || p.ManagedBy != "fstab" || p.FstabMountPoint != "/mnt/backup" {
 		t.Errorf("%+v", p)
 	}
-	if err := w.m.Mount(context.Background(), "/dev/sdc1"); !errors.Is(err, ErrManagedByFstab) {
-		t.Errorf("mount: %v", err)
+	// Mount on an fstab-managed volume runs exactly what /etc/fstab promises — the
+	// same mount systemd would already have done at boot, nothing TarOS invents.
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err == nil {
+		t.Fatal("the fstab target directory does not exist yet in this fake, so this must fail")
+	}
+	// Rewrite the fstab line's target to a path that exists, under the fake root.
+	os.MkdirAll(filepath.Join(w.dir, "mnt", "backup"), 0o755)
+	w.fstab("UUID=1111-2222 " + filepath.Join(w.dir, "mnt", "backup") + " exfat defaults,nofail 0 0\n")
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err != nil {
+		t.Fatalf("mounting an fstab volume by its own target must succeed: %v", err)
+	}
+	if got := w.called("mount " + filepath.Join(w.dir, "mnt", "backup")); len(got) != 1 {
+		t.Errorf("expected exactly `mount <target>`, nothing else: %v", w.calls)
+	}
+	p = w.part("/dev/sdc1")
+	if p.State != StateMounted || p.ManagedBy != "fstab" {
+		t.Errorf("after mounting: %+v", p)
 	}
 	// mounted by fstab: cannot be unmounted or ejected from here
-	w.mu.Lock()
-	w.mounts["/dev/sdc1"], w.mountFS["/dev/sdc1"] = "/mnt/backup", "exfat"
-	w.mu.Unlock()
-	w.sync()
 	if err := w.m.Unmount(context.Background(), "/dev/sdc1"); !errors.Is(err, ErrManagedByFstab) {
 		t.Errorf("unmount: %v", err)
 	}
@@ -950,6 +997,109 @@ func TestFstabManagedDrivesAreLeftAlone(t *testing.T) {
 	}
 	if len(w.called("umount")) != 0 {
 		t.Error("nothing may be unmounted")
+	}
+}
+
+// The real reason this exists: a hot-plugged (or re-plugged) fstab-managed drive
+// stays unmounted forever — fstab only mounts at boot — until Mount runs the exact
+// line fstab already promises. See mountFstabLocked's doc comment.
+func TestMountingAnFstabVolumeRunsExactlyWhatFstabPromises(t *testing.T) {
+	w := newWorld(t)
+	w.plug(hdd())
+	mp := filepath.Join(w.dir, "mnt", "backup")
+	os.MkdirAll(mp, 0o755)
+	w.fstab("UUID=1111-2222 " + mp + " exfat defaults,nofail 0 0\n")
+	if p := w.part("/dev/sdc1"); p.State != StateFstab {
+		t.Fatalf("setup: %+v", p)
+	}
+
+	// Auto-mount must never touch it — only a direct Mount() call may.
+	w.ticks(5)
+	if len(w.called("mount")) != 0 {
+		t.Errorf("auto-mount must leave an fstab volume alone: %v", w.calls)
+	}
+
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.called("mount " + mp); len(got) != 1 {
+		t.Errorf("exactly one `mount <target>`, no -t/-o of TarOS's own choosing: %v", w.calls)
+	}
+	p := w.part("/dev/sdc1")
+	if p.State != StateMounted || p.ManagedBy != "fstab" || p.MountPoint != mp {
+		t.Errorf("%+v", p)
+	}
+	// Mounting again is just the ordinary "already mounted" refusal.
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); !errors.Is(err, ErrAlreadyMounted) {
+		t.Errorf("remount: %v", err)
+	}
+}
+
+func TestMountingAnFstabVolumeThatFailsLeavesNoTrace(t *testing.T) {
+	w := newWorld(t)
+	w.plug(hdd())
+	mp := filepath.Join(w.dir, "mnt", "backup")
+	os.MkdirAll(mp, 0o755)
+	w.fstab("UUID=1111-2222 " + mp + " exfat defaults,nofail 0 0\n")
+	w.failRW["/dev/sdc1"] = "mount: wrong fs type, bad option, bad superblock on /dev/sdc1"
+
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err == nil || strings.Contains(err.Error(), w.dir) {
+		t.Fatalf("must fail, and never leak the server's temp path: %v", err)
+	}
+	p := w.part("/dev/sdc1")
+	if p.State != StateFstab || p.Error == "" {
+		t.Errorf("stays \"In fstab\" with the reason attached, not silently dropped: %+v", p)
+	}
+	if len(w.called("umount")) != 0 {
+		t.Error("a failed fstab mount must not attempt to clean up with umount — nothing mounted")
+	}
+	// retrying after whatever was wrong is fixed works, same as the ordinary unmounted case
+	delete(w.failRW, "/dev/sdc1")
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+}
+
+// If the admin later removes the fstab line of a volume TarOS mounted through it
+// (unusual, but not impossible) and the volume then goes away on its own, that
+// must register the same way any other deliberate/external unmount does — not
+// make auto-mount immediately grab it under TarOS's own name.
+func TestFstabVolumeLosingItsLineIsNotImmediatelyAutoMounted(t *testing.T) {
+	w := newWorld(t)
+	w.plug(hdd())
+	mp := filepath.Join(w.dir, "mnt", "backup")
+	os.MkdirAll(mp, 0o755)
+	w.fstab("UUID=1111-2222 " + mp + " exfat defaults,nofail 0 0\n")
+	if err := w.m.Mount(context.Background(), "/dev/sdc1"); err != nil {
+		t.Fatal(err)
+	}
+	w.ticks(1) // let the manager notice the mount in a normal poll, same as it would in practice
+
+	w.fstab("") // the admin removes the line — the volume is now a plain mounted one
+	// the drive is unplugged (or the filesystem goes away) without using Unmount
+	w.mu.Lock()
+	delete(w.mounts, "/dev/sdc1")
+	w.mu.Unlock()
+	w.sync()
+
+	before := len(w.called("mount"))
+	w.ticks(3)
+	if got := len(w.called("mount")); got != before {
+		t.Errorf("auto-mount must not grab a volume that just lost its fstab line and went away externally: %d → %d calls (%v)", before, got, w.calls)
+	}
+	if p := w.part("/dev/sdc1"); p.State != StateUnmounted {
+		t.Errorf("without a line it is an ordinary unmounted volume now: %+v", p)
+	}
+}
+
+func TestFstabVolumeWithNoMatchingLineRefusesToMount(t *testing.T) {
+	// Defensive: FstabMountPoint should only ever be empty when State isn't
+	// StateFstab, but mountFstabLocked must still refuse cleanly if it ever is.
+	w := newWorld(t)
+	w.plug(hdd())
+	w.fstab("UUID=1111-2222 /mnt/backup exfat defaults,nofail 0 0\n")
+	if err := w.m.mountFstabLocked(context.Background(), Partition{Path: "/dev/sdc1"}); !errors.Is(err, ErrManagedByFstab) {
+		t.Errorf("%v", err)
 	}
 }
 

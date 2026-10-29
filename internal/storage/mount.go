@@ -213,7 +213,11 @@ func (m *Manager) mountLocked(ctx context.Context, path string, manual bool) err
 	case StateMounted, StateMountedRO:
 		return ErrAlreadyMounted
 	case StateFstab:
-		return ErrManagedByFstab
+		// Not "mount it our way" — just run the mount /etc/fstab already promises,
+		// the same thing systemd would have done at boot. Never reached from the
+		// auto-mount loop (loop.go only ever calls this with StateUnmounted), only
+		// from a user clicking Mount — see mountFstabLocked's doc comment.
+		return m.mountFstabLocked(ctx, p)
 	case StateUnsupported:
 		return ErrUnsupportedFS
 	case StateIgnored:
@@ -297,6 +301,56 @@ func (m *Manager) mountLocked(ctx context.Context, path string, manual bool) err
 	m.stateMu.Unlock()
 	m.invalidate()
 	m.emit(Event{Kind: "mounted", Device: p.Path, Label: p.Label, Detail: mp})
+	return nil
+}
+
+// mountFstabLocked runs exactly `mount <FstabMountPoint>` — nothing TarOS chose:
+// the device, filesystem type and options all come from the matching /etc/fstab
+// line, resolved by `mount` itself from the target path, same as systemd does for
+// every fstab line at boot. TarOS never touches /etc/fstab, never picks a mount
+// point of its own, and never renders an fstab volume unmountable or ejectable
+// here — Unmount and Eject still refuse it (see unmountLocked/Eject below).
+//
+// Why this exists: fstab's own mounting only happens at boot. A USB drive that is
+// unplugged and replugged afterwards — or unmounted by another tool — is not
+// re-mounted by anything, fstab line or not; that gap is exactly what sent the
+// user hunting for an SSH session to run this same command by hand.
+func (m *Manager) mountFstabLocked(ctx context.Context, p Partition) error {
+	if p.FstabMountPoint == "" {
+		// Shouldn't happen (State is only ever StateFstab when a line matched), but
+		// never fall through to treating this as an ordinary TarOS-managed mount.
+		return ErrManagedByFstab
+	}
+	run := func() (string, error) {
+		if r, ok := m.Run.(combinedRunner); ok {
+			return r.RunCombined(ctx, m.tool("mount"), p.FstabMountPoint)
+		}
+		return m.Run.Run(ctx, m.tool("mount"), p.FstabMountPoint)
+	}
+	out, err := run()
+	if err != nil {
+		msg := firstLine(err.Error())
+		m.stateMu.Lock()
+		m.failed[p.Path] = msg
+		m.stateMu.Unlock()
+		m.invalidate()
+		m.emit(Event{Kind: "mount_failed", Device: p.Path, Label: p.Label, Detail: msg})
+		return &MountError{Detail: msg}
+	}
+	m.stateMu.Lock()
+	delete(m.failed, p.Path)
+	delete(m.unmountedByUser, p.Path)
+	m.wasMounted[p.Path] = true
+	// ntfs-3g can fall back to read-only on its own (dirty/hibernated volume) and
+	// only says so on stderr — same detection as TarOS's own mounts use.
+	if why := dirtyReason(out); why != "" {
+		m.roNotes[p.Path] = why
+	} else {
+		delete(m.roNotes, p.Path)
+	}
+	m.stateMu.Unlock()
+	m.invalidate()
+	m.emit(Event{Kind: "mounted", Device: p.Path, Label: p.Label, Detail: p.FstabMountPoint})
 	return nil
 }
 

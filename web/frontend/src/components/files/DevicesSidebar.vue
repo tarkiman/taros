@@ -19,7 +19,9 @@ onMounted(() => store.acquire())
 onBeforeUnmount(() => store.release())
 
 const parts = computed(() => store.disks.flatMap((d) => d.partitions))
-const shown = computed(() => parts.value.filter((p) => p.state === 'mounted' || p.state === 'mounted_ro' || p.state === 'unmounted' || p.state === 'failed'))
+const shown = computed(
+  () => parts.value.filter((p) => p.state === 'mounted' || p.state === 'mounted_ro' || p.state === 'unmounted' || p.state === 'failed' || p.state === 'fstab'),
+)
 const busy = ref('')
 const isMounted = (p: StoragePartition) => p.state === 'mounted' || p.state === 'mounted_ro'
 
