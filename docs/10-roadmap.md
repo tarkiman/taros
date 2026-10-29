@@ -2240,6 +2240,28 @@ rename massal, undo, drag-drop pindah, dan rename lewat long-press di layar sent
 terlihat sudah menutup kebutuhan dasarnya). Sisa paket dari audit File Explorer (tempat sampah, pencarian
 rekursif, arsip, properti/izin, thumbnail server-side) belum dikerjakan.
 
+### Drive eksternal: Mount untuk drive yang dikelola `/etc/fstab`
+
+Pengguna menanyakan kenapa HDD 4TB (NTFS, ada di `/etc/fstab` host-nya) tidak bisa dibuka di File
+Explorer padahal muncul di kartu "Drive eksternal". Penyebabnya terkonfirmasi langsung di host: drive itu
+**tidak sedang ter-mount** (`df`/`mount` kosong untuk path-nya) meski ada barisnya di `fstab`, karena
+`fstab` cuma di-mount sistemd **saat boot** — setelah dicabut-colok (atau ter-unmount pihak lain) di
+tengah sesi, tidak ada yang mem-mount ulang, dan nama device bisa berganti (`sda`→`sdc`) kalau drive USB
+lain dicolok duluan. Sementara itu TarOS memang sengaja tidak mengelola drive `fstab` (desain dari fitur
+auto-mount), jadi satu-satunya jalan sebelum ini adalah SSH manual + `sudo mount`. Diperbaiki (ikut
+rekomendasi): **Mount** sekarang bisa untuk drive berstatus "Di fstab" yang belum ter-mount — jalurnya
+sepenuhnya terpisah dari mount biasa TarOS, cuma menjalankan `mount <titik-di-fstab>` (device/filesystem/
+opsi dari baris fstab itu sendiri, bukan pilihan TarOS), persis yang systemd lakukan sendiri saat boot.
+**Unmount dan Eject tetap ditolak** untuk drive `fstab`, tidak berubah. Auto-mount **tidak pernah**
+menyentuh drive `fstab` (hanya lewat klik Mount manual) — sudah begitu secara alami karena status
+"menunggu mount" drive `fstab` adalah state `fstab`, bukan `unmounted`, dan loop auto-mount hanya pernah
+memproses `unmounted`. Detail di `docs/04-features.md` §4.17. Diuji: unit (mount sukses, gagal tanpa
+jejak, kehilangan baris fstab tidak langsung di-auto-mount ulang), mutation testing (5 dari 6 mutasi
+tertangkap; satu diterima — bookkeeping yang ditimpa ulang oleh `tick()` pada polling berikutnya sehingga
+tak teramati, simetris dengan pola yang sama di jalur mount biasa), dan `TestIntegrationFstabMount` di
+NTFS loop device sungguhan dengan baris `/etc/fstab` asli (mirror persis kasus drive pengguna) — kernel
+benar-benar mem-mount di titik yang diminta, Unmount/Eject tetap ditolak sesudahnya.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

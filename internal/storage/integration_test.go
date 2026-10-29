@@ -257,3 +257,110 @@ func TestIntegrationStorage(t *testing.T) {
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// TestIntegrationFstabMount mirrors the real situation that sent a user hunting
+// for an SSH session: a drive with a real /etc/fstab line (ntfs, exactly the
+// filesystem of the actual 4TB drive this was written for) that is NOT currently
+// mounted — fstab only auto-mounts at boot, not on a later hot-plug/replug. Mount
+// must bring it up by running exactly that fstab line, nothing of TarOS's own
+// choosing; Unmount and Eject must keep refusing it even once mounted that way.
+// Same safety/skip rules as TestIntegrationStorage (see its doc comment).
+func TestIntegrationFstabMount(t *testing.T) {
+	if os.Getenv("TAROS_STORAGE_IT") != "1" {
+		t.Skip("set TAROS_STORAGE_IT=1 (inside a disposable container)")
+	}
+	if m, _ := filepath.Glob("/dev/sd*"); len(m) > 0 {
+		t.Fatalf("real disks are visible in /dev (%v): run this in a container without --privileged", m)
+	}
+	sh := func(name string, args ...string) string {
+		t.Helper()
+		out, err := exec.Command(name, args...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s %v: %v\n%s", name, args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+
+	dir := t.TempDir()
+	img := filepath.Join(dir, "ntfs.img")
+	sh("truncate", "-s", "96M", img)
+	sh("mkfs.ntfs", "-F", "-f", "-L", "FSTABVOL", img)
+	dev := sh("losetup", "-f", "--show", img)
+	defer exec.Command("losetup", "-d", dev).Run()
+	uuid := strings.TrimSpace(sh("blkid", "-s", "UUID", "-o", "value", dev))
+	if uuid == "" {
+		t.Fatal("no UUID read back from the loop device")
+	}
+
+	target := filepath.Join(dir, "mnt", "fstabvol")
+	os.MkdirAll(target, 0o755)
+	// `mount <target>` (what Mount runs for an fstab volume) is the real mount(8)
+	// binary, and it always reads the system's own /etc/fstab — there is no "use
+	// this file instead" flag. So unlike every other test in this package, this one
+	// really does have to add a line to /etc/fstab, which is only safe because this
+	// whole test only ever runs inside a disposable container (see the skip/guard
+	// above and this package's doc comment). The original content is put back.
+	const realFstab = "/etc/fstab"
+	orig, err := os.ReadFile(realFstab)
+	if err != nil {
+		t.Fatalf("read %s: %v", realFstab, err)
+	}
+	t.Cleanup(func() { _ = os.WriteFile(realFstab, orig, 0o644) })
+	line := "UUID=" + uuid + " " + target + " ntfs-3g defaults,nofail,uid=0,gid=0 0 0\n"
+	if err := os.WriteFile(realFstab, append(append([]byte{}, orig...), []byte(line)...), 0o644); err != nil {
+		t.Fatalf("write %s: %v", realFstab, err)
+	}
+
+	m := New(Config{Enabled: true, MountBase: "/media/taros-it-unused", Umask: "002", ExtraExternal: []string{"loop"}}, NewStore(filepath.Join(dir, "storage.yaml")))
+	m.Run = loopOnlyRunner{Runner: m.Run, allowed: map[string]bool{dev: true}}
+	ctx := context.Background()
+
+	part := func() Partition {
+		m.invalidate()
+		for _, d := range m.Status(ctx).Disks {
+			for _, p := range d.Partitions {
+				if p.Path == dev {
+					return p
+				}
+			}
+		}
+		t.Fatal("the loop device is not listed at all")
+		return Partition{}
+	}
+
+	p := part()
+	if p.State != StateFstab || p.FstabMountPoint != target {
+		t.Fatalf("before mounting: %+v", p)
+	}
+
+	if err := m.Mount(ctx, dev); err != nil {
+		t.Fatalf("mount: %v", err)
+	}
+	defer exec.Command("umount", target).Run()
+	mountinfo := func() string { b, _ := os.ReadFile("/proc/self/mountinfo"); return string(b) }
+	if !strings.Contains(mountinfo(), " "+target+" ") {
+		t.Fatalf("the real kernel must show it mounted at the fstab target:\n%s", mountinfo())
+	}
+	if err := os.WriteFile(filepath.Join(target, "hello.txt"), []byte("hi"), 0o644); err != nil {
+		t.Errorf("the mount must be usable (read/write, as the fstab line asks): %v", err)
+	}
+
+	p = part()
+	if p.State != StateMounted || p.ManagedBy != "fstab" || p.MountPoint != target {
+		t.Fatalf("after mounting: %+v", p)
+	}
+
+	// Unmount and Eject must still be off-limits — mounting via fstab does not make
+	// TarOS the owner of this volume.
+	if err := m.Unmount(ctx, dev); !errors.Is(err, ErrManagedByFstab) {
+		t.Errorf("unmount must still be refused: %v", err)
+	}
+	// A loop device carries its filesystem directly (no partition table), so the
+	// "disk" and the "partition" are the same path here.
+	if err := m.Eject(ctx, dev); !errors.Is(err, ErrManagedByFstab) {
+		t.Errorf("eject must still be refused: %v", err)
+	}
+	if !strings.Contains(mountinfo(), " "+target+" ") {
+		t.Error("it must still be mounted — nothing above may have unmounted it")
+	}
+}

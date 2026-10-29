@@ -470,6 +470,7 @@ func (m *Manager) partitionState(d, p blockDev, fstab []fstabEntry, mounts []mou
 	for _, e := range fstab {
 		if e.matches(p) {
 			inFstab = true
+			part.FstabMountPoint = filepath.Clean(e.File)
 		}
 	}
 	switch {
@@ -512,8 +513,15 @@ func (m *Manager) partitionState(d, p blockDev, fstab []fstabEntry, mounts []mou
 		part.State = StateUnmounted
 	}
 	m.stateMu.Lock()
-	if msg, bad := m.failed[p.Path]; bad && part.State == StateUnmounted {
-		part.State, part.Error = StateFailed, msg
+	if msg, bad := m.failed[p.Path]; bad {
+		switch part.State {
+		case StateUnmounted:
+			part.State, part.Error = StateFailed, msg
+		case StateFstab:
+			// Stays "In fstab" (Mount is still the right next step, so the button must
+			// stay put) — just carries why the last attempt failed.
+			part.Error = msg
+		}
 	}
 	m.stateMu.Unlock()
 	return part

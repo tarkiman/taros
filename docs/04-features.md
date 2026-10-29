@@ -1681,9 +1681,17 @@ dilistkan dengan alasannya).
   `removable=0` di kernel, jadi bus-lah yang menentukan. NVMe/SATA internal tidak pernah disentuh
   (bisa ditambah lewat `storage.extraExternal`, mis. `mmcblk` untuk slot SD).
 - **Tidak pernah** disk yang menampung `/`, `/boot`, `/usr`, `/var` atau swap (Pi yang boot dari SSD USB
-  aman — diuji), **dan tidak pernah** drive yang ada di `/etc/fstab` (cocok lewat UUID/LABEL/PARTUUID/
-  path/`/dev/disk/by-*`/mount point): tampil "Di fstab", hanya bisa dibuka; tidak bisa di-mount/
-  unmount/eject dari sini. HDD 4TB di host ini (fstab) karenanya tidak berubah.
+  aman — diuji), **dan tidak pernah mengambil alih** drive yang ada di `/etc/fstab` (cocok lewat
+  UUID/LABEL/PARTUUID/path/`/dev/disk/by-*`/mount point): tampil "Di fstab"; **tidak bisa** di-unmount
+  atau di-eject dari sini sama sekali. **Mount** untuk drive fstab yang sedang tidak ter-mount **bisa**,
+  tapi hanya menjalankan `mount <titik-di-fstab>` — persis baris yang sudah ada di `/etc/fstab`, sama
+  dengan yang systemd lakukan sendiri saat boot. TarOS tidak pernah menyentuh `/etc/fstab`, tidak memilih
+  opsi mount sendiri, dan drive itu tetap tidak bisa di-unmount/eject sesudahnya. **Kenapa ini perlu**:
+  `fstab` cuma mount otomatis **saat boot** — begitu drive dicabut lalu dicolok ulang (atau ter-unmount
+  oleh tool lain) sementara host tetap menyala, tidak ada apa pun yang mem-mount ulang, dan device node-nya
+  bisa berganti nama (`sda` → `sdc`) kalau drive USB lain dicolok duluan. Ini ditemukan nyata di host
+  pengembangan: HDD 4TB di `fstab` (`/DATA/MOUNT/HDD_4TB`) hilang dari jangkauan setelah dicabut-colok,
+  dan sebelum ini satu-satunya jalan adalah SSH manual + `sudo mount`.
 - **Permintaan hanya bisa menyebut drive yang TarOS sendiri daftarkan** sebagai eksternal: path
   divalidasi (`/dev/<nama>`), lalu dicari di hasil `lsblk` baru — `/dev/nvme0n1p2`, `/etc/shadow`, `..`
   ditolak tanpa satu perintah pun dijalankan (diuji).
@@ -1714,6 +1722,13 @@ dilistkan dengan alasannya).
   tanpa label → `usb-<uuid8>`. Nama **diingat per-UUID** di `storage.yaml`, jadi drive yang sama selalu
   kembali ke path yang sama — share Samba/FTP dan bind mount container yang menunjuk ke dalamnya tetap
   valid setelah dicabut-colok. Default `mountBase` `/media/taros`; di host CasaOS-style pakai `/DATA/MOUNT`.
+- **Mount untuk drive `fstab`**: beda jalur sepenuhnya dari drive biasa — tidak lewat `mountDir`/
+  `mountSpec` TarOS, cuma `mount <titik>` memakai device, filesystem, dan opsi dari baris `fstab` itu
+  sendiri (target diambil sekali saat deteksi, disimpan di `FstabMountPoint`). Gagal (mis. masih offline/
+  kabel lepas) diingat dan ditampilkan di kartu sampai dicoba lagi — drive tetap berstatus "Di fstab",
+  bukan "Gagal", karena Mount tetaplah langkah yang benar; **tidak pernah** dicoba otomatis oleh
+  auto-mount (hanya lewat klik Mount manual) supaya tidak bentrok dengan opsi yang sengaja diatur beda di
+  `fstab`. ntfs-3g yang jatuh ke read-only tetap terdeteksi dan diberi alasan, sama seperti mount biasa.
 - **Volume kotor/hibernasi**: NTFS yang ditinggalkan Windows dalam "fast startup" ditolak ntfs-3g, tapi
   ia sendiri jatuh ke read-only dan hanya bilang di stderr — TarOS membaca stderr itu (diuji dengan
   ntfs-3g asli: file `hiberfil.sys` bertanda `hibr`) dan menampilkan alasan ("Windows meninggalkan volume
@@ -1749,6 +1764,12 @@ error `storage_*` diterjemahkan (§4.10; `storage_busy` memuat siapa yang memaka
   ada `/dev/sd*`/`nvme*`): auto-mount 2 putaran, opsi `nosuid,nodev,noexec` benar-benar berlaku (program
   yang disalin ke drive **tidak bisa dijalankan**), kepemilikan uid, busy dengan proses `sleep` sungguhan,
   path yang sama setelah mount ulang, NTFS hibernasi dengan ntfs-3g asli → read-only + alasan, eject.
+  `TestIntegrationFstabMount` menambah skenario yang memicu fitur ini: baris `/etc/fstab` sungguhan untuk
+  NTFS loop device, belum ter-mount (persis kasus HDD 4TB di host pengembangan) → `Mount` menjalankan
+  `mount <titik>` dan kernel benar-benar mem-mount-nya di sana (diverifikasi lewat `/proc/self/mountinfo`
+  dan tulis file sungguhan), lalu Unmount/Eject tetap ditolak sesudahnya. Baris `fstab` ditambahkan ke
+  `/etc/fstab` kontainer sekali-pakai itu sendiri (`mount(8)` selalu baca file sistem itu, tidak bisa
+  dialihkan) dan dikembalikan ke isi semula setelah tes.
 - UI di Chromium headless terhadap kontainer yang sama: colok/lepas, kartu dashboard, sidebar Files (klik
   membuka isi drive), Unmount/busy/Eject, "jangan auto-mount", toggle Settings (password salah/benar),
   tampilan ponsel 390px, id/en. Di Pi asli hanya **dibaca** (`taros storage-status`).
