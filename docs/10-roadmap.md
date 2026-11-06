@@ -2288,6 +2288,19 @@ TarOS sementara di Pi dengan go2rtc `pipit` + host pusat yang sengaja mati: tepa
 mati setelah masa tenggang (dikirim ke webhook palsu, Discord menjawab 404), relay `cam1` & NVR yang
 sehat tidak memicu apa pun.
 
+### Gerbang lokasi: wizard pengaturan di Settings
+
+Pengguna minta pemasangan gerbang tidak lagi lewat edit YAML manual (rawan salah indentasi/kutip/format
+alamat). Kartu **Settings → Gerbang lokasi**: cek kesiapan (root, ZeroTier, container go2rtc), alamat go2rtc +
+Tes, daftar server pusat (Label/Host/Port terpisah, Tes per baris, validasi yang sama di browser dan
+server), interval, lalu Simpan → konfirmasi password → hanya blok `gateway:` ditulis ulang (`config.SetGateway`,
+komentar lain utuh) → restart → login ulang → halaman Gerbang. Diuji: unit (round-trip YAML dengan label
+berkarakter khusus, penggantian/penambahan blok, komentar terjaga; validasi URL/host/port/label; password
+salah 403, isian salah 400 tanpa restart, simpan valid me-restart) dan end-to-end di browser headless pada
+instance TarOS sementara (loop restart meniru systemd, go2rtc `pipit` lewat SSH tunnel): Tes go2rtc
+menemukan `cam1`, simpan → `/login?next=/gateway` → halaman Gerbang menampilkan ZeroTier, NVR 6 ms, relay
+`cam1`.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

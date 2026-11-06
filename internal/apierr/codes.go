@@ -234,4 +234,8 @@ const (
 	WifiNotFound            = "wifi_not_found"
 	WifiScanFailed          = "wifi_scan_failed" // params: detail
 	WifiFailed              = "wifi_failed"      // params: detail
+
+	// handlers_settings_gateway.go
+	GatewayInvalid    = "gateway_invalid"     // params: field
+	GatewaySaveFailed = "gateway_save_failed" // params: detail
 )

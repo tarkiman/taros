@@ -315,6 +315,10 @@ func (s *Server) Handler() http.Handler {
 	// it on. No password gate, unlike the terminal toggle above — see
 	// handleSettingsDiskAnalysis's doc comment.
 	mux.HandleFunc("POST /api/settings/disk-analysis", s.requireAuth(s.handleSettingsDiskAnalysis))
+	mux.HandleFunc("GET /api/settings/gateway", s.requireAuth(s.handleSettingsGatewayStatus))
+	mux.HandleFunc("POST /api/settings/gateway/test-go2rtc", s.requireAuth(s.handleSettingsGatewayTestGo2rtc))
+	mux.HandleFunc("POST /api/settings/gateway/test-central", s.requireAuth(s.handleSettingsGatewayTestCentral))
+	mux.HandleFunc("PUT /api/settings/gateway", s.requireAuth(s.handleSettingsGatewaySave))
 
 	// Port config — same password-gated restart-and-reload mechanism as
 	// the terminal toggle above (changing this can lock someone out of

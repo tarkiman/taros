@@ -63,9 +63,14 @@ func execZT(ctx context.Context, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, bin, append([]string{"-j"}, args...)...).Output()
 }
 
-func (m *Monitor) readZeroTier(ctx context.Context) ZeroTier {
+func (m *Monitor) readZeroTier(ctx context.Context) ZeroTier { return readZeroTierWith(ctx, m.zt) }
+
+// ZeroTierStatus reads the ZeroTier state once (for Settings > Gerbang lokasi checks).
+func ZeroTierStatus(ctx context.Context) ZeroTier { return readZeroTierWith(ctx, execZT) }
+
+func readZeroTierWith(ctx context.Context, run ztRunner) ZeroTier {
 	zt := ZeroTier{Networks: []ZTNet{}, Peers: PeerStats{List: []ZTPeer{}}}
-	out, err := m.zt(ctx, "info")
+	out, err := run(ctx, "info")
 	if err != nil {
 		switch {
 		case errors.Is(err, errNoZT):
@@ -88,7 +93,7 @@ func (m *Monitor) readZeroTier(ctx context.Context) ZeroTier {
 	}
 	zt.Available, zt.Address, zt.Online, zt.Version = true, info.Address, info.Online, info.Version
 
-	if out, err := m.zt(ctx, "listnetworks"); err == nil {
+	if out, err := run(ctx, "listnetworks"); err == nil {
 		var nets []struct {
 			ID        string   `json:"nwid"`
 			Name      string   `json:"name"`
@@ -105,7 +110,7 @@ func (m *Monitor) readZeroTier(ctx context.Context) ZeroTier {
 			}
 		}
 	}
-	if out, err := m.zt(ctx, "peers"); err == nil {
+	if out, err := run(ctx, "peers"); err == nil {
 		var peers []struct {
 			Address string `json:"address"`
 			Role    string `json:"role"`

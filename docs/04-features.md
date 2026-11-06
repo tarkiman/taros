@@ -1806,7 +1806,28 @@ Semua dibaca oleh satu ticker di backend (`gateway.pollSeconds`, default 10 dtk)
 memori; halaman membaca snapshot terakhir tiap 10 dtk selama tab terlihat — membuka halaman
 berkali-kali tidak menambah beban. Tidak ada yang ditulis ke disk.
 
-**Config** (`gateway:` di `config.yaml`, mati secara default; menu Gerbang hanya muncul bila aktif):
+**Pengaturan lewat UI — Settings → Gerbang lokasi** (cara yang disarankan; kartu ini selalu
+tampil, walau fitur masih mati):
+
+1. **Cek kesiapan** otomatis: TarOS berjalan sebagai root (syarat membaca ZeroTier), ZeroTier
+   terpasang & online + IP-nya, dan container go2rtc yang terlihat di Docker.
+2. **Alamat API go2rtc** (default `http://127.0.0.1:1984`; hanya http(s) ke perangkat ini atau
+   jaringan lokal/privat) dengan tombol **Tes** yang menampilkan stream yang ada.
+3. **Server pusat**: baris Label / Host / Port terpisah (maks 8, tidak boleh ganda) masing-masing
+   dengan tombol **Tes** (latensi atau penyebab gagal). Kesalahan isian ditandai saat mengetik,
+   dengan aturan yang sama dengan validasi server.
+4. **Interval pemantauan**: 5 / 10 / 30 detik.
+5. **Simpan & terapkan** — hanya aktif bila semua isian valid; minta password dashboard; menulis
+   ulang **hanya blok `gateway:`** di `config.yaml` (bagian lain dan komentarnya tidak disentuh,
+   nilai di-quote sehingga label seperti `NVR: "umma"` aman); lalu servis restart. Karena sesi
+   disimpan di memori, semua orang perlu login lagi — halaman langsung mengarah ke login dan
+   setelahnya ke halaman Gerbang.
+
+API: `GET /api/settings/gateway` (config + cek kesiapan), `POST /api/settings/gateway/test-go2rtc`,
+`POST /api/settings/gateway/test-central`, `PUT /api/settings/gateway` (dengan `password`).
+
+**Config** (`gateway:` di `config.yaml` — yang ditulis wizard di atas; bisa juga diedit manual;
+mati secara default; menu Gerbang hanya muncul bila aktif):
 
 ```yaml
 gateway:
