@@ -1780,3 +1780,55 @@ Hanya Linux; butuh root; tidak ada LUKS/BitLocker, perbaikan volume kotor, atau 
 UI; drive yang harus siap **sebelum** Docker/Samba start tetap paling benar lewat `fstab` (auto-mount TarOS
 berjalan setelah TarOS start — persis kasus SMB race di host ini); eject USB fisik, hub bertenaga, dan
 pencabutan tanpa eject baru teruji lewat simulasi (kernel ini tak punya emulator USB).
+
+
+## 4.18 Gerbang Lokasi (pemantauan relay ke server pusat)
+
+Untuk perangkat TarOS yang menjadi **gerbang** sebuah lokasi: STB di rumah/kantor lain yang
+me-relay perangkat di LAN lokasi itu ke server pusat lewat ZeroTier. Kasus pertamanya CCTV:
+kamera di lokasi lain direkam terpusat di NVR (`umma`), dan gerbang (`pipit`) menjalankan go2rtc
+yang menarik kamera di LAN-nya lalu menyajikannya ulang ke pusat dengan password. Pola ini
+dipilih ketimbang routing subnet ZeroTier karena aman bila subnet LAN kedua lokasi sama
+(`192.168.1.x`), kamera Xiaomi (P2P) butuh berada di LAN yang sama, dan hanya satu stream per
+kamera yang keluar dari lokasi.
+
+**Tahap 1 (fitur ini) hanya memantau — tidak ada yang diubah di host.** Halaman **Gerbang**:
+
+| Bagian | Sumber | Isi |
+|---|---|---|
+| ZeroTier | `zerotier-cli -j info/listnetworks/peers` | online/offline, alamat node & versi, jaringan + IP + antarmuka, jumlah peer **langsung** vs **lewat relay** (peer LEAF tanpa path aktif = lewat root ZeroTier, lambat) |
+| Server pusat | sambungan TCP ke `host:port` dari config | latensi (ms) atau penyebab gagal (`timeout`/`refused`/`unreachable`); TCP, bukan ICMP, jadi tidak butuh raw socket |
+| Lalu lintas ZeroTier | `/proc/net/dev` antarmuka ZeroTier | upload/download saat ini + grafik upload 30 menit terakhir (ring buffer di memori) |
+| Relay (go2rtc) | `GET /api/streams` go2rtc lokal | per stream: sumber di LAN (hanya `skema://host:port` — **kredensial di URL sumber tidak pernah dikirim ke browser**), aktif/menunggu penonton, bitrate masuk, dan penonton (IP + bitrate keluar) |
+| Perangkat di LAN | `/proc/net/arp` pada antarmuka rute default | IP, MAC, terjangkau/tidak menjawab, dan stream relay mana yang bersumber dari perangkat itu (perangkat yang di-relay tapi belum ada di ARP tetap ditampilkan sebagai "belum terlihat") |
+
+Semua dibaca oleh satu ticker di backend (`gateway.pollSeconds`, default 10 dtk) ke snapshot di
+memori; halaman membaca snapshot terakhir tiap 10 dtk selama tab terlihat — membuka halaman
+berkali-kali tidak menambah beban. Tidak ada yang ditulis ke disk.
+
+**Config** (`gateway:` di `config.yaml`, mati secara default; menu Gerbang hanya muncul bila aktif):
+
+```yaml
+gateway:
+  enabled: true
+  go2rtcUrl: "http://127.0.0.1:1984"
+  pollSeconds: 10
+  central:
+    - label: NVR (umma)
+      addr: "172.22.244.135:8091"
+```
+
+API: `GET /api/gateway/status` → `{enabled, status?}` (status = snapshot di atas).
+
+Batasan: `zerotier-cli` butuh root (membaca `authtoken.secret`) — tanpa root kartu ZeroTier
+menjelaskan penyebabnya dan bagian lain tetap jalan; go2rtc harus terjangkau di `go2rtcUrl`
+(di gerbang, API-nya diikat ke loopback); daftar perangkat LAN hanya yang pernah berkomunikasi
+dengan gerbang (tabel ARP), bukan hasil pemindaian.
+
+**Tahap berikutnya** (rencana, belum dibangun): (2) kelola relay — tambah/ubah/hapus stream
+go2rtc dengan pemindai kamera (ONVIF/RTSP) dan rotasi password RTSP; (3) kendali akses — go2rtc
+diikat ke loopback dan TarOS yang membuka pintunya hanya untuk IP ZeroTier yang diizinkan, plus
+forward TCP untuk perangkat non-kamera di lokasi itu (halaman admin kamera, router, NAS);
+(4) integrasi NVR — token API hanya-baca agar NVR bisa menambah kamera dari gerbang dan memindai
+LAN lokasi lain. Peringatan Discord (relay putus, pusat tidak terjangkau) menyusul sebagai PR
+terpisah.

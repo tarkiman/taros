@@ -252,6 +252,17 @@ selama tidak diaktifkan; mengelola vsftpd butuh TarOS berjalan sebagai **root**;
 "hanya akun TarOS" mengunci user perangkat (UI menampilkan siapa sebelum diterapkan); restart vsftpd
 memutus transfer yang berjalan.
 
+### Gerbang lokasi (pemantauan)
+
+Hanya membaca, mati secara default (docs/04-features.md §4.18). Yang perlu diketahui: (1) URL sumber
+go2rtc bisa berisi password kamera — backend memotongnya menjadi `skema://host:port` sebelum
+apa pun keluar ke browser (dikunci tes `TestSnapshot`); (2) `zerotier-cli` butuh root, sama dengan
+fitur Wi-Fi/berbagi file — tanpa root kartu ZeroTier hanya menampilkan penyebabnya; (3) pengukuran
+latensi memakai sambungan TCP ke host:port yang **ditulis admin di config.yaml**, bukan input dari
+browser, jadi tidak membuka jalur SSRF; (4) halaman ini memperlihatkan IP/MAC perangkat di LAN
+lokasi dan IP ZeroTier penonton kepada semua akun dashboard (setara info jaringan lain yang
+sudah tampil di Dashboard).
+
 ### Drive eksternal (auto-mount)
 
 Fitur ini menjalankan `mount`/`umount` sebagai root atas perangkat yang dicolok orang, jadi pagarnya

@@ -160,3 +160,16 @@ containerShell:
   enabled: false
   idleTimeoutMin: 15        # sesi tanpa lalu-lintas selama ini ditutup
   maxConcurrentSessions: 2  # sesi shell container bersamaan
+
+gateway:
+  # Halaman Gerbang (lihat docs/04-features.md §4.18) untuk perangkat yang menjadi
+  # gerbang lokasi: me-relay perangkat di LAN lokasi itu (kamera via go2rtc) ke server
+  # pusat lewat ZeroTier. Hanya membaca: API go2rtc lokal, zerotier-cli (butuh TarOS
+  # sebagai root), /proc, dan latensi TCP ke host pusat. Mati secara default.
+  enabled: false
+  go2rtcUrl: "http://127.0.0.1:1984"
+  pollSeconds: 10
+  # Host pusat yang diukur latensinya (host:port, lewat sambungan TCP).
+  central: []
+  #  - label: NVR (umma)
+  #    addr: "172.22.244.135:8091"

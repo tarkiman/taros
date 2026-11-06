@@ -3,10 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutHeader, NLayoutContent, NIcon, NButton, NPopover, NSpin } from 'naive-ui'
-import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings, HardDrive, Share2 } from '@lucide/vue'
+import { LayoutDashboard, Box, Server, FolderOpen, SquareTerminal, LogOut, Sun, Moon, MonitorCog, CloudDownload, CircleCheck, CircleAlert, Cpu, Settings, HardDrive, Share2, Network } from '@lucide/vue'
 import { useAuthStore } from '../stores/auth'
 import { useTerminalStore } from '../stores/terminal'
 import { useDiskAnalysisStore } from '../stores/diskAnalysis'
+import { useGatewayStore } from '../stores/gateway'
 import { usePlayerStore } from '../stores/player'
 import { useThemeMode, type ThemeMode } from '../composables/useTheme'
 import { updateApi } from '../api/update'
@@ -17,6 +18,7 @@ const { t } = useI18n()
 const auth = useAuthStore()
 const terminal = useTerminalStore()
 const diskAnalysis = useDiskAnalysisStore()
+const gatewayStore = useGatewayStore()
 const player = usePlayerStore()
 const router = useRouter()
 const { mode: themeMode, setMode: setThemeMode } = useThemeMode()
@@ -43,6 +45,7 @@ const navLinks = computed(() => {
   if (terminal.enabled) links.push({ to: '/terminal', label: t('nav.terminal'), icon: SquareTerminal })
   if (diskAnalysis.enabled) links.push({ to: '/disk-analysis', label: t('nav.diskAnalysis'), icon: HardDrive })
   links.push({ to: '/sharing', label: t('nav.sharing'), icon: Share2 })
+  if (gatewayStore.enabled) links.push({ to: '/gateway', label: t('nav.gateway'), icon: Network })
   links.push({ to: '/settings', label: t('nav.settings'), icon: Settings })
   return links
 })
@@ -50,6 +53,7 @@ const navLinks = computed(() => {
 onMounted(() => {
   terminal.ensureLoaded()
   diskAnalysis.ensureLoaded()
+  gatewayStore.ensureLoaded()
 })
 
 async function handleLogout() {
