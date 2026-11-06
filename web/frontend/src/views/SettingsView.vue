@@ -18,6 +18,7 @@ import { totpApi } from '../api/totp'
 import { notifyApi, type NotifySettings } from '../api/notify'
 import { ApiError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import { useGatewayStore } from '../stores/gateway'
 import { currentPassword, newPassword as newPasswordProps, noAutofill, oneTimeCode } from '../utils/inputProps'
 
 // See utils/inputProps.ts — autocomplete on <NInput> itself never reaches the <input>.
@@ -449,7 +450,10 @@ const notifyForm = ref<NotifySettings>({
   temp: { enabled: false, thresholdC: 80, durationMin: 5 },
   containers: { enabled: false, restartLoop: true, unhealthy: true, crashed: true, graceMin: 3, includeLogs: false },
   boot: { powerLoss: false },
+  gateway: { enabled: false, relayDown: true, centralDown: true, zerotierOff: true, graceMin: 3 },
 })
+const gatewayStore = useGatewayStore()
+gatewayStore.ensureLoaded()
 
 async function loadNotifySettings() {
   notifyLoading.value = true
@@ -925,6 +929,29 @@ async function sendNotifyTest() {
                 {{ t('settings.notify.containers.logsWarning') }}
               </NAlert>
               <p class="text-muted">{{ t('settings.notify.containers.limits') }}</p>
+            </div>
+
+            <div v-if="gatewayStore.enabled && notifyForm.gateway" class="notify-rule">
+              <NSpace align="center" justify="space-between">
+                <span>{{ t('settings.notify.gateway.label') }}</span>
+                <NSwitch v-model:value="notifyForm.gateway.enabled" size="small" />
+              </NSpace>
+              <p class="text-muted">{{ t('settings.notify.gateway.desc') }}</p>
+              <NSpace vertical :size="6">
+                <NCheckbox v-model:checked="notifyForm.gateway.relayDown" :disabled="!notifyForm.gateway.enabled">{{ t('settings.notify.gateway.relayDown') }}</NCheckbox>
+                <NCheckbox v-model:checked="notifyForm.gateway.centralDown" :disabled="!notifyForm.gateway.enabled">{{ t('settings.notify.gateway.centralDown') }}</NCheckbox>
+                <NCheckbox v-model:checked="notifyForm.gateway.zerotierOff" :disabled="!notifyForm.gateway.enabled">{{ t('settings.notify.gateway.zerotierOff') }}</NCheckbox>
+              </NSpace>
+              <div class="notify-field">
+                <span class="notify-field-label">{{ t('settings.notify.gateway.grace') }}</span>
+                <div class="notify-slider-combo">
+                  <NSlider v-model:value="notifyForm.gateway.graceMin" :min="1" :max="30" :step="1" :disabled="!notifyForm.gateway.enabled" style="flex: 1" />
+                  <NInputNumber v-model:value="notifyForm.gateway.graceMin" :min="1" :max="60" :step="1" :disabled="!notifyForm.gateway.enabled" :show-button="false" size="small" class="notify-combo-input" :input-props="graceInputProps">
+                    <template #suffix>{{ t('settings.notify.durationUnit') }}</template>
+                  </NInputNumber>
+                </div>
+                <p class="text-muted">{{ t('settings.notify.gateway.graceHint') }}</p>
+              </div>
             </div>
 
             <div class="notify-rule">

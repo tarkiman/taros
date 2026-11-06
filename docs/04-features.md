@@ -1825,10 +1825,21 @@ menjelaskan penyebabnya dan bagian lain tetap jalan; go2rtc harus terjangkau di 
 (di gerbang, API-nya diikat ke loopback); daftar perangkat LAN hanya yang pernah berkomunikasi
 dengan gerbang (tabel ARP), bukan hasil pemindaian.
 
+**Peringatan Discord (tahap 1b).** Di **Settings → Notifikasi** muncul grup "Gerbang lokasi"
+(hanya di perangkat dengan `gateway.enabled`), memakai webhook yang sama dengan alert lain:
+
+| Aturan | Kapan dikirim |
+|---|---|
+| Relay tidak mengirim data | stream yang **sedang ditonton** (ada consumer) tetapi sumbernya tidak tersambung atau < 1 kbps. Stream tanpa penonton memang diam (go2rtc menyambung ke sumber hanya saat ada yang menonton), jadi tidak pernah dianggap putus |
+| Server pusat tidak terjangkau | host di `gateway.central` gagal disambungi TCP |
+| ZeroTier offline | `zerotier-cli info` melaporkan node offline |
+
+Setiap kondisi harus bertahan selama masa tenggang (default 3 menit) sebelum dikirim, dikirim
+sekali, lalu satu pesan pulih saat normal kembali. Dievaluasi tiap `gateway.pollSeconds`.
+
 **Tahap berikutnya** (rencana, belum dibangun): (2) kelola relay — tambah/ubah/hapus stream
 go2rtc dengan pemindai kamera (ONVIF/RTSP) dan rotasi password RTSP; (3) kendali akses — go2rtc
 diikat ke loopback dan TarOS yang membuka pintunya hanya untuk IP ZeroTier yang diizinkan, plus
 forward TCP untuk perangkat non-kamera di lokasi itu (halaman admin kamera, router, NAS);
 (4) integrasi NVR — token API hanya-baca agar NVR bisa menambah kamera dari gerbang dan memindai
-LAN lokasi lain. Peringatan Discord (relay putus, pusat tidak terjangkau) menyusul sebagai PR
-terpisah.
+LAN lokasi lain.

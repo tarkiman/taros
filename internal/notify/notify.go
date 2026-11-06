@@ -124,6 +124,19 @@ type Settings struct {
 	Temp       MetricRule     `yaml:"temp" json:"temp"`
 	Containers ContainerRules `yaml:"containers" json:"containers"`
 	Boot       BootRules      `yaml:"boot" json:"boot"`
+	Gateway    GatewayRules   `yaml:"gateway" json:"gateway"`
+}
+
+// GatewayRules configures alerts for a location gateway (internal/gateway,
+// docs/04-features.md §4.18). Only evaluated when gateway monitoring itself is on.
+type GatewayRules struct {
+	Enabled     bool `yaml:"enabled" json:"enabled"`
+	RelayDown   bool `yaml:"relayDown" json:"relayDown"`     // someone is watching but the source sends nothing
+	CentralDown bool `yaml:"centralDown" json:"centralDown"` // a central host can't be reached
+	ZeroTierOff bool `yaml:"zerotierOff" json:"zerotierOff"` // the node reports offline
+	// GraceMin: how long a condition must last before it alerts (a camera
+	// reconnecting or a short Wi-Fi blip stays quiet).
+	GraceMin int `yaml:"graceMin" json:"graceMin"`
 }
 
 // Default returns sane, inert defaults — Enabled=false and every rule
@@ -138,6 +151,7 @@ func Default() Settings {
 		// Rules default to on so that flipping the master switch is all it
 		// takes; the master itself is off like every other rule.
 		Containers: ContainerRules{Enabled: false, RestartLoop: true, Unhealthy: true, Crashed: true, GraceMin: defaultGraceMin},
+		Gateway:    GatewayRules{Enabled: false, RelayDown: true, CentralDown: true, ZeroTierOff: true, GraceMin: defaultGraceMin},
 	}
 }
 
@@ -207,6 +221,9 @@ func (s *Store) Update(next Settings) (Settings, error) {
 	if !next.Containers.Enabled && next.Containers.GraceMin == 0 {
 		next.Containers.GraceMin = defaultGraceMin
 	}
+	if !next.Gateway.Enabled && next.Gateway.GraceMin == 0 {
+		next.Gateway.GraceMin = defaultGraceMin
+	}
 	if err := validate(next); err != nil {
 		return Settings{}, err
 	}
@@ -224,7 +241,7 @@ func (s *Store) Update(next Settings) (Settings, error) {
 }
 
 func validate(s Settings) error {
-	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled || s.Containers.Enabled || s.Boot.PowerLoss
+	anyRuleEnabled := s.CPU.Enabled || s.Mem.Enabled || s.Temp.Enabled || s.Containers.Enabled || s.Boot.PowerLoss || s.Gateway.Enabled
 	if (s.Enabled || anyRuleEnabled) && strings.TrimSpace(s.WebhookURL) == "" {
 		return invalid(apierr.NotifyWebhookRequired, "URL webhook Discord wajib diisi untuk mengaktifkan notifikasi", nil)
 	}
@@ -243,6 +260,11 @@ func validate(s Settings) error {
 	}
 	if s.Containers.Enabled {
 		if err := validateDuration(s.Containers.GraceMin); err != nil {
+			return err
+		}
+	}
+	if s.Gateway.Enabled {
+		if err := validateDuration(s.Gateway.GraceMin); err != nil {
 			return err
 		}
 	}

@@ -323,6 +323,15 @@ const en = {
       duration: 'Sustained for',
       durationUnit: 'min',
       tempHint: 'Only fires on devices with a readable temperature sensor.',
+      gateway: {
+        label: 'Location gateway',
+        desc: 'Get notified when a relay on this gateway has trouble — a camera sends no video while the central site is watching, a central server is unreachable, or ZeroTier is offline.',
+        relayDown: 'Relay sends no data (viewers present, source silent)',
+        centralDown: 'Central server unreachable',
+        zerotierOff: 'ZeroTier offline',
+        grace: 'Grace period',
+        graceHint: 'How long a problem must last before it is sent — a camera reconnecting or a brief Wi-Fi drop is not reported.',
+      },
       containers: {
         label: 'Containers',
         desc: 'Get told when a container keeps crashing, stays unhealthy, or dies and does not come back — the cases CPU/RAM alerts cannot see.',
