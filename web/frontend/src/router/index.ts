@@ -17,6 +17,7 @@ const router = createRouter({
     { path: '/terminal', name: 'terminal', component: () => import('../views/TerminalView.vue') },
     { path: '/disk-analysis', name: 'disk-analysis', component: () => import('../views/DiskAnalysisView.vue') },
     { path: '/sharing', name: 'sharing', component: () => import('../views/SharingView.vue') },
+    { path: '/gateway', name: 'gateway', component: () => import('../views/GatewayView.vue') },
     { path: '/settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
   ],
 })

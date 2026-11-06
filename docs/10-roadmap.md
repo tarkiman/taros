@@ -2262,6 +2262,22 @@ tak teramati, simetris dengan pola yang sama di jalur mount biasa), dan `TestInt
 NTFS loop device sungguhan dengan baris `/etc/fstab` asli (mirror persis kasus drive pengguna) — kernel
 benar-benar mem-mount di titik yang diminta, Unmount/Eject tetap ditolak sesudahnya.
 
+### Gerbang lokasi: pemantauan (tahap 1 dari 4)
+
+Pengguna punya CCTV di lokasi lain yang direkam terpusat di NVR (`umma`, repo `cctv`); STB `pipit`
+(sudah ber-TarOS) menjadi gerbang yang me-relay kamera lewat go2rtc + ZeroTier. Diminta: TarOS
+bisa memantau dan nantinya mengelola **semua perangkat** di lokasi itu yang lewat gerbang, dan
+terintegrasi dengan NVR. Disepakati 4 tahap (relay di tingkat aplikasi, bukan routing/NAT);
+PR ini tahap 1: halaman **Gerbang** hanya-baca — ZeroTier (peer langsung vs relay), latensi ke
+host pusat, lalu lintas ZeroTier + grafik 30 menit, stream relay go2rtc (sumber tanpa kredensial,
+bitrate masuk, penonton + bitrate keluar), dan perangkat LAN dari ARP. Mati secara default
+(`gateway.enabled`), menu hanya muncul bila aktif. Detail di `docs/04-features.md` §4.18. Diuji:
+unit (sumber palsu ZeroTier/go2rtc/ARP/`/proc/net/dev`, perhitungan bitrate, kredensial tidak
+bocor ke JSON), dan instance TarOS sementara di Pi (root, port 18090 loopback) dengan data asli:
+ZeroTier Pi, go2rtc `pipit` lewat SSH tunnel (relay `cam1` ~360 kbps masuk & keluar ke `umma`),
+latensi ke `umma`/`pipit` dan host mati, serta tangkapan layar desktop & mobile. Belum: dipasang di
+`pipit` sendiri (TarOS di sana butuh update + `gateway.enabled`).
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

@@ -31,6 +31,7 @@ type Config struct {
 	FileSharing     FileSharingConfig     `yaml:"fileSharing"`
 	Storage         StorageConfig         `yaml:"storage"`
 	DiskAnalysis    DiskAnalysisConfig    `yaml:"diskAnalysis"`
+	Gateway         GatewayConfig         `yaml:"gateway"`
 }
 
 type ServerConfig struct {
@@ -247,6 +248,23 @@ type WifiConfig struct {
 	Device string `yaml:"device"`
 }
 
+// GatewayConfig — see docs/04-features.md §4.18. Turns on the Gateway page for a box
+// that relays a remote site's devices to a central server over ZeroTier. Read-only:
+// it polls the local go2rtc API, zerotier-cli (needs root), /proc and the central hosts.
+type GatewayConfig struct {
+	Enabled     bool                   `yaml:"enabled"`
+	Go2rtcURL   string                 `yaml:"go2rtcUrl"`
+	PollSeconds int                    `yaml:"pollSeconds"`
+	Central     []GatewayCentralTarget `yaml:"central"`
+}
+
+// GatewayCentralTarget is a central host whose latency is measured with a TCP
+// handshake (no ICMP, so no raw-socket privilege).
+type GatewayCentralTarget struct {
+	Label string `yaml:"label"`
+	Addr  string `yaml:"addr"` // host:port
+}
+
 func Default() Config {
 	return Config{
 		Server: ServerConfig{
@@ -301,6 +319,11 @@ func Default() Config {
 		},
 		Update: UpdateConfig{
 			Enabled: true,
+		},
+		Gateway: GatewayConfig{
+			Enabled:     false,
+			Go2rtcURL:   "http://127.0.0.1:1984",
+			PollSeconds: 10,
 		},
 		Dashboard: DashboardConfig{
 			QuickLinksFile: "./quick-links.yaml",

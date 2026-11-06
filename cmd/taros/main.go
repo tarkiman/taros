@@ -29,6 +29,7 @@ import (
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
 	"github.com/tarkiman/taros/internal/foldershortcuts"
+	"github.com/tarkiman/taros/internal/gateway"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/sharing"
@@ -241,6 +242,17 @@ func runServer(args []string) {
 		}
 	}
 
+	// Location gateway monitoring (opt-in, read-only) — docs/04-features.md §4.18.
+	var gatewayMon *gateway.Monitor
+	if cfg.Gateway.Enabled {
+		targets := make([]gateway.Target, 0, len(cfg.Gateway.Central))
+		for _, t := range cfg.Gateway.Central {
+			targets = append(targets, gateway.Target{Label: t.Label, Addr: t.Addr})
+		}
+		gatewayMon = gateway.New(gateway.Config{Go2rtcURL: cfg.Gateway.Go2rtcURL, Central: targets, PollSeconds: cfg.Gateway.PollSeconds}, slog.Default())
+		go gatewayMon.Run(ctx)
+	}
+
 	// Same "non-critical, don't block startup" reasoning as quickLinks
 	// above.
 	folderShortcuts, err := foldershortcuts.Load(cfg.FolderShortcuts.SettingsFile)
@@ -272,6 +284,7 @@ func runServer(args []string) {
 		FolderShortcuts:           folderShortcuts,
 		BootLog:                   bootLedger,
 		Wifi:                      wifiClient,
+		Gateway:                   gatewayMon,
 		Sharing:                   sharingMgr,
 		Storage:                   storageMgr,
 		DiskAnalysisEnabled:       cfg.DiskAnalysis.Enabled,

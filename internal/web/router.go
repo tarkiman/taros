@@ -12,6 +12,7 @@ import (
 	"github.com/tarkiman/taros/internal/docker"
 	"github.com/tarkiman/taros/internal/fileexplorer"
 	"github.com/tarkiman/taros/internal/foldershortcuts"
+	"github.com/tarkiman/taros/internal/gateway"
 	"github.com/tarkiman/taros/internal/notify"
 	"github.com/tarkiman/taros/internal/quicklinks"
 	"github.com/tarkiman/taros/internal/sharing"
@@ -139,6 +140,11 @@ type Deps struct {
 	// Linux — the endpoints then report unavailable.
 	Wifi *wifi.Client
 
+	// Gateway monitors a location-gateway box (internal/gateway,
+	// docs/04-features.md §4.18). nil when gateway.enabled is false — the
+	// endpoint then reports enabled:false so the page can explain how to turn it on.
+	Gateway *gateway.Monitor
+
 	// Sharing manages Samba and reports on FTP for the File Sharing page
 	// (internal/sharing, docs/04-features.md §4.16). nil off Linux — the
 	// endpoints then answer 503.
@@ -207,6 +213,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/system/addresses", s.requireAuth(s.handleSystemAddresses))
 	mux.HandleFunc("GET /api/system/boots", s.requireAuth(s.handleSystemBoots))
 	mux.HandleFunc("GET /sharing", s.serveSPA)
+	mux.HandleFunc("GET /gateway", s.serveSPA)
 	mux.HandleFunc("GET /api/storage/devices", s.requireAuth(s.handleStorageDevices))
 	mux.HandleFunc("POST /api/storage/mount", s.requireAuth(s.handleStorageMount))
 	mux.HandleFunc("POST /api/storage/unmount", s.requireAuth(s.handleStorageUnmount))
@@ -231,6 +238,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sharing/accounts/{name}/password", s.requireAuth(s.handleSharingAccountPassword))
 	mux.HandleFunc("POST /api/sharing/accounts/{name}/disabled", s.requireAuth(s.handleSharingAccountDisabled))
 	mux.HandleFunc("POST /api/sharing/accounts/{name}/delete", s.requireAuth(s.handleSharingAccountDelete))
+	mux.HandleFunc("GET /api/gateway/status", s.requireAuth(s.handleGatewayStatus))
 	mux.HandleFunc("GET /api/wifi/status", s.requireAuth(s.handleWifiStatus))
 	mux.HandleFunc("GET /api/wifi/networks", s.requireAuth(s.handleWifiNetworks))
 	mux.HandleFunc("POST /api/wifi/connect", s.requireAuth(s.handleWifiConnect))
