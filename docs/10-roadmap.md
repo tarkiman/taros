@@ -2301,6 +2301,21 @@ instance TarOS sementara (loop restart meniru systemd, go2rtc `pipit` lewat SSH 
 menemukan `cam1`, simpan → `/login?next=/gateway` → halaman Gerbang menampilkan ZeroTier, NVR 6 ms, relay
 `cam1`.
 
+### Gerbang lokasi: kelola relay (tahap 2 dari 4)
+
+Halaman Gerbang kini bisa mengubah relay: tambah/ubah/hapus stream go2rtc (dengan sub-stream `<nama>_sub`
+untuk NVR, Tes RTSP DESCRIBE, password lama dipertahankan saat diubah), **Cari kamera** di LAN gerbang
+(port paket discover NVR: ONVIF + sapuan RTSP, path umum per merek) yang mengisi form, dan **Ganti
+password** login RTSP pusat (acak, tampil sekali beserta URL siap-tempel untuk NVR, go2rtc restart).
+Semua lewat API go2rtc — tanpa Docker, tanpa tahu letak `go2rtc.yaml`. Temuan saat uji: `PATCH
+/api/config` go2rtc membuang komentar (maka TarOS mengedit pohon node YAML lalu `POST /api/config`), dan
+go2rtc tidak meminta login RTSP dari localhost. Diuji: unit (BuildSource, Editable/Describe tanpa bocor,
+YAML rotasi menjaga komentar, CRUD Admin, handler: daftar tanpa password, nama/IP publik/ganda ditolak,
+ubah menjaga password, Xiaomi terkunci, rotasi 403/200 + no-store, gerbang mati 409), integrasi ke go2rtc
+1.9.14 asli di container sementara (CRUD tersimpan ke file; setelah rotasi login baru diterima dan login
+lain 401 dari IP non-loopback), dan end-to-end browser headless (desktop + 390 px) pada instance TarOS
+sementara. Belum diuji di `pipit` sendiri.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

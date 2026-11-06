@@ -263,6 +263,23 @@ browser, jadi tidak membuka jalur SSRF; (4) halaman ini memperlihatkan IP/MAC pe
 lokasi dan IP ZeroTier penonton kepada semua akun dashboard (setara info jaringan lain yang
 sudah tampil di Dashboard).
 
+### Gerbang lokasi (kelola relay)
+
+Tahap 2 (docs/04-features.md §4.18) mengubah go2rtc gerbang lewat API-nya. Pagarnya: (1) **password
+kamera tidak pernah keluar ke browser** — daftar relay hanya memuat URL tanpa kredensial, username, dan
+"ada password"; ubah tanpa password = password lama dipakai lagi di server (dikunci
+`TestGatewayRelayHandlers`); pesan error go2rtc dibersihkan dari kredensial sebelum dikirim; log hanya
+mencatat URL tanpa kredensial; (2) **anti-SSRF**: sumber relay, tombol Tes, dan "Cari stream" hanya
+menerima IP privat/link-local/CGNAT atau nama host — IP publik ditolak; XAddr ONVIF dari browser juga
+harus lokal; pemindaian hanya menyapu subnet antarmuka fisik perangkat sendiri (≤ /22), satu pemindaian
+sekaligus; (3) **rotasi login RTSP** meminta password dashboard lagi, password baru acak 24 karakter dari
+`crypto/rand`, dikirim sekali dengan `Cache-Control: no-store` dan tidak disimpan TarOS di mana pun selain
+`go2rtc.yaml` milik go2rtc; (4) **diakui**: go2rtc membebaskan login RTSP untuk koneksi dari localhost,
+jadi proses lain di gerbang bisa menarik stream tanpa password — wajar untuk perangkat yang dikelola
+sendiri, dan alasan tahap 3 (kendali akses) direncanakan; API go2rtc sendiri tidak ber-auth, sehingga
+tetap harus diikat ke `127.0.0.1` (default di `nvr/deploy/gateway`). Semua akun dashboard bisa mengelola
+relay (TarOS belum punya role).
+
 ### Drive eksternal (auto-mount)
 
 Fitur ini menjalankan `mount`/`umount` sebagai root atas perangkat yang dicolok orang, jadi pagarnya

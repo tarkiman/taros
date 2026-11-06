@@ -1782,7 +1782,7 @@ berjalan setelah TarOS start — persis kasus SMB race di host ini); eject USB f
 pencabutan tanpa eject baru teruji lewat simulasi (kernel ini tak punya emulator USB).
 
 
-## 4.18 Gerbang Lokasi (pemantauan relay ke server pusat)
+## 4.18 Gerbang Lokasi (pemantauan & kelola relay ke server pusat)
 
 Untuk perangkat TarOS yang menjadi **gerbang** sebuah lokasi: STB di rumah/kantor lain yang
 me-relay perangkat di LAN lokasi itu ke server pusat lewat ZeroTier. Kasus pertamanya CCTV:
@@ -1792,7 +1792,7 @@ dipilih ketimbang routing subnet ZeroTier karena aman bila subnet LAN kedua loka
 (`192.168.1.x`), kamera Xiaomi (P2P) butuh berada di LAN yang sama, dan hanya satu stream per
 kamera yang keluar dari lokasi.
 
-**Tahap 1 (fitur ini) hanya memantau — tidak ada yang diubah di host.** Halaman **Gerbang**:
+**Tahap 1 — pemantauan** (hanya membaca). Halaman **Gerbang**:
 
 | Bagian | Sumber | Isi |
 |---|---|---|
@@ -1858,9 +1858,49 @@ dengan gerbang (tabel ARP), bukan hasil pemindaian.
 Setiap kondisi harus bertahan selama masa tenggang (default 3 menit) sebelum dikirim, dikirim
 sekali, lalu satu pesan pulih saat normal kembali. Dievaluasi tiap `gateway.pollSeconds`.
 
-**Tahap berikutnya** (rencana, belum dibangun): (2) kelola relay — tambah/ubah/hapus stream
-go2rtc dengan pemindai kamera (ONVIF/RTSP) dan rotasi password RTSP; (3) kendali akses — go2rtc
-diikat ke loopback dan TarOS yang membuka pintunya hanya untuk IP ZeroTier yang diizinkan, plus
-forward TCP untuk perangkat non-kamera di lokasi itu (halaman admin kamera, router, NAS);
-(4) integrasi NVR — token API hanya-baca agar NVR bisa menambah kamera dari gerbang dan memindai
-LAN lokasi lain.
+**Kelola relay (tahap 2).** Di halaman Gerbang, kartu **Relay (go2rtc)** menggabungkan isi
+`go2rtc.yaml` (sumber, login) dengan status langsung dari snapshot, dan bisa mengubahnya:
+
+- **Tambah relay** — nama stream (huruf kecil/angka/`-`/`_`, maks 40, sama dengan slug kamera di
+  NVR), alamat sumber (`rtsp`/`rtsps`/`rtmp`/`http(s)` ke **IP lokal/privat atau nama host** — IP
+  publik ditolak), username/password kamera terpisah (di-encode `net/url`, jadi `@`/`:` di password
+  aman), dan opsional **sub-stream** yang dibuat sebagai `<nama>_sub` (NVR otomatis memakainya
+  sebagai stream resolusi rendah `<nama>`). Tombol **Tes** melakukan RTSP `DESCRIBE` (401 =
+  login salah) atau sambungan TCP untuk skema lain.
+- **Ubah** — password dikosongkan = tetap memakai password lama selama username sama.
+- **Hapus** — dengan konfirmasi; NVR yang menarik stream itu kehilangan gambarnya.
+- Stream dengan banyak sumber, `xiaomi://`, `ffmpeg:`/`exec:` tampil **"Lewat go2rtc.yaml"** (hanya
+  bisa dihapus).
+
+Semua perubahan lewat API go2rtc sendiri (`PUT`/`DELETE /api/streams` — go2rtc yang menulis
+`go2rtc.yaml`), jadi TarOS tidak perlu tahu letak file itu atau menyentuh Docker. Password kamera
+tidak pernah dikirim ke browser (hanya URL tanpa kredensial + username + "ada password").
+
+**Cari kamera** — memindai LAN gerbang (subnet antarmuka fisik ≤ /22, bukan Docker/ZeroTier):
+ONVIF WS-Discovery + sapuan port RTSP 554/8554, digabung per MAC dari ARP, ditandai "sudah
+di-relay: …" bila IP-nya sudah jadi sumber stream. **Pakai** → isi login → **Cari stream**: kamera
+ONVIF ditanya profilnya (`GetStreamUri`, WS-Security digest), selain itu path RTSP umum dicoba
+(Dafang, Bardi/Tuya, Tapo, Hikvision, Dahua, Reolink, V380, …). Hasilnya mengisi form Tambah
+relay (utama + sub). Kodenya port dari NVR (`internal/gateway/discover` ↔ repo cctv
+`nvr/server/internal/discover`) — perbaikan di salah satu sebaiknya dibawa ke yang lain.
+
+**Login RTSP untuk server pusat** — menampilkan username, status password, dan format alamat
+yang dipakai NVR (`rtsp://<user>:•••@<ip-zerotier>:<port>/<stream>`). **Ganti password** (minta
+password dashboard) membuat password acak 24 karakter (huruf+angka, aman di URL/YAML),
+menuliskannya ke `rtsp.username/password` di `go2rtc.yaml` sebagai pohon node YAML (komentar dan
+bagian lain utuh — `PATCH /api/config` milik go2rtc justru membuang komentar), lalu
+`POST /api/restart`. Password baru dan URL siap-tempel per stream **ditampilkan sekali**; semua
+relay putus sebentar dan NVR tidak mendapat gambar sampai sumber kameranya diperbarui. Catatan:
+go2rtc **tidak meminta login untuk koneksi dari localhost** — login hanya berlaku untuk penonton
+dari luar perangkat (diverifikasi pada go2rtc 1.9.14).
+
+API (semua butuh login; 409 `gateway_disabled` bila gerbang mati): `GET /api/gateway/relays`,
+`POST /api/gateway/relays`, `PUT|DELETE /api/gateway/relays/{name}`, `POST
+/api/gateway/relays/test`, `POST /api/gateway/scan` (satu pemindaian sekaligus),
+`POST /api/gateway/scan/streams`, `POST /api/gateway/rtsp-login` (dengan `password`).
+
+**Tahap berikutnya** (rencana, belum dibangun): (3) kendali akses — go2rtc diikat ke loopback dan
+TarOS yang membuka pintunya hanya untuk IP ZeroTier yang diizinkan, plus forward TCP untuk
+perangkat non-kamera di lokasi itu (halaman admin kamera, router, NAS); (4) integrasi NVR — token
+API agar NVR bisa menambah kamera dari gerbang, memindai LAN lokasi lain, dan menerima password RTSP
+baru otomatis setelah rotasi.
