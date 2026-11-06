@@ -19,6 +19,7 @@ import { notifyApi, type NotifySettings } from '../api/notify'
 import { ApiError } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import { useGatewayStore } from '../stores/gateway'
+import GatewaySetupCard from '../components/GatewaySetupCard.vue'
 import { currentPassword, newPassword as newPasswordProps, noAutofill, oneTimeCode } from '../utils/inputProps'
 
 // See utils/inputProps.ts — autocomplete on <NInput> itself never reaches the <input>.
@@ -630,6 +631,8 @@ async function sendNotifyTest() {
             <p class="text-muted">{{ t('settings.portDefaultHint') }}</p>
           </NSpace>
         </NCard>
+
+        <GatewaySetupCard />
 
         <NCard embedded size="small" :title="t('settings.totpTitle')" style="margin-top: 16px">
           <NSpace vertical :size="12">

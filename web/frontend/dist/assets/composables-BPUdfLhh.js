@@ -1,0 +1,1 @@
+import{It as e,Vn as t}from"./auth-CY6uHILD.js";import{t as n}from"./context-C0VKt1sZ.js";function r(){let r=t(n,null);return r===null&&e(`use-dialog`,`No outer <n-dialog-provider /> founded.`),r}export{r as t};

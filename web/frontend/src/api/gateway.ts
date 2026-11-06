@@ -58,3 +58,32 @@ export interface GatewayStatus {
 export const gatewayApi = {
   status: () => api.get<GatewayStatus>('/api/gateway/status'),
 }
+
+// Settings > Gerbang lokasi (internal/web/handlers_settings_gateway.go).
+export interface GatewayCentralInput {
+  label: string
+  host: string
+  port: number | null
+}
+
+export interface GatewaySetupConfig {
+  enabled: boolean
+  go2rtcUrl: string
+  pollSeconds: number
+  central: GatewayCentralInput[]
+}
+
+export interface GatewaySetupStatus {
+  config: GatewaySetupConfig
+  active: boolean
+  root: boolean
+  zerotier: ZeroTier
+  containers: { name: string; image: string; state: string }[]
+}
+
+export const gatewaySetupApi = {
+  status: () => api.get<GatewaySetupStatus>('/api/settings/gateway'),
+  testGo2rtc: (url: string) => api.post<{ ok: boolean; streams?: string[]; error?: string }>('/api/settings/gateway/test-go2rtc', { url }),
+  testCentral: (host: string, port: number) => api.post<{ ok: boolean; rttMs: number; error?: string }>('/api/settings/gateway/test-central', { host, port }),
+  save: (cfg: GatewaySetupConfig, password: string) => api.put<{ enabled: boolean }>('/api/settings/gateway', { ...cfg, password }),
+}
