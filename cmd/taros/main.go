@@ -251,6 +251,7 @@ func runServer(args []string) {
 		}
 		gatewayMon = gateway.New(gateway.Config{Go2rtcURL: cfg.Gateway.Go2rtcURL, Central: targets, PollSeconds: cfg.Gateway.PollSeconds}, slog.Default())
 		go gatewayMon.Run(ctx)
+		go notify.NewGatewayMonitor(gatewayMon, notifySettings).Run(ctx, time.Duration(cfg.Gateway.PollSeconds)*time.Second)
 	}
 
 	// Same "non-critical, don't block startup" reasoning as quickLinks

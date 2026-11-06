@@ -2278,6 +2278,16 @@ ZeroTier Pi, go2rtc `pipit` lewat SSH tunnel (relay `cam1` ~360 kbps masuk & kel
 latensi ke `umma`/`pipit` dan host mati, serta tangkapan layar desktop & mobile. Belum: dipasang di
 `pipit` sendiri (TarOS di sana butuh update + `gateway.enabled`).
 
+### Gerbang lokasi: peringatan Discord (tahap 1b)
+
+Lanjutan tahap 1: grup "Gerbang lokasi" di Settings → Notifikasi (hanya muncul di perangkat gerbang) —
+relay yang ditonton tapi sumbernya diam, host pusat tidak terjangkau, ZeroTier offline; masa tenggang
+(default 3 menit), sekali kirim + satu pesan pulih. Detail di `docs/04-features.md` §4.18. Diuji: unit
+(masa tenggang, tanpa pengulangan, pemulihan, stream tanpa penonton tidak dianggap putus) dan instance
+TarOS sementara di Pi dengan go2rtc `pipit` + host pusat yang sengaja mati: tepat satu alert untuk host
+mati setelah masa tenggang (dikirim ke webhook palsu, Discord menjawab 404), relay `cam1` & NVR yang
+sehat tidak memicu apa pun.
+
 ## Fase 6 — Opsional / Masa Depan (di luar scope awal)
 
 Tidak dikerjakan kecuali kebutuhan berubah — dicatat di sini supaya keputusan arsitektur

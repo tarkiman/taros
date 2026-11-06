@@ -324,6 +324,15 @@ export default {
       duration: 'Bertahan selama',
       durationUnit: 'menit',
       tempHint: 'Hanya berjalan di perangkat dengan sensor suhu yang terbaca.',
+      gateway: {
+        label: 'Gerbang lokasi',
+        desc: 'Diberi tahu saat relay di gerbang ini bermasalah — kamera tidak mengirim video padahal sedang ditonton pusat, server pusat tidak terjangkau, atau ZeroTier offline.',
+        relayDown: 'Relay tidak mengirim data (ada penonton, sumber diam)',
+        centralDown: 'Server pusat tidak terjangkau',
+        zerotierOff: 'ZeroTier offline',
+        grace: 'Masa tenggang',
+        graceHint: 'Berapa lama masalah harus berlangsung sebelum dikirim — kamera yang tersambung ulang atau Wi-Fi yang putus sesaat tidak dilaporkan.',
+      },
       containers: {
         label: 'Container',
         desc: 'Diberi tahu saat container terus crash, tetap unhealthy, atau mati dan tidak menyala lagi — kasus yang tidak terlihat oleh alert CPU/RAM.',

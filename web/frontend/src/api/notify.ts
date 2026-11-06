@@ -17,6 +17,15 @@ export interface ContainerRules {
   includeLogs: boolean
 }
 
+// Location-gateway alerts (internal/notify/gateway.go, docs/04-features.md §4.18).
+export interface GatewayRules {
+  enabled: boolean
+  relayDown: boolean
+  centralDown: boolean
+  zerotierOff: boolean
+  graceMin: number
+}
+
 export interface NotifySettings {
   enabled: boolean
   webhookUrl: string
@@ -25,6 +34,7 @@ export interface NotifySettings {
   temp: MetricRule
   containers: ContainerRules
   boot: { powerLoss: boolean }
+  gateway?: GatewayRules
 }
 
 export const notifyApi = {
