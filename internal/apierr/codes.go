@@ -238,4 +238,16 @@ const (
 	// handlers_settings_gateway.go
 	GatewayInvalid    = "gateway_invalid"     // params: field
 	GatewaySaveFailed = "gateway_save_failed" // params: detail
+
+	// handlers_gateway_relays.go
+	GatewayDisabled       = "gateway_disabled"
+	GatewayStreamName     = "gateway_stream_name"
+	GatewayStreamExists   = "gateway_stream_exists"
+	GatewayStreamNotFound = "gateway_stream_not_found"
+	GatewayStreamLocked   = "gateway_stream_locked" // params: reason
+	GatewaySourceInvalid  = "gateway_source_invalid"
+	GatewaySourcePublic   = "gateway_source_public"
+	GatewayGo2rtcFailed   = "gateway_go2rtc_failed" // params: detail
+	GatewayScanBusy       = "gateway_scan_busy"
+	GatewayScanFailed     = "gateway_scan_failed" // params: detail
 )

@@ -12,6 +12,8 @@ package gateway
 import (
 	"context"
 	"log/slog"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,4 +139,22 @@ func (m *Monitor) Poll(ctx context.Context) {
 
 	m.snap = Snapshot{At: now, ZeroTier: zt, Central: central, Relays: relays, LAN: lan, Uplink: up}
 	m.prevAt = now
+}
+
+// Go2rtcURL is the go2rtc API this monitor reads (also used by Admin).
+func (m *Monitor) Go2rtcURL() string { return m.cfg.Go2rtcURL }
+
+// ZeroTierIP is the gateway's first ZeroTier address (without prefix length), or "".
+func (m *Monitor) ZeroTierIP() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, n := range m.snap.ZeroTier.Networks {
+		for _, a := range n.Addresses {
+			ip, _, _ := strings.Cut(a, "/")
+			if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() != nil {
+				return ip
+			}
+		}
+	}
+	return ""
 }

@@ -87,3 +87,84 @@ export const gatewaySetupApi = {
   testCentral: (host: string, port: number) => api.post<{ ok: boolean; rttMs: number; error?: string }>('/api/settings/gateway/test-central', { host, port }),
   save: (cfg: GatewaySetupConfig, password: string) => api.put<{ enabled: boolean }>('/api/settings/gateway', { ...cfg, password }),
 }
+
+// Gateway stage 2 (internal/web/handlers_gateway_relays.go): manage the go2rtc relay.
+export interface SourceInfo {
+  url: string // without credentials
+  username?: string
+  hasPassword: boolean
+}
+
+export interface StreamConfig {
+  name: string
+  sources: SourceInfo[]
+  editable: boolean
+  reason?: 'missing' | 'multiple' | 'xiaomi' | 'scheme'
+}
+
+export interface RelayConfig {
+  rtsp: { port: number; username: string; hasPassword: boolean }
+  streams: StreamConfig[]
+  zerotierIp?: string
+}
+
+export interface SourceInput {
+  url: string
+  username: string
+  password: string
+}
+
+export interface SourceTest {
+  ok: boolean
+  status?: number
+  codec?: string
+  error?: 'unreachable' | 'auth' | 'status'
+}
+
+export interface ScanDevice {
+  mac?: string
+  ips: string[]
+  ports: number[]
+  onvif?: { xaddr: string; name?: string; hardware?: string }
+  server?: string
+  gateway: boolean
+  relayed: string[]
+}
+
+export interface OnvifStream {
+  profile: string
+  url: string
+  encoding?: string
+  width?: number
+  height?: number
+}
+
+export interface StreamGuess {
+  guess?: { brand: string; main: string; sub?: string; codec?: string; sub_codec?: string }
+  needs_auth: boolean
+  tried: number
+}
+
+export interface ScanStreams {
+  onvif?: OnvifStream[]
+  onvifError?: 'auth' | 'failed'
+  guess?: StreamGuess
+}
+
+export interface RTSPLoginResult {
+  username: string
+  password: string
+  urls: Record<string, string>
+}
+
+export const relayApi = {
+  list: () => api.get<RelayConfig>('/api/gateway/relays'),
+  create: (name: string, source: SourceInput) => api.post<{ name: string }>('/api/gateway/relays', { name, source }),
+  update: (name: string, source: SourceInput) => api.put<{ name: string }>(`/api/gateway/relays/${encodeURIComponent(name)}`, { source }),
+  remove: (name: string) => api.del<void>(`/api/gateway/relays/${encodeURIComponent(name)}`),
+  test: (source: SourceInput, name?: string) => api.post<SourceTest>('/api/gateway/relays/test', { name: name ?? '', source }),
+  scan: () => api.post<{ subnets: { interface: string; cidr: string }[]; devices: ScanDevice[] }>('/api/gateway/scan'),
+  streams: (ip: string, port: number, xaddr: string, username: string, password: string) =>
+    api.post<ScanStreams>('/api/gateway/scan/streams', { ip, port, xaddr, username, password }),
+  rotateLogin: (username: string, password: string) => api.post<RTSPLoginResult>('/api/gateway/rtsp-login', { username, password }),
+}
